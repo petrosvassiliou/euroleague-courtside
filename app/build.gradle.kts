@@ -100,10 +100,14 @@ dependencies {
     // WorkManager for Tip-Off & Close-Game Background Alerts
     implementation("androidx.work:work-runtime-ktx:2.10.0")
 
-    // Networking (Retrofit & Kotlinx Serialization)
+    // Networking (Retrofit, OkHttp & Kotlinx Serialization)
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter:1.0.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+
+    // Unit Testing
+    testImplementation("junit:junit:4.13.2")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

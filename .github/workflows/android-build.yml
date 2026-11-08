@@ -10,6 +10,8 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -29,10 +31,22 @@ jobs:
         run: gradle testDebugUnitTest
 
       - name: Assemble Debug APK
-        run: gradle assembleDebug
+        run: |
+          gradle assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/EuroLeague-Courtside-v1.0.0-debug.apk
 
       - name: Upload EuroLeague Courtside APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: euroleague-courtside-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/debug/EuroLeague-Courtside-v1.0.0-debug.apk
+
+      - name: Publish APK to GitHub Releases (v1.0.0)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view v1.0.0 >/dev/null 2>&1 || gh release create v1.0.0 \
+            --title "EuroLeague Courtside v1.0.0 (Debug APK)" \
+            --notes "Erste offizielle APK von **EuroLeague Courtside** (Kotlin & Jetpack Compose Material 3 Adaptive) für Googlebook OS, Tablets, Foldables und Smartphones."
+          gh release upload v1.0.0 app/build/outputs/apk/debug/EuroLeague-Courtside-v1.0.0-debug.apk --clobber
+

@@ -241,7 +241,7 @@ class EuroLeagueNotificationManager @Inject constructor(
                     .setSummaryText("Live Match Center")
             )
             .setPriority(priority)
-            .setCategory(NotificationCompat.CATEGORY_SPORTS)
+            .setCategory(NotificationCompat.CATEGORY_EVENT)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .build()

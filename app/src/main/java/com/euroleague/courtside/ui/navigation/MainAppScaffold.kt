@@ -434,7 +434,7 @@ private fun CourtsideLeftSidebar(
                 .pointerHoverIcon(PointerIcon.Hand)
         ) {
             Text(
-                text = if (showShortcutPills) "⚡ Live-Sim (R)" else "⚡",
+                text = if (isExpanded) "⚡ Live-Sim" else "⚡",
                 color = CourtsideDesignTokens.EuroLeagueOrange,
                 fontWeight = FontWeight.Bold,
                 fontSize = 12.sp,
