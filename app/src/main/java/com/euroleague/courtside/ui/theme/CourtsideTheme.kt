@@ -44,6 +44,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.euroleague.courtside.data.repository.EuroLeagueTeam
 
 /**
@@ -269,115 +275,65 @@ fun CourtsideDualToneBanner(
 }
 
 /**
- * Zeichnet das offizielle Vereinswappen (Vektor-Emblem + offizielle Vereinsfarben) jedes EuroLeague-Clubs:
- * - FC Bayern (`BAY`): Karmesinroter Außenring mit weißem Innenring & bayerischen Rauten (`#0066B2` / `#FFFFFF`)
- * - Panathinaikos (`PAO`): 7 goldene EuroLeague-Sterne über dem grünen Kleeblatt-Basketball-Emblem (`#007A3D` / `#D4AF37`)
- * - Real Madrid (`RMB`): Königliche Goldkrone + Gold-Ring mit blauem Diagonalband (`#FEBE10` / `#00529F`)
- * - Olympiacos (`OLY`): Rot-weiße Vertikalstreifen im goldenen Lorbeerkranz (`#E30613` / `#FFFFFF` / `#D4AF37`)
- * - FC Barcelona (`FCB`): Blaugrana-Wappenschild mit Gold-Rahmen (`#A50044` / `#004D98` / `#EDBB00`)
- * - Fenerbahce (`FBB`), Monaco (`ASM`), Zalgiris (`ZAL`), Partizan (`PAR`), Efes (`EFS`), ALBA (`BER`) u.v.m.
+ * Rendert das echte, offizielle Vereins-Logo (`images.crest` PNG der EuroLeague) jedes Clubs:
+ * 1. Löst sofort das lokal gebündelte offizielle Wappen (`res/drawable-nodpi/club_logo_<code>.png`) auf,
+ *    sodass alle 20 EuroLeague-Logos im selben Frame (und 100 % offline) gestochen scharf erscheinen.
+ * 2. Lädt parallel via Coil `AsyncImage` die aktuelle Live-CDN-URL (`team.logoUrl` von `media-cdn.cortextech.io` /
+ *    `media-cdn.incrowdsports.com`), falls ein Verein unter der Saison sein Wappen aktualisiert.
+ * 3. Fällt nur bei unbekannten Test-IDs auf das Vektor-Wappen in den Vereinsfarben zurück.
  */
 @Composable
 fun CourtsideClubCrest(
     team: EuroLeagueTeam,
     size: Dp = 42.dp
 ) {
+    val context = LocalContext.current
+    val localDrawableId = remember(team.id, team.code, team.localLogoResName) {
+        val candidates = listOf(
+            team.localLogoResName,
+            "club_logo_${team.id.lowercase()}",
+            "club_logo_${team.code.lowercase()}"
+        ).filter { it.isNotBlank() }.distinct()
+        candidates.firstNotNullOfOrNull { resName ->
+            val id = context.resources.getIdentifier(resName, "drawable", context.packageName)
+            id.takeIf { it != 0 }
+        } ?: 0
+    }
+
     Box(
         modifier = Modifier.size(size),
         contentAlignment = Alignment.Center
     ) {
-        androidx.compose.foundation.Canvas(modifier = Modifier.matchParentSize()) {
-            val w = this.size.width
-            val h = this.size.height
-            val cx = w / 2f
-            val cy = h / 2f
-            val r = (w.coerceAtMost(h) / 2f) * 0.90f
+        when {
+            team.logoUrl.isNotBlank() -> {
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(team.logoUrl)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = "${team.name} Official Logo",
+                    placeholder = if (localDrawableId != 0) painterResource(id = localDrawableId) else null,
+                    error = if (localDrawableId != 0) painterResource(id = localDrawableId) else null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.matchParentSize()
+                )
+            }
+            localDrawableId != 0 -> {
+                Image(
+                    painter = painterResource(id = localDrawableId),
+                    contentDescription = "${team.name} Official Logo",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.matchParentSize()
+                )
+            }
+            else -> {
+                androidx.compose.foundation.Canvas(modifier = Modifier.matchParentSize()) {
+                    val w = this.size.width
+                    val h = this.size.height
+                    val cx = w / 2f
+                    val cy = h / 2f
+                    val r = (w.coerceAtMost(h) / 2f) * 0.90f
 
-            when (team.id) {
-                "BAY" -> {
-                    // FC Bayern: Roter Außenring, weißer Trennring, blau-weiße Rauten im Zentrum
-                    drawCircle(color = Color(0xFFDC052D), radius = r, center = Offset(cx, cy))
-                    drawCircle(
-                        color = Color.White,
-                        radius = r * 0.92f,
-                        center = Offset(cx, cy),
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = r * 0.08f)
-                    )
-                    drawCircle(color = Color(0xFF0066B2), radius = r * 0.62f, center = Offset(cx, cy))
-                    // Bayerische weiße Rauten-Struktur im blauen Innenkreis
-                    val dPath = androidx.compose.ui.graphics.Path().apply {
-                        moveTo(cx, cy - r * 0.55f)
-                        lineTo(cx + r * 0.35f, cy)
-                        lineTo(cx, cy + r * 0.55f)
-                        lineTo(cx - r * 0.35f, cy)
-                        close()
-                    }
-                    drawPath(dPath, color = Color.White)
-                    val innerBlue = androidx.compose.ui.graphics.Path().apply {
-                        moveTo(cx, cy - r * 0.28f)
-                        lineTo(cx + r * 0.18f, cy)
-                        lineTo(cx, cy + r * 0.28f)
-                        lineTo(cx - r * 0.18f, cy)
-                        close()
-                    }
-                    drawPath(innerBlue, color = Color(0xFF0066B2))
-                }
-
-                "PAO" -> {
-                    // Panathinaikos: 7 goldene Sterne + Grüner Basketball/Kleeblatt-Kreis mit Goldring
-                    drawCircle(color = Color(0xFF007A3D), radius = r * 0.88f, center = Offset(cx, cy + r * 0.06f))
-                    drawCircle(
-                        color = Color(0xFFD4AF37),
-                        radius = r * 0.88f,
-                        center = Offset(cx, cy + r * 0.06f),
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = r * 0.10f)
-                    )
-                    // 3 Kleeblatt-Blätter in Weiß/Gold
-                    drawCircle(color = Color.White, radius = r * 0.22f, center = Offset(cx, cy - r * 0.14f))
-                    drawCircle(color = Color.White, radius = r * 0.22f, center = Offset(cx - r * 0.22f, cy + r * 0.14f))
-                    drawCircle(color = Color.White, radius = r * 0.22f, center = Offset(cx + r * 0.22f, cy + r * 0.14f))
-                    // 7 Goldene Sterne als Bogen oben
-                    for (i in -3..3) {
-                        val angle = Math.toRadians((i * 18.0) - 90.0)
-                        val sx = cx + (r * 0.96f * kotlin.math.cos(angle)).toFloat()
-                        val sy = (cy + r * 0.06f) + (r * 0.96f * kotlin.math.sin(angle)).toFloat()
-                        drawCircle(color = Color(0xFFD4AF37), radius = r * 0.07f, center = Offset(sx, sy))
-                    }
-                }
-
-                "RMB" -> {
-                    // Real Madrid: Weißes Wappen mit Goldring, königsblauem Diagonalband und Goldkrone oben
-                    drawCircle(color = Color.White, radius = r * 0.86f, center = Offset(cx, cy + r * 0.08f))
-                    drawLine(
-                        color = Color(0xFF00529F),
-                        start = Offset(cx - r * 0.55f, cy - r * 0.35f),
-                        end = Offset(cx + r * 0.55f, cy + r * 0.50f),
-                        strokeWidth = r * 0.32f
-                    )
-                    drawCircle(
-                        color = Color(0xFFFEBE10),
-                        radius = r * 0.86f,
-                        center = Offset(cx, cy + r * 0.08f),
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = r * 0.14f)
-                    )
-                    drawCircle(color = Color(0xFFFEBE10), radius = r * 0.22f, center = Offset(cx, cy - r * 0.82f))
-                }
-
-                "OLY" -> {
-                    // Olympiacos: Rot-weiße Streifen + goldener Lorbeerkranz
-                    drawCircle(color = Color(0xFFE30613), radius = r * 0.88f, center = Offset(cx, cy))
-                    drawLine(color = Color.White, start = Offset(cx - r * 0.3f, cy - r * 0.7f), end = Offset(cx - r * 0.3f, cy + r * 0.7f), strokeWidth = r * 0.18f)
-                    drawLine(color = Color.White, start = Offset(cx + r * 0.3f, cy - r * 0.7f), end = Offset(cx + r * 0.3f, cy + r * 0.7f), strokeWidth = r * 0.18f)
-                    drawCircle(
-                        color = Color(0xFFD4AF37),
-                        radius = r * 0.92f,
-                        center = Offset(cx, cy),
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = r * 0.12f)
-                    )
-                }
-
-                else -> {
-                    // Alle weiteren offiziellen EuroLeague-Clubs in ihren exakten Primär-, Sekundär- & Akzentfarben
                     drawCircle(color = team.primaryColor, radius = r, center = Offset(cx, cy))
                     drawCircle(color = team.secondaryColor, radius = r * 0.58f, center = Offset(cx, cy))
                     drawCircle(color = team.primaryColor, radius = r * 0.34f, center = Offset(cx, cy))

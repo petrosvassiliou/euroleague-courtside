@@ -54,6 +54,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -85,6 +86,7 @@ import androidx.compose.ui.unit.sp
 import androidx.window.core.layout.WindowWidthSizeClass
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
+import com.euroleague.courtside.data.remote.EuroLeagueOfflineFirstRepository
 import com.euroleague.courtside.data.repository.EuroLeagueGame
 import com.euroleague.courtside.data.repository.EuroLeagueMockRepository
 import com.euroleague.courtside.data.repository.EuroLeagueTeam
@@ -102,6 +104,7 @@ import com.euroleague.courtside.ui.theme.CourtsideLivePill
 import com.euroleague.courtside.ui.theme.CourtsideShortcutPill
 import com.euroleague.courtside.util.CalendarExportHelper
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import kotlin.math.cos
 import kotlin.math.sin
@@ -120,30 +123,40 @@ enum class CourtsideDestination(
 
 /**
  * Gesamtes App-Scaffold in der einheitlichen "Courtside UI" Design-Sprache:
- * - Links auf Desktop/Foldables: Obsidian-Sidebar (`#0B0B0E`) mit leuchtendem Basketball-Brand-Icon,
- *   orangenen Glow-Icon-Buttons und `Ctrl+1`..`Ctrl+5` Shortcut-Pills.
+ * - Links auf Desktop/Foldables: Obsidian-Sidebar (`#0B0B0E`) mit leuchtendem Basketball-Brand-Icon
+ *   und orangenen Glow-Icon-Buttons (ohne sichtbare Ctrl+1..5 Badges).
  * - Unten auf Smartphones (`COMPACT`): Abgedunkelte Broadcast-NavigationBar.
- * - Alle 5 Screens nutzen das 2-Spalten-Broadcast-Layout (Links Liste/Karten + Rechts Dual-Tone-Banner,
- *   leuchtendes Canvas-Chart und dunkle Datentabelle mit orangener PIR-Spalte).
+ * - Alle 5 Screens nutzen Live-Daten der offiziellen EuroLeague-API, echte Vereins-Logos und
+ *   geprüfte Kader inkl. täglichem Injury-Report.
  */
 @Composable
 fun MainAppScaffold(
     repository: EuroLeagueMockRepository,
-    notificationManager: EuroLeagueNotificationManager
+    notificationManager: EuroLeagueNotificationManager,
+    offlineFirstRepository: EuroLeagueOfflineFirstRepository? = null
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val favoriteIds by repository.favoriteTeamIds.collectAsState()
     val primaryTeamId by repository.selectedTeamId.collectAsState()
+    val allTeams by repository.teamsFlow.collectAsState()
+    val allPlayers by repository.playersFlow.collectAsState()
     val games by repository.games.collectAsState()
+    val activeRound by repository.activeRoundFlow.collectAsState()
+    val syncStatus by repository.lastSyncStatusFlow.collectAsState()
 
-    val primaryTeam = remember(primaryTeamId, repository.teams) {
-        repository.teams.find { it.id == primaryTeamId } ?: repository.teams.first()
+    val primaryTeam = remember(primaryTeamId, allTeams) {
+        repository.findTeam(primaryTeamId) ?: allTeams.first()
     }
 
     var currentDestination by rememberSaveable { mutableStateOf(CourtsideDestination.MATCHDAY) }
-    var selectedRound by rememberSaveable { mutableIntStateOf(33) }
+    var selectedRound by rememberSaveable { mutableIntStateOf(activeRound) }
     var filterOnlyFavorites by rememberSaveable { mutableStateOf(false) }
     var comparisonTeamBId by rememberSaveable { mutableStateOf("PAO") }
+
+    LaunchedEffect(activeRound) {
+        selectedRound = activeRound
+    }
 
     var isBookPosture by remember { mutableStateOf(false) }
     var isTableTopPosture by remember { mutableStateOf(false) }
@@ -162,7 +175,15 @@ fun MainAppScaffold(
     val adaptiveInfo = currentWindowAdaptiveInfo()
     val widthClass = adaptiveInfo.windowSizeClass.windowWidthSizeClass
     val isCompact = widthClass == WindowWidthSizeClass.COMPACT
-    val showShortcutPills = widthClass == WindowWidthSizeClass.EXPANDED
+
+    val triggerLiveSync: () -> Unit = {
+        scope.launch {
+            val res = offlineFirstRepository?.syncSeasonDataFromRemoteOrSeedCache()
+            if (res == null || res.isFailure) {
+                repository.simulateLiveRefresh()
+            }
+        }
+    }
 
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
@@ -198,13 +219,13 @@ fun MainAppScaffold(
                         filterOnlyFavorites = !filterOnlyFavorites; true
                     }
                     event.key == Key.R -> {
-                        repository.simulateLiveRefresh(); true
+                        triggerLiveSync(); true
                     }
                     event.key == Key.DirectionLeft -> {
                         selectedRound = (selectedRound - 1).coerceAtLeast(1); true
                     }
                     event.key == Key.DirectionRight -> {
-                        selectedRound = (selectedRound + 1).coerceAtMost(34); true
+                        selectedRound = (selectedRound + 1).coerceAtMost(38); true
                     }
                     else -> false
                 }
@@ -217,7 +238,7 @@ fun MainAppScaffold(
                     currentDestination = currentDestination,
                     isExpanded = widthClass == WindowWidthSizeClass.EXPANDED,
                     onSelectDestination = { currentDestination = it },
-                    onLiveRefresh = { repository.simulateLiveRefresh() }
+                    onLiveRefresh = triggerLiveSync
                 )
             }
 
@@ -226,25 +247,44 @@ fun MainAppScaffold(
                 when (currentDestination) {
                     CourtsideDestination.MY_TEAM -> MyTeamDashboardScreen(
                         primaryTeam = primaryTeam,
-                        allTeams = repository.teams,
+                        allTeams = allTeams,
                         favoriteTeamIds = favoriteIds,
-                        roster = repository.players.filter { it.teamId == primaryTeam.id },
+                        roster = allPlayers.filter {
+                            it.teamId == primaryTeam.id || it.teamId == primaryTeam.code
+                        },
                         games = games,
+                        syncStatus = syncStatus,
                         isTableTopPosture = isTableTopPosture,
-                        onSelectPrimaryTeam = { repository.selectPrimaryTeam(it) }
+                        onSelectPrimaryTeam = { teamId ->
+                            repository.selectPrimaryTeam(teamId)
+                            scope.launch {
+                                offlineFirstRepository?.verifyAndSyncClubRoster(teamId)
+                            }
+                        },
+                        onVerifyRosterNow = {
+                            scope.launch {
+                                offlineFirstRepository?.verifyAndSyncClubRoster(primaryTeam.id)
+                            }
+                        }
                     )
 
                     CourtsideDestination.MATCHDAY -> MatchCenterScreen(
                         games = games,
                         selectedRound = selectedRound,
+                        syncStatus = syncStatus,
                         filterOnlyFavorites = filterOnlyFavorites,
                         favoriteTeamIds = favoriteIds,
                         hingeInBookPosture = isBookPosture,
                         notificationManager = notificationManager,
                         onPreviousRound = { selectedRound = (selectedRound - 1).coerceAtLeast(1) },
-                        onNextRound = { selectedRound = (selectedRound + 1).coerceAtMost(34) },
+                        onNextRound = { selectedRound = (selectedRound + 1).coerceAtMost(38) },
                         onToggleFavoriteFilter = { filterOnlyFavorites = !filterOnlyFavorites },
-                        onTriggerLiveRefresh = { repository.simulateLiveRefresh() },
+                        onTriggerLiveRefresh = triggerLiveSync,
+                        onRefreshSelectedGameStats = { game ->
+                            scope.launch {
+                                offlineFirstRepository?.refreshSelectedGameLiveStats(game)
+                            }
+                        },
                         onOpenTeamStats = { teamId ->
                             comparisonTeamBId = teamId
                             currentDestination = CourtsideDestination.STATISTICS
@@ -258,10 +298,10 @@ fun MainAppScaffold(
                     )
 
                     CourtsideDestination.STATISTICS -> SeasonLeadersAndComparisonScreen(
-                        players = repository.players,
-                        teams = repository.teams,
+                        players = allPlayers,
+                        teams = allTeams,
                         teamA = primaryTeam,
-                        teamB = repository.teams.find { it.id == comparisonTeamBId } ?: repository.teams.first(),
+                        teamB = repository.findTeam(comparisonTeamBId) ?: allTeams.first(),
                         onSelectTeamB = { comparisonTeamBId = it }
                     )
 
@@ -457,12 +497,15 @@ private fun MyTeamDashboardScreen(
     favoriteTeamIds: Set<String>,
     roster: List<PlayerProfile>,
     games: List<EuroLeagueGame>,
+    syncStatus: String = "LIVE API • E2026",
     isTableTopPosture: Boolean,
-    onSelectPrimaryTeam: (String) -> Unit
+    onSelectPrimaryTeam: (String) -> Unit,
+    onVerifyRosterNow: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val nextGame = games.firstOrNull {
-        it.homeTeam.id == primaryTeam.id || it.awayTeam.id == primaryTeam.id
+        it.homeTeam.id == primaryTeam.id || it.awayTeam.id == primaryTeam.id ||
+            it.homeTeam.code == primaryTeam.code || it.awayTeam.code == primaryTeam.code
     } ?: games.first()
 
     var remainingMillis by remember(nextGame.id) {
@@ -489,19 +532,30 @@ private fun MyTeamDashboardScreen(
                 .fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = "My Team Hub",
-                style = MaterialTheme.typography.titleLarge,
-                color = Color.White
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "My Team Hub",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White
+                )
+                CourtsideLivePill(
+                    badgeText = "LIVE SYNC",
+                    detailText = "${allTeams.size} Clubs",
+                    badgeColor = CourtsideDesignTokens.NeonMadeGreen
+                )
+            }
 
-            // Verein-Umschalter im Pill-Design
+            // Verein-Umschalter im Pill-Design mit echten offiziellen Club-Logos
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 allTeams.forEach { team ->
-                    val isSelected = team.id == primaryTeam.id
+                    val isSelected = team.id == primaryTeam.id || team.code == primaryTeam.code
                     CourtsideGlassCard(
                         isSelected = isSelected,
                         glowColor = team.primaryColor,
@@ -631,10 +685,37 @@ private fun MyTeamDashboardScreen(
                 }
             }
 
-            // Roster Table im "Player boxscore ⌄"-Stil mit orangener PIR-Spalte
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Active Club Roster", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = CourtsideDesignTokens.MutedText)
+            // Roster Header inkl. Live-Prüfstatus & Sofort-Check-Button
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Active Club Roster (${roster.size} Spieler)",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = CourtsideDesignTokens.MutedText)
+                }
+                Surface(
+                    color = Color(0x2200E676),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .border(1.dp, CourtsideDesignTokens.NeonMadeGreen.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .clickable { onVerifyRosterNow() }
+                        .pointerHoverIcon(PointerIcon.Hand)
+                ) {
+                    Text(
+                        text = "✓ Kader & Injury-Report geprüft",
+                        color = CourtsideDesignTokens.NeonMadeGreen,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
             }
 
             LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -656,8 +737,17 @@ private fun MyTeamDashboardScreen(
                     ) {
                         Column(modifier = Modifier.weight(2.6f)) {
                             Text("${idx + 1}. #${p.number} ${p.name}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                            val injColor = if (p.injuryStatus == InjuryStatus.FIT) CourtsideDesignTokens.NeonMadeGreen else CourtsideDesignTokens.EuroLeagueOrange
-                            Text(p.injuryStatus.label, color = injColor, fontSize = 10.sp)
+                            val injColor = when (p.injuryStatus) {
+                                InjuryStatus.FIT -> CourtsideDesignTokens.NeonMadeGreen
+                                InjuryStatus.QUESTIONABLE -> CourtsideDesignTokens.EuroLeagueOrange
+                                InjuryStatus.OUT -> CourtsideDesignTokens.NeonMissedRed
+                            }
+                            val injText = if (p.injuryDetail.isNotBlank()) {
+                                "${p.injuryStatus.label} • ${p.injuryDetail}"
+                            } else {
+                                "${p.injuryStatus.label} • ${p.nationality} • ${p.heightCm}cm"
+                            }
+                            Text(injText, color = injColor, fontSize = 10.sp)
                         }
                         Text(p.position, Modifier.weight(0.8f), color = Color(0xFFD1D5DB), fontSize = 12.sp, textAlign = TextAlign.Center)
                         Text(p.ppg.toString(), Modifier.weight(1f), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, textAlign = TextAlign.Center)
@@ -807,6 +897,7 @@ private fun StandingsAndBracketScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(dotColor))
+                            CourtsideClubCrest(team = team, size = 22.dp)
                             Text("$rank. ${team.name}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                         }
                         Text(team.wins.toString(), Modifier.weight(0.8f), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.Center)

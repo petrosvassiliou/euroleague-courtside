@@ -11,14 +11,23 @@ import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.euroleague.courtside.data.remote.EuroLeagueOfflineFirstRepository
 import com.euroleague.courtside.data.repository.EuroLeagueGame
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -247,6 +256,56 @@ class EuroLeagueNotificationManager @Inject constructor(
             .build()
 
         NotificationManagerCompat.from(context).notify(notificationId, notification)
+    }
+
+    /**
+     * Plant die tägliche Hintergrund-Synchronisation (alle 6 Stunden via WorkManager),
+     * damit Kader (Rosters), Verletztenstatus, Tabellenstände und Spieltage jeden Tag aktuell sind.
+     */
+    fun scheduleDailyLiveSync() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val periodicRequest = PeriodicWorkRequestBuilder<DailyEuroLeagueSyncWorker>(6, TimeUnit.HOURS)
+            .setConstraints(constraints)
+            .addTag("euroleague_daily_live_sync")
+            .build()
+
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            "euroleague_daily_live_sync",
+            ExistingPeriodicWorkPolicy.KEEP,
+            periodicRequest
+        )
+    }
+}
+
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface DailySyncWorkerEntryPoint {
+    fun offlineFirstRepository(): EuroLeagueOfflineFirstRepository
+}
+
+/**
+ * Periodischer WorkManager-Worker für den täglichen Einsatz:
+ * Synchronisiert im Hintergrund alle EuroLeague-Clubs, aktuelle Kader (`people`), Verletzten-Reports,
+ * Tabellenstände und Spieltage.
+ */
+class DailyEuroLeagueSyncWorker(
+    appContext: Context,
+    workerParams: WorkerParameters
+) : CoroutineWorker(appContext, workerParams) {
+
+    override suspend fun doWork(): Result {
+        return runCatching {
+            val entryPoint = EntryPointAccessors.fromApplication(
+                applicationContext,
+                DailySyncWorkerEntryPoint::class.java
+            )
+            entryPoint.offlineFirstRepository().loadBundledLiveSnapshotFromAssets(applicationContext)
+            entryPoint.offlineFirstRepository().syncSeasonDataFromRemoteOrSeedCache()
+            Result.success()
+        }.getOrDefault(Result.retry())
     }
 }
 

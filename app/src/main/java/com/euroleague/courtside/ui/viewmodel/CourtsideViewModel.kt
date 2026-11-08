@@ -10,6 +10,7 @@ import com.euroleague.courtside.data.repository.EuroLeagueMockRepository
 import com.euroleague.courtside.data.repository.EuroLeagueTeam
 import com.euroleague.courtside.notifications.EuroLeagueNotificationManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -23,12 +24,13 @@ data class CourtsideUiState(
     val favoriteTeamIds: Set<String>,
     val allTeams: List<EuroLeagueTeam>,
     val games: List<EuroLeagueGame>,
-    val selectedRound: Int = 33,
+    val selectedRound: Int = 1,
     val filterOnlyFavorites: Boolean = false,
     val tipOffAlarmEnabled: Boolean = true,
     val halftimeFinalScoreEnabled: Boolean = true,
     val closeGameAlertEnabled: Boolean = true,
-    val isSyncing: Boolean = false
+    val isSyncing: Boolean = false,
+    val syncStatus: String = "LIVE API • E2026"
 )
 
 sealed interface CourtsideUiEvent {
@@ -46,7 +48,8 @@ sealed interface CourtsideUiEvent {
 
 /**
  * Unidirectional Data Flow (UDF) ViewModel für EuroLeague Courtside.
- * Kombiniert Jetpack DataStore Preferences, Offline-First Room Sync und Live-Crunch-Time-Alarme.
+ * Kombiniert Jetpack DataStore Preferences, Live-API / Offline-First Room Sync,
+ * automatische Kader-Verifikation (`/people`) und Crunch-Time-Alarme.
  */
 @HiltViewModel
 class CourtsideViewModel @Inject constructor(
@@ -56,7 +59,7 @@ class CourtsideViewModel @Inject constructor(
     private val notificationManager: EuroLeagueNotificationManager
 ) : ViewModel() {
 
-    private val _selectedRound = MutableStateFlow(33)
+    private val _selectedRound = MutableStateFlow(mockRepository.activeRoundFlow.value)
     private val _filterOnlyFavorites = MutableStateFlow(false)
     private val _isSyncing = MutableStateFlow(false)
 
@@ -67,34 +70,43 @@ class CourtsideViewModel @Inject constructor(
         _filterOnlyFavorites,
         _isSyncing
     ) { prefs: UserPreferencesState, games: List<EuroLeagueGame>, round: Int, filterFav: Boolean, syncing: Boolean ->
-        val primary = mockRepository.teams.find { it.id == prefs.primaryTeamId }
-            ?: mockRepository.teams.first()
+        val teams = mockRepository.teamsFlow.value
+        val primary = mockRepository.findTeam(prefs.primaryTeamId) ?: teams.first()
 
         CourtsideUiState(
             primaryTeam = primary,
             favoriteTeamIds = prefs.favoriteTeamIds,
-            allTeams = mockRepository.teams,
+            allTeams = teams,
             games = games,
             selectedRound = round,
             filterOnlyFavorites = filterFav,
             tipOffAlarmEnabled = prefs.tipOffAlarmEnabled,
             halftimeFinalScoreEnabled = prefs.halftimeFinalScoreEnabled,
             closeGameAlertEnabled = prefs.closeGameAlertEnabled,
-            isSyncing = syncing
+            isSyncing = syncing,
+            syncStatus = mockRepository.lastSyncStatusFlow.value
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = CourtsideUiState(
-            primaryTeam = mockRepository.teams.first { it.id == "BAY" },
+            primaryTeam = mockRepository.findTeam("BAY") ?: mockRepository.teams.first(),
             favoriteTeamIds = setOf("BAY", "PAO"),
             allTeams = mockRepository.teams,
-            games = mockRepository.games.value
+            games = mockRepository.games.value,
+            selectedRound = mockRepository.activeRoundFlow.value,
+            syncStatus = mockRepository.lastSyncStatusFlow.value
         )
     )
 
     init {
         syncRemoteWithLocalRoomCache()
+        startLivePollingLoop()
+        viewModelScope.launch {
+            mockRepository.activeRoundFlow.collect { activeRound ->
+                _selectedRound.value = activeRound
+            }
+        }
     }
 
     fun onEvent(event: CourtsideUiEvent) {
@@ -102,23 +114,31 @@ class CourtsideViewModel @Inject constructor(
             is CourtsideUiEvent.SelectPrimaryTeam -> viewModelScope.launch {
                 mockRepository.selectPrimaryTeam(event.teamId)
                 preferencesDataStore.setPrimaryTeam(event.teamId)
+                offlineFirstRepository.verifyAndSyncClubRoster(event.teamId)
             }
             is CourtsideUiEvent.ToggleFavoriteTeam -> viewModelScope.launch {
                 mockRepository.toggleFavoriteTeam(event.teamId)
                 preferencesDataStore.toggleFavoriteTeam(event.teamId)
             }
             is CourtsideUiEvent.ChangeRound -> {
-                _selectedRound.value = event.round.coerceIn(1, 34)
+                _selectedRound.value = event.round.coerceIn(1, 38)
             }
             CourtsideUiEvent.ToggleFavoriteFilter -> {
                 _filterOnlyFavorites.value = !_filterOnlyFavorites.value
             }
             CourtsideUiEvent.TriggerLiveRefresh -> {
-                mockRepository.simulateLiveRefresh()
-                if (uiState.value.closeGameAlertEnabled) {
-                    mockRepository.games.value
-                        .filter { it.isCloseGameFourthQuarter }
-                        .forEach { notificationManager.evaluateAndSendCloseGameAlert(it) }
+                viewModelScope.launch {
+                    _isSyncing.value = true
+                    val res = offlineFirstRepository.syncSeasonDataFromRemoteOrSeedCache()
+                    if (res.isFailure) {
+                        mockRepository.simulateLiveRefresh()
+                    }
+                    _isSyncing.value = false
+                    if (uiState.value.closeGameAlertEnabled) {
+                        mockRepository.games.value
+                            .filter { it.isCloseGameFourthQuarter }
+                            .forEach { notificationManager.evaluateAndSendCloseGameAlert(it) }
+                    }
                 }
             }
             is CourtsideUiEvent.UpdateNotificationPrefs -> viewModelScope.launch {
@@ -136,6 +156,15 @@ class CourtsideViewModel @Inject constructor(
             _isSyncing.value = true
             offlineFirstRepository.syncSeasonDataFromRemoteOrSeedCache()
             _isSyncing.value = false
+        }
+    }
+
+    private fun startLivePollingLoop() {
+        viewModelScope.launch {
+            while (true) {
+                delay(30_000L)
+                offlineFirstRepository.syncSeasonDataFromRemoteOrSeedCache()
+            }
         }
     }
 }

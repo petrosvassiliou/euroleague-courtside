@@ -100,6 +100,7 @@ enum class BoxscoreSortColumn {
 fun MatchCenterScreen(
     games: List<EuroLeagueGame>,
     selectedRound: Int,
+    syncStatus: String = "LIVE API • E2026",
     filterOnlyFavorites: Boolean,
     favoriteTeamIds: Set<String>,
     hingeInBookPosture: Boolean,
@@ -108,6 +109,7 @@ fun MatchCenterScreen(
     onNextRound: () -> Unit,
     onToggleFavoriteFilter: () -> Unit,
     onTriggerLiveRefresh: () -> Unit,
+    onRefreshSelectedGameStats: (EuroLeagueGame) -> Unit = {},
     onOpenTeamStats: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -115,25 +117,37 @@ fun MatchCenterScreen(
     val navigator = rememberListDetailPaneScaffoldNavigator<String>()
     var searchQuery by rememberSaveable { mutableStateOf("") }
 
-    val filteredGames = remember(games, filterOnlyFavorites, favoriteTeamIds, searchQuery) {
-        games.filter { game ->
+    val filteredGames = remember(games, selectedRound, filterOnlyFavorites, favoriteTeamIds, searchQuery) {
+        val q = searchQuery.trim().lowercase()
+        val roundFiltered = if (q.isEmpty()) {
+            val inRound = games.filter { it.round == selectedRound }
+            inRound.ifEmpty { games }
+        } else {
+            games
+        }
+        roundFiltered.filter { game ->
             val matchesFav = !filterOnlyFavorites ||
                     favoriteTeamIds.contains(game.homeTeam.id) ||
-                    favoriteTeamIds.contains(game.awayTeam.id)
-            val q = searchQuery.trim().lowercase()
+                    favoriteTeamIds.contains(game.awayTeam.id) ||
+                    favoriteTeamIds.contains(game.homeTeam.code) ||
+                    favoriteTeamIds.contains(game.awayTeam.code)
             val matchesSearch = q.isEmpty() ||
                     game.homeTeam.name.lowercase().contains(q) ||
                     game.awayTeam.name.lowercase().contains(q) ||
                     game.homeTeam.code.lowercase().contains(q) ||
                     game.awayTeam.code.lowercase().contains(q)
             matchesFav && matchesSearch
-        }.ifEmpty { games }
+        }.ifEmpty { roundFiltered.ifEmpty { games } }
     }
 
     var activeGameId by rememberSaveable {
         mutableStateOf(filteredGames.firstOrNull()?.id ?: games.first().id)
     }
     val selectedGame = filteredGames.find { it.id == activeGameId } ?: filteredGames.first()
+
+    androidx.compose.runtime.LaunchedEffect(selectedGame.id) {
+        onRefreshSelectedGameStats(selectedGame)
+    }
 
     ListDetailPaneScaffold(
         directive = navigator.scaffoldDirective,
@@ -153,16 +167,26 @@ fun MatchCenterScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 14.dp),
+                            .padding(bottom = 10.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "EuroLeagues",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
-                        )
+                        Column {
+                            Text(
+                                text = "EuroLeagues",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = syncStatus,
+                                color = Color(0xFF00E676),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
 
                         OutlinedTextField(
                             value = searchQuery,
@@ -187,9 +211,81 @@ fun MatchCenterScreen(
                                 unfocusedTextColor = Color.White
                             ),
                             modifier = Modifier
-                                .width(160.dp)
+                                .width(152.dp)
                                 .height(46.dp)
                         )
+                    }
+
+                    // Round Switcher Bar
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Surface(
+                                color = Color(0xFF1B1B21),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .border(1.dp, Color(0xFF2C2C34), RoundedCornerShape(8.dp))
+                                    .clickable { onPreviousRound() }
+                                    .pointerHoverIcon(PointerIcon.Hand)
+                            ) {
+                                Text(
+                                    text = "◀",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
+                            Text(
+                                text = "Round $selectedRound",
+                                color = Color(0xFFFF6600),
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 12.sp
+                            )
+                            Surface(
+                                color = Color(0xFF1B1B21),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .border(1.dp, Color(0xFF2C2C34), RoundedCornerShape(8.dp))
+                                    .clickable { onNextRound() }
+                                    .pointerHoverIcon(PointerIcon.Hand)
+                            ) {
+                                Text(
+                                    text = "▶",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
+                        Surface(
+                            color = if (filterOnlyFavorites) Color(0x33FF6600) else Color(0xFF1B1B21),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .border(
+                                    1.dp,
+                                    if (filterOnlyFavorites) Color(0xFFFF6600) else Color(0xFF2C2C34),
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .clickable { onToggleFavoriteFilter() }
+                                .pointerHoverIcon(PointerIcon.Hand)
+                        ) {
+                            Text(
+                                text = if (filterOnlyFavorites) "★ Favoriten" else "Alle Spiele",
+                                color = if (filterOnlyFavorites) Color(0xFFFF6600) else Color(0xFFD1D5DB),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
                     }
 
                     LazyColumn(
@@ -202,6 +298,7 @@ fun MatchCenterScreen(
                                 isSelected = game.id == selectedGame.id,
                                 onSelect = {
                                     activeGameId = game.id
+                                    onRefreshSelectedGameStats(game)
                                     scope.launch {
                                         navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, game.id)
                                     }
@@ -448,25 +545,10 @@ private fun ClubCrestColumn(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(
-            modifier = Modifier
-                .size(42.dp)
-                .clip(CircleShape)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(team.primaryColor, Color(0xFF101014))
-                    )
-                )
-                .border(2.dp, team.secondaryColor, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = team.code,
-                color = Color.White,
-                fontWeight = FontWeight.ExtraBold,
-                fontSize = 11.sp
-            )
-        }
+        com.euroleague.courtside.ui.theme.CourtsideClubCrest(
+            team = team,
+            size = 42.dp
+        )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = team.name.substringBefore(" AKTOR").substringBefore(" Beko").substringBefore(" Mozzart"),

@@ -84,4 +84,21 @@ class EuroLeagueCourtsideUnitTest {
         val finishedGame = liveCrunchGame.copy(status = GameStatus.FINAL)
         assertFalse(finishedGame.isCloseGameFourthQuarter)
     }
+
+    @Test
+    fun `live club roster verification and official crest logo URLs update reactive state`() {
+        val bayern = repository.findTeam("BAY")
+        assertTrue(bayern != null)
+        assertTrue(bayern!!.logoUrl.startsWith("https://"))
+        assertEquals("club_logo_mun", bayern.localLogoResName)
+
+        val updatedRoster = repository.players
+            .filter { it.teamId == "BAY" }
+            .map { it.copy(injuryDetail = "Verified Active Roster") }
+
+        repository.updateClubRoster("BAY", updatedRoster)
+        val syncedBayernPlayers = repository.playersFlow.value.filter { it.teamId == "BAY" }
+        assertTrue(syncedBayernPlayers.isNotEmpty())
+        assertTrue(syncedBayernPlayers.all { it.injuryDetail == "Verified Active Roster" })
+    }
 }
