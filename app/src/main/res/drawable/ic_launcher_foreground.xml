@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Glowing EuroLeague Orange Basketball Emblem -->
+    <path
+        android:fillColor="#FF6600"
+        android:pathData="M54,24A30,30 0,1 1,24 54A30,30 0,0 1,54 24Z" />
+    <path
+        android:strokeColor="#0E0E11"
+        android:strokeWidth="3.5"
+        android:pathData="M24,54L84,54M54,24L54,84M33,33Q54,54 33,75M75,33Q54,54 75,75" />
+</vector>
