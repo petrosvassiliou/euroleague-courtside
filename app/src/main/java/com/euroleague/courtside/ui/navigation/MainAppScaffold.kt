@@ -739,7 +739,7 @@ private fun MyTeamDashboardScreen(
                             Text("${idx + 1}. #${p.number} ${p.name}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                             val injColor = when (p.injuryStatus) {
                                 InjuryStatus.FIT -> CourtsideDesignTokens.NeonMadeGreen
-                                InjuryStatus.QUESTIONABLE -> CourtsideDesignTokens.EuroLeagueOrange
+                                InjuryStatus.GAME_TIME_DECISION, InjuryStatus.QUESTIONABLE -> CourtsideDesignTokens.EuroLeagueOrange
                                 InjuryStatus.OUT -> CourtsideDesignTokens.NeonMissedRed
                             }
                             val injText = if (p.injuryDetail.isNotBlank()) {

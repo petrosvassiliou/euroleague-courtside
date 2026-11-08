@@ -45,6 +45,7 @@ data class EuroLeagueTeam(
 enum class InjuryStatus(val label: String) {
     FIT("Einsatzbereit"),
     GAME_TIME_DECISION("Fraglich (GTD)"),
+    QUESTIONABLE("Fraglich (GTD)"),
     OUT("Verletzt")
 }
 
@@ -123,7 +124,9 @@ data class ShotAttempt(
     val made: Boolean,
     val isThreePointer: Boolean,
     val quarter: Int
-)
+) {
+    val isMade: Boolean get() = made
+}
 
 data class EuroLeagueGame(
     val id: String,
@@ -145,6 +148,8 @@ data class EuroLeagueGame(
     val gameCode: Int = 0,
     val seasonCode: String = "E2026"
 ) {
+    val shotChart: List<ShotAttempt> get() = shots
+
     val isCloseGameFourthQuarter: Boolean
         get() {
             if (status != GameStatus.LIVE || currentQuarter < 4) return false
@@ -207,7 +212,8 @@ class EuroLeagueMockRepository @Inject constructor() {
         liveGames: List<EuroLeagueGame>,
         activeRound: Int,
         seasonCode: String,
-        syncStatus: String
+        syncStatus: String = "",
+        syncLabel: String = ""
     ) {
         if (liveTeams.isNotEmpty()) {
             _teams.value = liveTeams
@@ -224,8 +230,9 @@ class EuroLeagueMockRepository @Inject constructor() {
         if (seasonCode.isNotBlank()) {
             _seasonCode.value = seasonCode
         }
-        if (syncStatus.isNotBlank()) {
-            _lastSyncStatus.value = syncStatus
+        val statusText = syncStatus.ifBlank { syncLabel }
+        if (statusText.isNotBlank()) {
+            _lastSyncStatus.value = statusText
         }
     }
 
@@ -236,6 +243,14 @@ class EuroLeagueMockRepository @Inject constructor() {
         }
         if (statusMessage != null) {
             _lastSyncStatus.value = statusMessage
+        }
+    }
+
+    fun updateSingleGameDetails(updatedGame: EuroLeagueGame) {
+        _games.update { currentList ->
+            currentList.map { game ->
+                if (game.id == updatedGame.id) updatedGame else game
+            }
         }
     }
 
@@ -539,6 +554,7 @@ class EuroLeagueMockRepository @Inject constructor() {
             PlayerProfile("001926", "PAN", 10, "Kostas Sloukas", "G", "GRE", 190, 11.8f, 2.7f, 6.1f, 15.9f, InjuryStatus.FIT),
             PlayerProfile("004088", "PAN", 16, "Cedi Osman", "F", "TUR", 204, 12.9f, 3.8f, 1.6f, 13.4f, InjuryStatus.FIT),
             PlayerProfile("011988", "MUN", 3, "Carsen Edwards", "G", "USA", 180, 19.9f, 2.4f, 3.3f, 17.6f, InjuryStatus.FIT),
+            PlayerProfile("011988_bay", "BAY", 3, "Carsen Edwards", "G", "USA", 180, 19.9f, 2.4f, 3.3f, 17.6f, InjuryStatus.FIT),
             PlayerProfile("009862", "MUN", 0, "Nick Weiler-Babb", "G", "GER", 196, 8.9f, 4.5f, 5.4f, 14.1f, InjuryStatus.FIT),
             PlayerProfile("007032", "MUN", 13, "Andreas Obst", "G", "GER", 191, 11.4f, 1.9f, 1.6f, 10.8f, InjuryStatus.FIT),
             PlayerProfile("007432", "MUN", 7, "Johannes Voigtmann", "C", "GER", 211, 7.8f, 5.2f, 2.4f, 11.2f, InjuryStatus.FIT),

@@ -844,7 +844,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                 val updated = game.copy(
                     boxscoreHome = boxHome.ifEmpty { game.boxscoreHome },
                     boxscoreAway = boxAway.ifEmpty { game.boxscoreAway },
-                    shotChart = shots.ifEmpty { game.shotChart }
+                    shots = shots.ifEmpty { game.shots }
                 )
                 fallbackMockRepository.updateSingleGameDetails(updated)
                 updated
@@ -1034,7 +1034,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                 teamId = mappedTeamId,
                 courtX = normX,
                 courtY = normY,
-                isMade = act in setOf("2FGM", "3FGM", "DUNK"),
+                made = act in setOf("2FGM", "3FGM", "DUNK"),
                 isThreePointer = "3FG" in act,
                 quarter = quarter
             )
@@ -1111,7 +1111,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
             headToHeadAwayWins = 5,
             boxscoreHome = boxHome,
             boxscoreAway = boxAway,
-            shotChart = shots
+            shots = shots
         )
     }
 
