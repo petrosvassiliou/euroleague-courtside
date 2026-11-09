@@ -33,7 +33,7 @@ data class EuroLeagueTeam(
     val threePointPct: Float,
     val twoPointPct: Float,
     val reboundRate: Float,
-    val logoUrl: String = "",
+    val logoUrl: String = "https://media-cdn.cortextech.io/crest/${id.lowercase()}.png",
     val localLogoResName: String = "club_logo_${id.lowercase()}"
 ) {
     val primaryColor: Color get() = Color(primaryColorHex)
@@ -566,8 +566,8 @@ class EuroLeagueMockRepository @Inject constructor() {
 
         fun buildInitialGames(teams: List<EuroLeagueTeam>): List<EuroLeagueGame> {
             val now = Instant.now()
-            val bay = teams.find { it.id == "BAY" || it.id == "MUN" } ?: teams.first()
-            val pao = teams.find { it.id == "PAO" || it.id == "PAN" } ?: teams[1]
+            val bay = teams.find { it.id == "BAY" } ?: teams.find { it.id == "MUN" } ?: teams.first()
+            val pao = teams.find { it.id == "PAO" } ?: teams.find { it.id == "PAN" } ?: teams[1]
             val rmb = teams.find { it.id == "MAD" || it.id == "RMB" } ?: teams[1]
             val oly = teams.find { it.id == "OLY" } ?: teams[2]
             val fbb = teams.find { it.id == "ULK" || it.id == "FBB" } ?: teams[3]
