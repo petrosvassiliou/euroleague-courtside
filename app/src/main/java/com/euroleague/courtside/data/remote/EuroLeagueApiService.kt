@@ -611,7 +611,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         foulsCommitted = b.foulsCommitted
                     )
                 },
-                shotChart = g.shotChart.map { s ->
+                shots = g.shotChart.map { s ->
                     ShotAttempt(
                         id = s.id,
                         playerId = s.playerId,
@@ -619,7 +619,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         teamId = s.teamId,
                         courtX = s.courtX,
                         courtY = s.courtY,
-                        isMade = s.isMade,
+                        made = s.isMade,
                         isThreePointer = s.isThreePointer,
                         quarter = s.quarter
                     )
