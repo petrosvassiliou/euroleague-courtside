@@ -45,27 +45,35 @@ jobs:
       - name: Run Unit Tests (PIR, RFC 5545 .ics, Crunch-Time Alerts, Live Roster Verification)
         run: gradle testDebugUnitTest
 
-      - name: Assemble Debug APK
+      - name: Assemble Signed Release APK & Debug APK
         run: |
-          gradle assembleDebug
+          gradle assembleRelease assembleDebug
+          cp app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/EuroLeague-Courtside-v1.0.0.apk
           cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/EuroLeague-Courtside-v1.0.0-debug.apk
 
-      - name: Upload EuroLeague Courtside APK Artifact
+      - name: Upload EuroLeague Courtside Signed Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: euroleague-courtside-release-apk
+          path: app/build/outputs/apk/release/EuroLeague-Courtside-v1.0.0.apk
+
+      - name: Upload EuroLeague Courtside Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: euroleague-courtside-debug-apk
           path: app/build/outputs/apk/debug/EuroLeague-Courtside-v1.0.0-debug.apk
 
-      - name: Publish APK to GitHub Releases (v1.0.0)
+      - name: Publish Signed Release APK to GitHub Releases (v1.0.0)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release view v1.0.0 >/dev/null 2>&1 || gh release create v1.0.0 \
-            --title "EuroLeague Courtside v1.0.0 (Live Data & Official Logos APK)" \
-            --notes "Offizielle APK von **EuroLeague Courtside** mit Live-Anbindung an api-live.euroleague.net (v2/v3), echten offiziellen Vereins-Logos, geprüften Kadern & täglichem Injury-Report."
+            --title "EuroLeague Courtside v1.0.0 (Official Signed Release APK)" \
+            --notes "Offizielle, kryptografisch signierte und R8-optimierte **Release-APK (`EuroLeague-Courtside-v1.0.0.apk`)** von **EuroLeague Courtside** mit Live-Anbindung an api-live.euroleague.net (v2/v3), allen 38 Spieltagen (380 Spiele), echten offiziellen Vereins-Logos, interaktivem Team-Vergleich (Radar & 8-Balken-Metriken), geprüften Kadern & täglichem Injury-Report in 6 Sprachen (DE, EN, FR, IT, ES, EL)."
           gh release edit v1.0.0 \
-            --title "EuroLeague Courtside v1.0.0 (Live Data & Official Logos APK)" \
-            --notes "Offizielle APK von **EuroLeague Courtside** mit Live-Anbindung an api-live.euroleague.net (v2/v3), echten offiziellen Vereins-Logos (images.crest), geprüften Kadern (/people) & täglichem Injury-Report."
+            --title "EuroLeague Courtside v1.0.0 (Official Signed Release APK)" \
+            --notes "Offizielle, kryptografisch signierte und R8-optimierte **Release-APK (`EuroLeague-Courtside-v1.0.0.apk`)** von **EuroLeague Courtside** mit Live-Anbindung an api-live.euroleague.net (v2/v3), allen 38 Spieltagen (380 Spiele), echten offiziellen Vereins-Logos (images.crest), interaktivem Team-Vergleich (Radar & 8-Balken-Metriken), geprüften Kadern (/people) & täglichem Injury-Report in 6 Sprachen (DE, EN, FR, IT, ES, EL)."
+          gh release upload v1.0.0 app/build/outputs/apk/release/EuroLeague-Courtside-v1.0.0.apk --clobber
           gh release upload v1.0.0 app/build/outputs/apk/debug/EuroLeague-Courtside-v1.0.0-debug.apk --clobber
           gh release upload v1.0.0 app/src/main/assets/euroleague_live_snapshot.json --clobber
           gh release upload v1.0.0 app/src/main/assets/euroleague_club_logos_b64.json --clobber
