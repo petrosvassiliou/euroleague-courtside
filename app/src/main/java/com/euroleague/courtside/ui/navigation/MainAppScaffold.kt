@@ -22,8 +22,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import com.euroleague.courtside.BuildConfig
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -1834,18 +1837,49 @@ private fun SettingsAndNotificationTestScreen(
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Column(
-            modifier = Modifier.weight(1f).fillMaxHeight(),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // 6-Language Selector Card (EN, DE, FR, IT, ES, EL)
             CourtsideGlassCard(isSelected = true, modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = strings.languageSectionTitle,
-                        color = Color.White,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 15.sp
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = strings.languageSectionTitle,
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 15.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Surface(
+                            color = Color(0x26FF6600),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.border(1.dp, Color(0x66FF6600), RoundedCornerShape(8.dp))
+                        ) {
+                            val versionLabel = when (activeLanguage) {
+                                AppLanguage.EN -> "Version v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
+                                AppLanguage.DE -> "Version v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
+                                AppLanguage.FR -> "Version v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
+                                AppLanguage.IT -> "Versione v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
+                                AppLanguage.ES -> "Versión v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
+                                AppLanguage.EL -> "Έκδοση v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
+                            }
+                            Text(
+                                text = versionLabel,
+                                color = CourtsideDesignTokens.EuroLeagueOrange,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
                     Text(
                         text = strings.languageSectionSubtitle,
                         color = CourtsideDesignTokens.MutedText,
@@ -1921,7 +1955,10 @@ private fun SettingsAndNotificationTestScreen(
         }
 
         Column(
-            modifier = Modifier.weight(1.1f).fillMaxHeight(),
+            modifier = Modifier
+                .weight(1.1f)
+                .fillMaxHeight()
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             val previewPayload = remember(sampleLiveGame, activeLanguage) {
