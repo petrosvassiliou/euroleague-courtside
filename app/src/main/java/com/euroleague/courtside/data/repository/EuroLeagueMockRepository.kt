@@ -209,8 +209,23 @@ class EuroLeagueMockRepository @Inject constructor() {
     private val _appLanguage = MutableStateFlow(com.euroleague.courtside.i18n.AppLanguage.fromCode(null))
     val appLanguageFlow: StateFlow<com.euroleague.courtside.i18n.AppLanguage> = _appLanguage.asStateFlow()
 
+    private val _activeDestination = MutableStateFlow(com.euroleague.courtside.ui.navigation.CourtsideDestination.START_DESTINATION)
+    val activeDestinationFlow: StateFlow<com.euroleague.courtside.ui.navigation.CourtsideDestination> = _activeDestination.asStateFlow()
+
     fun selectLanguage(language: com.euroleague.courtside.i18n.AppLanguage) {
         _appLanguage.value = language
+    }
+
+    fun selectDestination(destination: com.euroleague.courtside.ui.navigation.CourtsideDestination) {
+        _activeDestination.value = destination
+    }
+
+    /**
+     * Stellt sicher, dass bei jedem App-Start (Kaltstart, Prozess-Wiederherstellung,
+     * Warmstart aus dem Hintergrund oder Launcher-/Notification-Aufruf) immer "My Team" angezeigt wird.
+     */
+    fun resetToStartDestination() {
+        _activeDestination.value = com.euroleague.courtside.ui.navigation.CourtsideDestination.START_DESTINATION
     }
 
     fun applyLiveDataset(

@@ -130,14 +130,22 @@ import kotlin.math.sin
 
 enum class CourtsideDestination(
     val title: String,
-    val shortcutHint: String,
-    val icon: ImageVector
+    val shortcutHint: String
 ) {
-    MY_TEAM("Mein Team", "Ctrl+1", Icons.Default.Home),
-    MATCHDAY("EuroLeague", "Ctrl+2", Icons.Default.SportsBasketball),
-    STANDINGS_PLAYOFFS("Standings", "Ctrl+3", Icons.Default.EmojiEvents),
-    STATISTICS("Analytics", "Ctrl+4", Icons.Default.Analytics),
-    SETTINGS("Settings", "Ctrl+5", Icons.Default.Settings);
+    MY_TEAM("Mein Team", "Ctrl+1"),
+    MATCHDAY("EuroLeague", "Ctrl+2"),
+    STANDINGS_PLAYOFFS("Standings", "Ctrl+3"),
+    STATISTICS("Analytics", "Ctrl+4"),
+    SETTINGS("Settings", "Ctrl+5");
+
+    val icon: ImageVector
+        get() = when (this) {
+            MY_TEAM -> Icons.Default.Home
+            MATCHDAY -> Icons.Default.SportsBasketball
+            STANDINGS_PLAYOFFS -> Icons.Default.EmojiEvents
+            STATISTICS -> Icons.Default.Analytics
+            SETTINGS -> Icons.Default.Settings
+        }
 
     fun localizedTitle(strings: CourtsideStrings): String = when (this) {
         MY_TEAM -> strings.navMyTeam
@@ -145,6 +153,11 @@ enum class CourtsideDestination(
         STANDINGS_PLAYOFFS -> strings.navStandings
         STATISTICS -> strings.navAnalytics
         SETTINGS -> strings.navSettings
+    }
+
+    companion object {
+        /** Beim Start der App wird ausnahmslos immer "My Team" angezeigt. */
+        val START_DESTINATION: CourtsideDestination = MY_TEAM
     }
 }
 
@@ -192,7 +205,7 @@ fun MainAppScaffold(
         repository.findTeam(primaryTeamId) ?: allTeams.first()
     }
 
-    var currentDestination by rememberSaveable { mutableStateOf(CourtsideDestination.MATCHDAY) }
+    val currentDestination by repository.activeDestinationFlow.collectAsState()
     var selectedRound by rememberSaveable { mutableIntStateOf(activeRound) }
     var userManuallySelectedRound by rememberSaveable { mutableStateOf(false) }
     var filterOnlyFavorites by rememberSaveable { mutableStateOf(false) }
@@ -283,19 +296,19 @@ fun MainAppScaffold(
                     val ctrlOrCmd = event.isCtrlPressed || event.isMetaPressed
                     when {
                         ctrlOrCmd && event.key == Key.One -> {
-                            currentDestination = CourtsideDestination.MY_TEAM; true
+                            repository.selectDestination(CourtsideDestination.MY_TEAM); true
                         }
                         ctrlOrCmd && event.key == Key.Two -> {
-                            currentDestination = CourtsideDestination.MATCHDAY; true
+                            repository.selectDestination(CourtsideDestination.MATCHDAY); true
                         }
                         ctrlOrCmd && event.key == Key.Three -> {
-                            currentDestination = CourtsideDestination.STANDINGS_PLAYOFFS; true
+                            repository.selectDestination(CourtsideDestination.STANDINGS_PLAYOFFS); true
                         }
                         ctrlOrCmd && event.key == Key.Four -> {
-                            currentDestination = CourtsideDestination.STATISTICS; true
+                            repository.selectDestination(CourtsideDestination.STATISTICS); true
                         }
                         ctrlOrCmd && event.key == Key.Five -> {
-                            currentDestination = CourtsideDestination.SETTINGS; true
+                            repository.selectDestination(CourtsideDestination.SETTINGS); true
                         }
                         event.key == Key.F -> {
                             filterOnlyFavorites = !filterOnlyFavorites; true
@@ -324,7 +337,7 @@ fun MainAppScaffold(
                         strings = strings,
                         isExpanded = widthClass == WindowWidthSizeClass.EXPANDED,
                         isSyncing = isLiveSyncing,
-                        onSelectDestination = { currentDestination = it },
+                        onSelectDestination = { repository.selectDestination(it) },
                         onSelectLanguage = onChangeLanguage,
                         onLiveRefresh = triggerLiveSync
                     )
@@ -402,7 +415,7 @@ fun MainAppScaffold(
                             },
                             onOpenTeamStats = { teamId ->
                                 comparisonTeamBId = teamId
-                                currentDestination = CourtsideDestination.STATISTICS
+                                repository.selectDestination(CourtsideDestination.STATISTICS)
                             }
                         )
 
@@ -532,7 +545,7 @@ fun MainAppScaffold(
                         val navTitle = dest.localizedTitle(strings)
                         NavigationBarItem(
                             selected = selected,
-                            onClick = { currentDestination = dest },
+                            onClick = { repository.selectDestination(dest) },
                             icon = { Icon(dest.icon, contentDescription = navTitle) },
                             label = { Text(navTitle, fontSize = 11.sp) },
                             colors = NavigationBarItemDefaults.colors(

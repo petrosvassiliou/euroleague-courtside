@@ -166,5 +166,36 @@ class EuroLeagueCourtsideUnitTest {
         assertTrue(freshRepo.favoriteTeamIds.value.contains("OLY"))
         assertEquals("Olympiacos Piraeus", freshRepo.findTeam(freshRepo.selectedTeamId.value)?.name)
     }
+
+    @Test
+    fun `app always starts on My Team destination on initial launch and every restart`() {
+        assertEquals(
+            com.euroleague.courtside.ui.navigation.CourtsideDestination.MY_TEAM,
+            com.euroleague.courtside.ui.navigation.CourtsideDestination.START_DESTINATION
+        )
+
+        val freshRepo = EuroLeagueMockRepository()
+        assertEquals(
+            com.euroleague.courtside.ui.navigation.CourtsideDestination.MY_TEAM,
+            freshRepo.activeDestinationFlow.value
+        )
+
+        freshRepo.selectDestination(com.euroleague.courtside.ui.navigation.CourtsideDestination.MATCHDAY)
+        assertEquals(
+            com.euroleague.courtside.ui.navigation.CourtsideDestination.MATCHDAY,
+            freshRepo.activeDestinationFlow.value
+        )
+        freshRepo.selectDestination(com.euroleague.courtside.ui.navigation.CourtsideDestination.SETTINGS)
+        assertEquals(
+            com.euroleague.courtside.ui.navigation.CourtsideDestination.SETTINGS,
+            freshRepo.activeDestinationFlow.value
+        )
+
+        freshRepo.resetToStartDestination()
+        assertEquals(
+            com.euroleague.courtside.ui.navigation.CourtsideDestination.MY_TEAM,
+            freshRepo.activeDestinationFlow.value
+        )
+    }
 }
 
