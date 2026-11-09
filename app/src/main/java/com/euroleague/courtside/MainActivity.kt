@@ -68,13 +68,20 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Sofortiges Laden des gebündelten Live-Snapshots + kontinuierlicher 30s Live-API-Sync
+            // Sofortiges Laden des gebündelten Live-Snapshots + vollständiger Live-API-Sync beim Start
+            // + schonender 45s-Live-Ticker (verhindert HTTP 429) & vollständiger Kader/Statistik-Sync alle 15 Min.
             LaunchedEffect(Unit) {
                 offlineFirstRepository.loadBundledLiveSnapshotFromAssets(applicationContext)
                 offlineFirstRepository.syncSeasonDataFromRemoteOrSeedCache()
+                var tickCount = 0
                 while (true) {
-                    delay(30_000L)
-                    offlineFirstRepository.syncSeasonDataFromRemoteOrSeedCache()
+                    delay(45_000L)
+                    tickCount++
+                    if (tickCount % 20 == 0) {
+                        offlineFirstRepository.syncSeasonDataFromRemoteOrSeedCache()
+                    } else {
+                        offlineFirstRepository.refreshLiveMatchdayTick()
+                    }
                 }
             }
 

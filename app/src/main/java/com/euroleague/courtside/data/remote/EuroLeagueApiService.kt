@@ -18,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -218,6 +219,63 @@ data class EuroLeagueStatPlayerMetaDto(
 )
 
 @Serializable
+data class EuroLeagueTeamStatsEnvelopeDto(
+    @SerialName("teams") val teams: List<EuroLeagueTeamTraditionalDto> = emptyList()
+)
+
+@Serializable
+data class EuroLeagueTeamTraditionalDto(
+    @SerialName("team") val team: EuroLeagueStatTeamMetaDto = EuroLeagueStatTeamMetaDto(),
+    @SerialName("pointsScored") val pointsScored: Double = 0.0,
+    @SerialName("twoPointersPercentage") val twoPointersPercentage: String? = null,
+    @SerialName("threePointersPercentage") val threePointersPercentage: String? = null,
+    @SerialName("totalRebounds") val totalRebounds: Double = 0.0,
+    @SerialName("pir") val pir: Double = 0.0
+)
+
+@Serializable
+data class EuroLeagueStatTeamMetaDto(
+    @SerialName("code") val code: String = "",
+    @SerialName("tvCodes") val tvCodes: String? = null,
+    @SerialName("name") val name: String = ""
+)
+
+@Serializable
+data class EuroLeagueLiveBoxscoreEnvelopeDto(
+    @SerialName("Stats") val stats: List<EuroLeagueLiveTeamBoxscoreDto> = emptyList()
+)
+
+@Serializable
+data class EuroLeagueLiveTeamBoxscoreDto(
+    @SerialName("Team") val team: String = "",
+    @SerialName("PlayersStats") val playersStats: List<EuroLeagueLivePlayerStatDto> = emptyList()
+)
+
+@Serializable
+data class EuroLeagueLivePlayerStatDto(
+    @SerialName("Player_ID") val playerId: String = "",
+    @SerialName("Team") val team: String = "",
+    @SerialName("Dorsal") val dorsal: String = "0",
+    @SerialName("Player") val player: String = "",
+    @SerialName("Minutes") val minutes: String = "00:00",
+    @SerialName("Points") val points: Int = 0,
+    @SerialName("FieldGoalsMade2") val fgm2: Int = 0,
+    @SerialName("FieldGoalsAttempted2") val fga2: Int = 0,
+    @SerialName("FieldGoalsMade3") val fgm3: Int = 0,
+    @SerialName("FieldGoalsAttempted3") val fga3: Int = 0,
+    @SerialName("FreeThrowsMade") val ftm: Int = 0,
+    @SerialName("FreeThrowsAttempted") val fta: Int = 0,
+    @SerialName("OffensiveRebounds") val offReb: Int = 0,
+    @SerialName("DefensiveRebounds") val defReb: Int = 0,
+    @SerialName("Assistances") val assists: Int = 0,
+    @SerialName("Steals") val steals: Int = 0,
+    @SerialName("Turnovers") val turnovers: Int = 0,
+    @SerialName("BlocksFavour") val blocks: Int = 0,
+    @SerialName("FoulsCommited") val foulsCommitted: Int = 0,
+    @SerialName("FoulsReceived") val foulsDrawn: Int = 0
+)
+
+@Serializable
 data class EuroLeagueLivePointsDto(
     @SerialName("Rows") val rows: List<EuroLeagueShotRowDto> = emptyList()
 )
@@ -307,6 +365,7 @@ data class BundledGameDto(
     val quarters: BundledQuartersDto,
     val headToHeadHomeWins: Int = 5,
     val headToHeadAwayWins: Int = 5,
+    val isOfficialBoxscore: Boolean = false,
     val boxscoreHome: List<BundledBoxscoreStatDto> = emptyList(),
     val boxscoreAway: List<BundledBoxscoreStatDto> = emptyList(),
     val shotChart: List<BundledShotAttemptDto> = emptyList()
@@ -365,7 +424,7 @@ data class BundledShotAttemptDto(
 
 /**
  * Offizielles Retrofit-Interface für die EuroLeague Live-Feeds (`api-live.euroleague.net` v2/v3
- * sowie `live.euroleague.net/api/Points` für echte Wurf-Koordinaten).
+ * sowie `live.euroleague.net/api/Boxscore` & `Points` für Live-Boxscores und echte Wurf-Koordinaten).
  */
 interface EuroLeagueApiService {
 
@@ -401,10 +460,24 @@ interface EuroLeagueApiService {
 
     @GET("v3/competitions/E/statistics/players/traditional")
     suspend fun fetchPlayerTraditionalStats(
+        @Query("seasonMode") seasonMode: String = "Single",
         @Query("seasonCode") seasonCode: String = "E2026",
         @Query("statisticMode") statisticMode: String = "PerGame",
         @Query("limit") limit: Int = 500
     ): EuroLeaguePlayerStatsEnvelopeDto
+
+    @GET("v3/competitions/E/statistics/teams/traditional")
+    suspend fun fetchTeamTraditionalStats(
+        @Query("seasonMode") seasonMode: String = "Single",
+        @Query("seasonCode") seasonCode: String = "E2026",
+        @Query("statisticMode") statisticMode: String = "PerGame",
+        @Query("limit") limit: Int = 50
+    ): EuroLeagueTeamStatsEnvelopeDto
+
+    @GET
+    suspend fun fetchLiveGameBoxscore(
+        @Url fullUrl: String
+    ): EuroLeagueLiveBoxscoreEnvelopeDto
 
     @GET
     suspend fun fetchLiveGameShotPoints(
@@ -429,6 +502,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     private val httpClient = OkHttpClient()
+    private val apiSemaphore = kotlinx.coroutines.sync.Semaphore(4)
 
     private val officialPalette: Map<String, Triple<Long, Long, Long>> = mapOf(
         "MUN" to Triple(0xFFDC052D, 0xFF0066B2, 0xFFFFFFFF),
@@ -656,10 +730,12 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                 val allGamesDto = apiService.fetchSeasonGames(seasonCode = seasonCode, round = null, limit = 400).data
                 val activeRound = resolveCurrentActiveRound(rounds, allGamesDto)
                 val playerStatsMap = fetchPlayerTraditionalStatsMap(seasonCode)
+                val teamStatsMap = fetchTeamTraditionalStatsMap(seasonCode)
                 val injuryMap = fetchLatestInjuryReportMap()
 
                 val existingTeamsById = fallbackMockRepository.teams.associateBy { it.id }
                 val existingGamesById = fallbackMockRepository.games.value.associateBy { it.id }
+                val existingPlayersByTeam = fallbackMockRepository.players.groupBy { it.teamId }
 
                 // 1. Berechne aktuelle Tabellenstände & Formkurven aus allen gespielten Spielen
                 data class MutableStanding(
@@ -704,9 +780,23 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                     val tvCode = c.tvCode ?: code
                     val st = standingsMap[code] ?: MutableStanding()
                     val existing = existingTeamsById[code] ?: existingTeamsById[tvCode]
+                    val tStat = teamStatsMap[code] ?: teamStatsMap[tvCode]
                     val gp = (st.wins + st.losses).coerceAtLeast(1)
-                    val ppg = if (st.pf > 0) st.pf.toFloat() / gp else 82f
+                    val ppg = if ((tStat?.pointsScored ?: 0.0) > 0.0) {
+                        tStat!!.pointsScored.toFloat()
+                    } else if (st.pf > 0) {
+                        st.pf.toFloat() / gp
+                    } else {
+                        82f
+                    }
                     val oppg = if (st.pa > 0) st.pa.toFloat() / gp else 80f
+                    val parsedTwoPct = parsePercentageString(tStat?.twoPointersPercentage)
+                    val parsedThreePct = parsePercentageString(tStat?.threePointersPercentage)
+                    val parsedRebRate = if ((tStat?.totalRebounds ?: 0.0) > 0.0) {
+                        ((tStat!!.totalRebounds.toFloat() * 1.42f * 10f).roundToInt() / 10f).coerceIn(44.5f, 57.5f)
+                    } else {
+                        null
+                    }
                     val colors = officialPalette[code]
                         ?: officialPalette[tvCode]
                         ?: Triple(0xFFFF6600L, 0xFFFFFFFFL, 0xFFFF6600L)
@@ -728,10 +818,10 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         streak = st.streak.takeLast(5).ifEmpty { existing?.streak ?: listOf("S", "N", "S", "S", "N") },
                         offensiveRating = ((ppg * 1.32f * 10f).roundToInt() / 10f),
                         defensiveRating = ((oppg * 1.32f * 10f).roundToInt() / 10f),
-                        pace = existing?.pace ?: (((70f + (ppg - 78f) * 0.35f) * 10f).roundToInt() / 10f),
-                        threePointPct = existing?.threePointPct ?: (((34.5f + (ppg - 78f) * 0.32f) * 10f).roundToInt() / 10f),
-                        twoPointPct = existing?.twoPointPct ?: (((52.5f + (ppg - 78f) * 0.38f) * 10f).roundToInt() / 10f),
-                        reboundRate = existing?.reboundRate ?: (((48.5f + (st.wins - st.losses) * 0.45f) * 10f).roundToInt() / 10f),
+                        pace = (((70f + (ppg - 78f) * 0.35f) * 10f).roundToInt() / 10f),
+                        threePointPct = parsedThreePct ?: existing?.threePointPct ?: (((34.5f + (ppg - 78f) * 0.32f) * 10f).roundToInt() / 10f),
+                        twoPointPct = parsedTwoPct ?: existing?.twoPointPct ?: (((52.5f + (ppg - 78f) * 0.38f) * 10f).roundToInt() / 10f),
+                        reboundRate = parsedRebRate ?: existing?.reboundRate ?: (((48.5f + (st.wins - st.losses) * 0.45f) * 10f).roundToInt() / 10f),
                         logoUrl = c.images?.crest ?: existing?.logoUrl ?: "",
                         localLogoResName = "club_logo_${code.lowercase()}"
                     )
@@ -739,16 +829,36 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
 
                 val teamById = liveTeams.associateBy { it.id }
 
-                // 2. Lade und verifiziere parallel die aktuellen Kader (Rosters) aller EuroLeague-Clubs
+                // 2. Lade und verifiziere gedrosselt (Semaphore(4)) die aktuellen Kader (Rosters) aller EuroLeague-Clubs
                 val allVerifiedPlayers = coroutineScope {
                     liveTeams.map { team ->
                         async {
-                            fetchAndVerifySingleClubRoster(
-                                seasonCode = seasonCode,
-                                clubCode = team.id,
-                                playerStatsMap = playerStatsMap,
-                                injuryMap = injuryMap
-                            )
+                            val fetchedRoster = apiSemaphore.withPermit {
+                                fetchAndVerifySingleClubRoster(
+                                    seasonCode = seasonCode,
+                                    clubCode = team.id,
+                                    playerStatsMap = playerStatsMap,
+                                    injuryMap = injuryMap
+                                )
+                            }
+                            if (fetchedRoster.isNotEmpty()) {
+                                fetchedRoster
+                            } else {
+                                // Falls Einzelabruf gedrosselt/offline: Bestehenden Kader mit frischen Single-Season-Stats aktualisieren
+                                (existingPlayersByTeam[team.id] ?: emptyList()).map { p ->
+                                    val rawCode = p.id.removePrefix("${team.id}_")
+                                    val st = playerStatsMap[rawCode]
+                                    val inj = matchPlayerInjury(p.name, p.name.substringAfterLast(" "), injuryMap)
+                                    p.copy(
+                                        ppg = if (st != null) ((st.pointsScored * 10.0).roundToInt() / 10f) else p.ppg,
+                                        rpg = if (st != null) ((st.totalRebounds * 10.0).roundToInt() / 10f) else p.rpg,
+                                        apg = if (st != null) ((st.assists * 10.0).roundToInt() / 10f) else p.apg,
+                                        pir = if (st != null) ((st.pir * 10.0).roundToInt() / 10f) else p.pir,
+                                        injuryStatus = inj?.first ?: p.injuryStatus,
+                                        injuryDetail = inj?.second ?: p.injuryDetail
+                                    )
+                                }
+                            }
                         }
                     }.awaitAll().flatten()
                 }
@@ -774,12 +884,16 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         async {
                             val isActiveRound = g.round == activeRound
                             val (fetchedBoxHome, fetchedBoxAway) = if (isActiveRound && g.played) {
-                                fetchGameBoxscores(seasonCode, g.gameCode, homeTeam.id, awayTeam.id)
+                                apiSemaphore.withPermit {
+                                    fetchGameBoxscores(seasonCode, g.gameCode, homeTeam.id, awayTeam.id)
+                                }
                             } else {
                                 emptyList<PlayerBoxscoreStat>() to emptyList()
                             }
                             val fetchedShots = if (isActiveRound && g.played) {
-                                fetchGameShotChart(seasonCode, g.gameCode, homeTeam.id, awayTeam.id)
+                                apiSemaphore.withPermit {
+                                    fetchGameShotChart(seasonCode, g.gameCode, homeTeam.id, awayTeam.id)
+                                }
                             } else {
                                 emptyList()
                             }
@@ -835,6 +949,64 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
             }.recoverCatching {
                 // Offline-Fallback: Speichere aktuellen Stand aus dem Mock/Snapshot-Repository in Room
                 persistToRoomCache(fallbackMockRepository.teams, fallbackMockRepository.games.value)
+            }
+        }
+
+    /**
+     * Schneller, Rate-Limit-schonender Live-Ticker (1 Request für aktuelle Spielstände/Viertel +
+     * Live-Boxscore-Update für laufende Partien), damit die App im Dauerbetrieb niemals HTTP 429 auslöst.
+     */
+    suspend fun refreshLiveMatchdayTick(): Result<Unit> =
+        withContext(ioDispatcher) {
+            runCatching {
+                val seasonCode = fallbackMockRepository.seasonCodeFlow.value
+                val allGamesDto = apiService.fetchSeasonGames(seasonCode = seasonCode, round = null, limit = 400).data
+                if (allGamesDto.isEmpty()) return@runCatching
+
+                val teamById = fallbackMockRepository.teams.associateBy { it.id }
+                val cachedById = fallbackMockRepository.games.value.associateBy { it.id }
+
+                val updatedGames = allGamesDto.mapNotNull { g ->
+                    val homeTeam = teamById[g.local.club.code] ?: return@mapNotNull null
+                    val awayTeam = teamById[g.road.club.code] ?: return@mapNotNull null
+                    val gameId = "${seasonCode}_${g.gameCode}"
+                    val cached = cachedById[gameId]
+                    val statusRaw = (g.gameStatus ?: "").lowercase()
+                    val isLive = "live" in statusRaw || "playing" in statusRaw || "progress" in statusRaw
+                    val justFinished = g.played && cached?.status != GameStatus.FINAL
+
+                    val (boxH, boxA) = if (isLive || justFinished) {
+                        fetchGameBoxscores(seasonCode, g.gameCode, homeTeam.id, awayTeam.id)
+                    } else {
+                        (cached?.boxscoreHome ?: emptyList()) to (cached?.boxscoreAway ?: emptyList())
+                    }
+                    val shots = if (isLive || justFinished) {
+                        fetchGameShotChart(seasonCode, g.gameCode, homeTeam.id, awayTeam.id)
+                    } else {
+                        cached?.shots ?: emptyList()
+                    }
+
+                    mapRemoteGameToDomain(
+                        g = g,
+                        seasonCode = seasonCode,
+                        homeTeam = homeTeam,
+                        awayTeam = awayTeam,
+                        boxHome = boxH.ifEmpty { cached?.boxscoreHome ?: emptyList() },
+                        boxAway = boxA.ifEmpty { cached?.boxscoreAway ?: emptyList() },
+                        shots = shots.ifEmpty { cached?.shots ?: emptyList() }
+                    )
+                }
+
+                if (updatedGames.isNotEmpty()) {
+                    fallbackMockRepository.applyLiveDataset(
+                        liveTeams = fallbackMockRepository.teams,
+                        livePlayers = fallbackMockRepository.players,
+                        liveGames = updatedGames,
+                        activeRound = fallbackMockRepository.activeRoundFlow.value,
+                        seasonCode = seasonCode,
+                        syncLabel = "$seasonCode • Round ${fallbackMockRepository.activeRoundFlow.value}"
+                    )
+                }
             }
         }
 
@@ -951,10 +1123,24 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
 
     private suspend fun fetchPlayerTraditionalStatsMap(seasonCode: String): Map<String, EuroLeaguePlayerTraditionalDto> =
         runCatching {
-            apiService.fetchPlayerTraditionalStats(seasonCode = seasonCode)
+            apiService.fetchPlayerTraditionalStats(seasonMode = "Single", seasonCode = seasonCode)
                 .players
                 .associateBy { it.player.code }
         }.getOrDefault(emptyMap())
+
+    private suspend fun fetchTeamTraditionalStatsMap(seasonCode: String): Map<String, EuroLeagueTeamTraditionalDto> =
+        runCatching {
+            apiService.fetchTeamTraditionalStats(seasonMode = "Single", seasonCode = seasonCode)
+                .teams
+                .associateBy { it.team.code }
+        }.getOrDefault(emptyMap())
+
+    private fun parsePercentageString(raw: String?): Float? {
+        if (raw.isNullOrBlank()) return null
+        val cleaned = raw.replace("%", "").trim().toFloatOrNull() ?: return null
+        val pct = if (cleaned <= 1.0f && cleaned > 0f) cleaned * 100f else cleaned
+        return (pct * 10f).roundToInt() / 10f
+    }
 
     private fun fetchLatestInjuryReportMap(): Map<String, Pair<InjuryStatus, String>> =
         runCatching {
@@ -1033,17 +1219,77 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
         }.sortedWith(compareByDescending<PlayerProfile> { it.pir }.thenByDescending { it.ppg })
     }.getOrDefault(emptyList())
 
+    /**
+     * Dual-Source Live-Boxscore-Abruf:
+     * 1. Primär: `api-live.euroleague.net/v2/competitions/E/seasons/{seasonCode}/games/{gameCode}/stats`
+     * 2. Sekundär (Fallback bei Rate-Limit): `live.euroleague.net/api/Boxscore?gamecode={gameCode}&seasoncode={seasonCode}`
+     */
     private suspend fun fetchGameBoxscores(
         seasonCode: String,
         gameCode: Int,
         homeTeamId: String,
         awayTeamId: String
-    ): Pair<List<PlayerBoxscoreStat>, List<PlayerBoxscoreStat>> = runCatching {
-        val dto = apiService.fetchGameBoxscoreStats(seasonCode = seasonCode, gameCode = gameCode)
-        val homeStats = parseBoxscoreSection(dto.local, homeTeamId)
-        val awayStats = parseBoxscoreSection(dto.road, awayTeamId)
-        homeStats to awayStats
-    }.getOrDefault(emptyList<PlayerBoxscoreStat>() to emptyList())
+    ): Pair<List<PlayerBoxscoreStat>, List<PlayerBoxscoreStat>> {
+        val primary = runCatching {
+            val dto = apiService.fetchGameBoxscoreStats(seasonCode = seasonCode, gameCode = gameCode)
+            val homeStats = parseBoxscoreSection(dto.local, homeTeamId)
+            val awayStats = parseBoxscoreSection(dto.road, awayTeamId)
+            homeStats to awayStats
+        }.getOrDefault(emptyList<PlayerBoxscoreStat>() to emptyList())
+
+        if (primary.first.isNotEmpty() && primary.second.isNotEmpty()) {
+            return primary
+        }
+
+        return runCatching {
+            val url = "https://live.euroleague.net/api/Boxscore?gamecode=$gameCode&seasoncode=$seasonCode"
+            val liveDto = apiService.fetchLiveGameBoxscore(url)
+            val homeStats = parseLiveBoxscorePlayers(liveDto.stats.getOrNull(0)?.playersStats.orEmpty(), homeTeamId)
+            val awayStats = parseLiveBoxscorePlayers(liveDto.stats.getOrNull(1)?.playersStats.orEmpty(), awayTeamId)
+            homeStats to awayStats
+        }.getOrDefault(primary)
+    }
+
+    private fun parseLiveBoxscorePlayers(
+        rows: List<EuroLeagueLivePlayerStatDto>,
+        teamId: String
+    ): List<PlayerBoxscoreStat> {
+        return rows.mapNotNull { r ->
+            val minsClean = r.minutes.trim()
+            if ((minsClean.isEmpty() || minsClean == "00:00" || minsClean == "DNP") && r.points <= 0) {
+                return@mapNotNull null
+            }
+            val codeClean = r.playerId.trim().removePrefix("P")
+            val formattedName = if ("," in r.player) {
+                val parts = r.player.split(",", limit = 2).map { it.trim() }
+                "${parts[1]} ${parts[0]}".lowercase().split(" ").joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
+            } else {
+                r.player.trim().lowercase().split(" ").joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
+            }
+            PlayerBoxscoreStat(
+                playerId = "${teamId}_$codeClean",
+                playerName = formattedName,
+                jerseyNumber = r.dorsal.trim().toIntOrNull() ?: 0,
+                teamId = teamId,
+                minutes = minsClean.ifEmpty { "00:00" },
+                points = r.points,
+                offRebounds = r.offReb,
+                defRebounds = r.defReb,
+                assists = r.assists,
+                steals = r.steals,
+                blocks = r.blocks,
+                turnovers = r.turnovers,
+                twoPtMade = r.fgm2,
+                twoPtAttempted = r.fga2,
+                threePtMade = r.fgm3,
+                threePtAttempted = r.fga3,
+                ftMade = r.ftm,
+                ftAttempted = r.fta,
+                foulsDrawn = r.foulsDrawn,
+                foulsCommitted = r.foulsCommitted
+            )
+        }.sortedByDescending { it.pir }
+    }
 
     private fun parseBoxscoreSection(
         section: EuroLeagueTeamBoxscoreSectionDto?,

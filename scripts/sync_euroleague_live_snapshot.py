@@ -79,7 +79,7 @@ CLUB_STYLE_MAP = {
 }
 
 
-def fetch_json(url: str, timeout: int = 20, retries: int = 3):
+def fetch_json(url: str, timeout: int = 20, retries: int = 4):
     for attempt in range(retries):
         req = urllib.request.Request(
             url,
@@ -96,13 +96,15 @@ def fetch_json(url: str, timeout: int = 20, retries: int = 3):
                 return json.loads(raw)
         except urllib.error.HTTPError as exc:
             if exc.code == 429 and attempt < retries - 1:
-                time.sleep(1.2 * (attempt + 1))
+                wait_s = 12.0 * (attempt + 1)
+                print(f"[RATE-LIMIT] 429 on {url}, cooling down {wait_s:.0f}s...")
+                time.sleep(wait_s)
                 continue
             print(f"[WARN] Failed to fetch {url}: {exc}")
             return None
         except Exception as exc:
             if attempt < retries - 1:
-                time.sleep(0.6)
+                time.sleep(1.0)
                 continue
             print(f"[WARN] Failed to fetch {url}: {exc}")
             return None
@@ -328,9 +330,9 @@ def main():
 
     injuries_map = fetch_latest_injuries()
 
-    # Fetch player traditional stats (PerGame)
+    # Fetch player traditional stats (Single season PerGame)
     player_stats_payload = fetch_json(
-        f"{V3_BASE}/statistics/players/traditional?seasonCode={season_code}&statisticMode=PerGame&limit=500"
+        f"{V3_BASE}/statistics/players/traditional?seasonMode=Single&seasonCode={season_code}&statisticMode=PerGame&limit=500"
     )
     player_stats_rows = extract_rows(player_stats_payload)
     stats_by_player_code = {}
@@ -346,11 +348,11 @@ def main():
             if pcode:
                 stats_by_player_code[pcode] = row
 
-    print(f"[INFO] Loaded season per-game stats for {len(stats_by_player_code)} players")
+    print(f"[INFO] Loaded single-season per-game stats for {len(stats_by_player_code)} players")
 
-    # Fetch team traditional stats (PerGame)
+    # Fetch team traditional stats (Single season PerGame)
     team_stats_payload = fetch_json(
-        f"{V3_BASE}/statistics/teams/traditional?seasonCode={season_code}&statisticMode=PerGame&limit=50"
+        f"{V3_BASE}/statistics/teams/traditional?seasonMode=Single&seasonCode={season_code}&statisticMode=PerGame&limit=50"
     )
     team_stats_rows = extract_rows(team_stats_payload)
     team_stats_by_code = {}
@@ -365,6 +367,8 @@ def main():
             tcode = str(t_obj.get("code") or "").strip()
             if tcode:
                 team_stats_by_code[tcode] = row
+
+    print(f"[INFO] Loaded single-season per-game stats for {len(team_stats_by_code)} teams")
 
     # Fetch all season games to compute accurate W-L, pointsFor, pointsAgainst, streak, and schedule
     all_games_payload = fetch_json(f"{V2_BASE}/seasons/{season_code}/games")
@@ -590,8 +594,18 @@ def main():
             })
 
         if not club_roster and code in old_players_by_team:
-            club_roster = old_players_by_team[code]
-            print(f"[ROSTER] {code} ({name}): reused {len(club_roster)} cached verified players")
+            club_roster = []
+            for op in old_players_by_team[code]:
+                op_copy = dict(op)
+                raw_pcode = str(op_copy.get("id") or "").replace(f"{code}_", "").strip()
+                p_stat = stats_by_player_code.get(raw_pcode) or {}
+                if p_stat:
+                    op_copy["ppg"] = round(float(p_stat.get("pointsScored") or 0.0), 1)
+                    op_copy["rpg"] = round(float(p_stat.get("totalRebounds") or 0.0), 1)
+                    op_copy["apg"] = round(float(p_stat.get("assists") or 0.0), 1)
+                    op_copy["pir"] = round(float(p_stat.get("pir") or 0.0), 1)
+                club_roster.append(op_copy)
+            print(f"[ROSTER] {code} ({name}): reused {len(club_roster)} cached verified players with updated single-season stats")
         else:
             print(f"[ROSTER] {code} ({name}): verified {len(club_roster)} active players")
 
@@ -613,9 +627,9 @@ def main():
                 l_code = g.get("homeTeamId", "")
                 r_code = g.get("awayTeamId", "")
                 gc = int(g.get("gameCode") or 1)
-                if not g.get("boxscoreHome"):
+                if not g.get("boxscoreHome") or not g.get("isOfficialBoxscore"):
                     g["boxscoreHome"] = build_roster_boxscore_for_played_game(l_code, int(g.get("homeScore") or 80), rosters_by_team.get(l_code, []), gc)
-                if not g.get("boxscoreAway"):
+                if not g.get("boxscoreAway") or not g.get("isOfficialBoxscore"):
                     g["boxscoreAway"] = build_roster_boxscore_for_played_game(r_code, int(g.get("awayScore") or 78), rosters_by_team.get(r_code, []), gc + 1)
                 if not g.get("shotChart"):
                     shots = build_shots_for_played_game(gc, l_code, r_code, g["boxscoreHome"], g["boxscoreAway"])
@@ -629,7 +643,7 @@ def main():
         active_round = latest_played_round
         print(f"[INFO] Active round set to latest played round: Round {active_round}")
 
-        live_fetch_budget = [16]  # Max live game stats fetches per run to stay well below HTTP 429 limit
+        live_fetch_budget = [24]  # Fetch up to 24 official game boxscores/shot-charts per run safely
 
         games_out = []
         for g in sorted_games:
@@ -676,19 +690,22 @@ def main():
             cached_box_home = cached_g.get("boxscoreHome") or []
             cached_box_away = cached_g.get("boxscoreAway") or []
             cached_shots = cached_g.get("shotChart") or cached_g.get("shots") or []
+            was_official = bool(cached_g.get("isOfficialBoxscore")) or (len(cached_shots) >= 40)
 
             box_home = []
             box_away = []
             shots_list = []
+            is_official = False
 
             if (played or status == "LIVE") and game_code > 0:
-                if status == "FINAL" and len(cached_box_home) > 0 and len(cached_box_away) > 0 and len(cached_shots) > 0:
+                if status == "FINAL" and was_official and len(cached_box_home) > 0 and len(cached_box_away) > 0 and len(cached_shots) > 0:
                     box_home = cached_box_home
                     box_away = cached_box_away
                     shots_list = cached_shots
-                elif (rnd == active_round or live_fetch_budget[0] > 0) and live_fetch_budget[0] > 0:
+                    is_official = True
+                elif (rnd in (active_round, 2, 9, 8) or live_fetch_budget[0] > 0) and live_fetch_budget[0] > 0:
                     live_fetch_budget[0] -= 1
-                    time.sleep(0.15)
+                    time.sleep(0.25)
                     stats_data = fetch_json(f"{V2_BASE}/seasons/{season_code}/games/{game_code}/stats")
                     if isinstance(stats_data, dict):
                         for side_key, target_list, team_code in [("local", box_home, l_code), ("road", box_away, r_code)]:
@@ -738,6 +755,8 @@ def main():
                                     "foulsDrawn": int(st.get("foulsReceived") or 0),
                                     "foulsCommitted": int(st.get("foulsCommited") or 0)
                                 })
+                        if box_home and box_away:
+                            is_official = True
 
                     points_data = fetch_json(f"{LIVE_BASE}/Points?gamecode={game_code}&seasoncode={season_code}")
                     point_rows = extract_rows(points_data)
@@ -775,13 +794,13 @@ def main():
                         if len(shots_list) >= 45:
                             break
 
-                # Ensure every played/live game has complete player boxscores & shot chart
+                # Ensure every played/live game has complete player boxscores & shot chart using current single-season stats
                 if not box_home:
-                    box_home = cached_box_home or build_roster_boxscore_for_played_game(l_code, l_score, rosters_by_team.get(l_code, []), game_code)
+                    box_home = build_roster_boxscore_for_played_game(l_code, l_score, rosters_by_team.get(l_code, []), game_code)
                 if not box_away:
-                    box_away = cached_box_away or build_roster_boxscore_for_played_game(r_code, r_score, rosters_by_team.get(r_code, []), game_code + 1)
+                    box_away = build_roster_boxscore_for_played_game(r_code, r_score, rosters_by_team.get(r_code, []), game_code + 1)
                 if not shots_list:
-                    shots_list = cached_shots or build_shots_for_played_game(game_code, l_code, r_code, box_home, box_away)
+                    shots_list = build_shots_for_played_game(game_code, l_code, r_code, box_home, box_away)
 
             games_out.append({
                 "id": game_id,
@@ -815,6 +834,7 @@ def main():
                 "q3Away": q3_a,
                 "q4Home": q4_h,
                 "q4Away": q4_a,
+                "isOfficialBoxscore": is_official,
                 "boxscoreHome": box_home,
                 "boxscoreAway": box_away,
                 "shotChart": shots_list,
