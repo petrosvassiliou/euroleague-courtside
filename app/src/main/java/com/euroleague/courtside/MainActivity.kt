@@ -44,6 +44,18 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // Stelle gespeichertes "My Team" & Sprache sofort synchron vor dem ersten UI-Frame wieder her
+        preferencesDataStore.getSavedPrimaryTeamImmediate()?.let { savedTeamId ->
+            repository.restoreSavedTeamSelection(
+                primaryTeamId = savedTeamId,
+                favoriteIds = preferencesDataStore.getSavedFavoriteTeamsImmediate().orEmpty()
+            )
+        }
+        preferencesDataStore.getSavedLanguageImmediate()?.let { savedLang ->
+            repository.selectLanguage(savedLang)
+            notificationManager.setLanguage(savedLang)
+        }
+
         // Plane periodische Hintergrund-Synchronisation (alle 6 Std. via WorkManager) für den täglichen Einsatz
         notificationManager.scheduleDailyLiveSync()
 
@@ -54,6 +66,7 @@ class MainActivity : ComponentActivity() {
 
             LaunchedEffect(Unit) {
                 preferencesDataStore.userPreferencesFlow.collect { prefs ->
+                    repository.restoreSavedTeamSelection(prefs.primaryTeamId, prefs.favoriteTeamIds)
                     repository.selectLanguage(prefs.language)
                     notificationManager.setLanguage(prefs.language)
                 }

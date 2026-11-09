@@ -1,6 +1,9 @@
 package com.euroleague.courtside.ui.navigation
 
 import android.app.Activity
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -19,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -39,7 +43,10 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SportsBasketball
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -175,6 +182,7 @@ fun MainAppScaffold(
     val onChangeLanguage: (AppLanguage) -> Unit = { newLang ->
         repository.selectLanguage(newLang)
         notificationManager.setLanguage(newLang)
+        preferencesDataStore?.saveLanguageImmediate(newLang)
         scope.launch {
             preferencesDataStore?.setLanguage(newLang)
         }
@@ -222,11 +230,35 @@ fun MainAppScaffold(
     val widthClass = adaptiveInfo.windowSizeClass.windowWidthSizeClass
     val isCompact = widthClass == WindowWidthSizeClass.COMPACT
 
+    var isLiveSyncing by remember { mutableStateOf(false) }
+    var syncFeedbackBanner by remember { mutableStateOf<LiveSyncFeedbackState?>(null) }
+
     val triggerLiveSync: () -> Unit = {
-        scope.launch {
-            val res = offlineFirstRepository?.syncSeasonDataFromRemoteOrSeedCache()
-            if (res == null || res.isFailure) {
-                repository.simulateLiveRefresh()
+        if (!isLiveSyncing) {
+            scope.launch {
+                isLiveSyncing = true
+                syncFeedbackBanner = buildSyncingFeedbackState(activeLanguage)
+                val res = offlineFirstRepository?.syncSeasonDataFromRemoteOrSeedCache()
+                offlineFirstRepository?.verifyAndSyncClubRoster(primaryTeam.id)
+                offlineFirstRepository?.refreshLiveMatchdayTick()
+                val timeStr = runCatching {
+                    LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))
+                }.getOrDefault("")
+                isLiveSyncing = false
+                syncFeedbackBanner = if (res != null && res.isSuccess) {
+                    buildSyncSuccessFeedbackState(
+                        language = activeLanguage,
+                        timeStr = timeStr,
+                        clubCount = repository.teamsFlow.value.size,
+                        teamCode = primaryTeam.code
+                    )
+                } else {
+                    buildSyncOfflineFeedbackState(activeLanguage, timeStr)
+                }
+                delay(4_500L)
+                if (!isLiveSyncing) {
+                    syncFeedbackBanner = null
+                }
             }
         }
     }
@@ -291,13 +323,14 @@ fun MainAppScaffold(
                         activeLanguage = activeLanguage,
                         strings = strings,
                         isExpanded = widthClass == WindowWidthSizeClass.EXPANDED,
+                        isSyncing = isLiveSyncing,
                         onSelectDestination = { currentDestination = it },
                         onSelectLanguage = onChangeLanguage,
                         onLiveRefresh = triggerLiveSync
                     )
                 }
 
-                // Haupt-Arbeitsbereich
+                // Haupt-Arbeitsbereich inkl. Live-Sync-Status-Hinweis & permanenter Versionsnummer unten rechts
                 Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                     when (currentDestination) {
                         CourtsideDestination.MY_TEAM -> MyTeamDashboardScreen(
@@ -312,6 +345,7 @@ fun MainAppScaffold(
                             isTableTopPosture = isTableTopPosture,
                             onSelectPrimaryTeam = { teamId ->
                                 repository.selectPrimaryTeam(teamId)
+                                preferencesDataStore?.savePrimaryTeamImmediate(teamId)
                                 scope.launch {
                                     preferencesDataStore?.setPrimaryTeam(teamId)
                                     offlineFirstRepository?.verifyAndSyncClubRoster(teamId)
@@ -319,7 +353,22 @@ fun MainAppScaffold(
                             },
                             onVerifyRosterNow = {
                                 scope.launch {
-                                    offlineFirstRepository?.verifyAndSyncClubRoster(primaryTeam.id)
+                                    isLiveSyncing = true
+                                    syncFeedbackBanner = buildSyncingFeedbackState(activeLanguage)
+                                    val res = offlineFirstRepository?.verifyAndSyncClubRoster(primaryTeam.id)
+                                    val timeStr = runCatching {
+                                        LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))
+                                    }.getOrDefault("")
+                                    isLiveSyncing = false
+                                    syncFeedbackBanner = if (res != null && res.isSuccess) {
+                                        buildRosterVerifiedFeedbackState(activeLanguage, primaryTeam.name, timeStr)
+                                    } else {
+                                        buildSyncOfflineFeedbackState(activeLanguage, timeStr)
+                                    }
+                                    delay(4_000L)
+                                    if (!isLiveSyncing) {
+                                        syncFeedbackBanner = null
+                                    }
                                 }
                             }
                         )
@@ -397,6 +446,78 @@ fun MainAppScaffold(
                             notificationManager = notificationManager
                         )
                     }
+
+                    // Sichtbarer Live-Sync-Status-Hinweis unten links im Arbeitsbereich (neben dem Live-Sync-Button)
+                    AnimatedVisibility(
+                        visible = syncFeedbackBanner != null,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = 16.dp, bottom = 12.dp, end = 96.dp)
+                    ) {
+                        val banner = syncFeedbackBanner
+                        if (banner != null) {
+                            val accentColor = when {
+                                banner.isRunning -> CourtsideDesignTokens.EuroLeagueOrange
+                                banner.isError -> CourtsideDesignTokens.NeonMissedRed
+                                else -> CourtsideDesignTokens.NeonMadeGreen
+                            }
+                            Surface(
+                                color = Color(0xEB141419),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .widthIn(max = 520.dp)
+                                    .border(1.5.dp, accentColor.copy(alpha = 0.75f), RoundedCornerShape(12.dp))
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                                ) {
+                                    if (banner.isRunning) {
+                                        CircularProgressIndicator(
+                                            color = CourtsideDesignTokens.EuroLeagueOrange,
+                                            strokeWidth = 2.dp,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            text = banner.title,
+                                            color = accentColor,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 12.sp
+                                        )
+                                        Text(
+                                            text = banner.detail,
+                                            color = Color(0xFFE5E7EB),
+                                            fontSize = 11.sp,
+                                            lineHeight = 14.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Permanente Versionsnummer unten rechts
+                    Surface(
+                        color = Color(0xCC121216),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 12.dp, bottom = 8.dp)
+                            .border(1.dp, Color(0x38FF6600), RoundedCornerShape(8.dp))
+                    ) {
+                        Text(
+                            text = "v${BuildConfig.VERSION_NAME}",
+                            color = Color(0xFFD1D5DB),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
                 }
             }
 
@@ -429,11 +550,153 @@ fun MainAppScaffold(
     }
 }
 
+private data class LiveSyncFeedbackState(
+    val isRunning: Boolean,
+    val isError: Boolean,
+    val title: String,
+    val detail: String
+)
+
+private fun buildSyncingFeedbackState(language: AppLanguage): LiveSyncFeedbackState = when (language) {
+    AppLanguage.EN -> LiveSyncFeedbackState(
+        isRunning = true,
+        isError = false,
+        title = "⚡ EuroLeague Live Sync in progress…",
+        detail = "Updating live scores, all 38 rounds, standings, club rosters & season stats from api-live.euroleague.net…"
+    )
+    AppLanguage.DE -> LiveSyncFeedbackState(
+        isRunning = true,
+        isError = false,
+        title = "⚡ EuroLeague Live-Sync läuft…",
+        detail = "Aktualisiere Spielstände, alle 38 Spieltage, Tabelle, Kader & Saisonstatistiken live von api-live.euroleague.net…"
+    )
+    AppLanguage.FR -> LiveSyncFeedbackState(
+        isRunning = true,
+        isError = false,
+        title = "⚡ Synchronisation EuroLeague en cours…",
+        detail = "Mise à jour des scores en direct, des 38 journées, du classement, des effectifs et des statistiques…"
+    )
+    AppLanguage.IT -> LiveSyncFeedbackState(
+        isRunning = true,
+        isError = false,
+        title = "⚡ Sincronizzazione live EuroLeague in corso…",
+        detail = "Aggiornamento punteggi live, 38 giornate, classifica, roster e statistiche stagionali…"
+    )
+    AppLanguage.ES -> LiveSyncFeedbackState(
+        isRunning = true,
+        isError = false,
+        title = "⚡ Sincronización en vivo de EuroLeague en curso…",
+        detail = "Actualizando marcadores en vivo, 38 jornadas, clasificación, plantillas y estadísticas…"
+    )
+    AppLanguage.EL -> LiveSyncFeedbackState(
+        isRunning = true,
+        isError = false,
+        title = "⚡ Ζωντανός συγχρονισμός EuroLeague σε εξέλιξη…",
+        detail = "Ενημέρωση ζωντανών σκορ, 38 αγωνιστικών, βαθμολογίας, ρόστερ & στατιστικών σεζόν…"
+    )
+}
+
+private fun buildSyncSuccessFeedbackState(
+    language: AppLanguage,
+    timeStr: String,
+    clubCount: Int,
+    teamCode: String
+): LiveSyncFeedbackState = when (language) {
+    AppLanguage.EN -> LiveSyncFeedbackState(
+        isRunning = false,
+        isError = false,
+        title = "✅ Live Sync completed ($timeStr)",
+        detail = "$clubCount clubs, 38 rounds, standings, $teamCode roster & season statistics are up to date."
+    )
+    AppLanguage.DE -> LiveSyncFeedbackState(
+        isRunning = false,
+        isError = false,
+        title = "✅ Live-Sync abgeschlossen ($timeStr)",
+        detail = "$clubCount Teams, 38 Spieltage, Tabelle, $teamCode-Kader & Saisonstatistiken sind auf dem neuesten Stand."
+    )
+    AppLanguage.FR -> LiveSyncFeedbackState(
+        isRunning = false,
+        isError = false,
+        title = "✅ Synchronisation terminée ($timeStr)",
+        detail = "$clubCount clubs, 38 journées, classement, effectif $teamCode et statistiques à jour."
+    )
+    AppLanguage.IT -> LiveSyncFeedbackState(
+        isRunning = false,
+        isError = false,
+        title = "✅ Sincronizzazione completata ($timeStr)",
+        detail = "$clubCount club, 38 giornate, classifica, roster $teamCode e statistiche aggiornati."
+    )
+    AppLanguage.ES -> LiveSyncFeedbackState(
+        isRunning = false,
+        isError = false,
+        title = "✅ Sincronización completada ($timeStr)",
+        detail = "$clubCount clubes, 38 jornadas, clasificación, plantilla de $teamCode y estadísticas al día."
+    )
+    AppLanguage.EL -> LiveSyncFeedbackState(
+        isRunning = false,
+        isError = false,
+        title = "✅ Ο συγχρονισμός ολοκληρώθηκε ($timeStr)",
+        detail = "$clubCount ομάδες, 38 αγωνιστικές, βαθμολογία, ρόστερ $teamCode & στατιστικά ενημερώθηκαν."
+    )
+}
+
+private fun buildRosterVerifiedFeedbackState(
+    language: AppLanguage,
+    teamName: String,
+    timeStr: String
+): LiveSyncFeedbackState = when (language) {
+    AppLanguage.EN -> LiveSyncFeedbackState(false, false, "✅ Roster verified ($timeStr)", "Active squad & injury report updated for $teamName.")
+    AppLanguage.DE -> LiveSyncFeedbackState(false, false, "✅ Kader geprüft ($timeStr)", "Aktiver Kader & Verletztenstatus für $teamName erfolgreich abgeglichen.")
+    AppLanguage.FR -> LiveSyncFeedbackState(false, false, "✅ Effectif vérifié ($timeStr)", "Effectif actif et rapport médical mis à jour pour $teamName.")
+    AppLanguage.IT -> LiveSyncFeedbackState(false, false, "✅ Roster verificato ($timeStr)", "Roster attivo e report infortuni aggiornati per $teamName.")
+    AppLanguage.ES -> LiveSyncFeedbackState(false, false, "✅ Plantilla verificada ($timeStr)", "Plantilla activa y parte médico actualizados para $teamName.")
+    AppLanguage.EL -> LiveSyncFeedbackState(false, false, "✅ Το ρόστερ επαληθεύτηκε ($timeStr)", "Ενεργό ρόστερ & αναφορά τραυματισμών ενημερώθηκαν για $teamName.")
+}
+
+private fun buildSyncOfflineFeedbackState(language: AppLanguage, timeStr: String): LiveSyncFeedbackState = when (language) {
+    AppLanguage.EN -> LiveSyncFeedbackState(
+        isRunning = false,
+        isError = true,
+        title = "⚠️ Live API unreachable ($timeStr)",
+        detail = "No connection or server busy – keeping latest saved EuroLeague data active."
+    )
+    AppLanguage.DE -> LiveSyncFeedbackState(
+        isRunning = false,
+        isError = true,
+        title = "⚠️ Live-API momentan nicht erreichbar ($timeStr)",
+        detail = "Keine Verbindung oder Server ausgelastet – der zuletzt gespeicherte Datenstand bleibt aktiv."
+    )
+    AppLanguage.FR -> LiveSyncFeedbackState(
+        isRunning = false,
+        isError = true,
+        title = "⚠️ API en direct indisponible ($timeStr)",
+        detail = "Aucune connexion ou serveur occupé – les dernières données enregistrées restent actives."
+    )
+    AppLanguage.IT -> LiveSyncFeedbackState(
+        isRunning = false,
+        isError = true,
+        title = "⚠️ API live non raggiungibile ($timeStr)",
+        detail = "Nessuna connessione o server occupato – restano attivi gli ultimi dati salvati."
+    )
+    AppLanguage.ES -> LiveSyncFeedbackState(
+        isRunning = false,
+        isError = true,
+        title = "⚠️ API en vivo no disponible ($timeStr)",
+        detail = "Sin conexión o servidor ocupado – se mantienen activos los últimos datos guardados."
+    )
+    AppLanguage.EL -> LiveSyncFeedbackState(
+        isRunning = false,
+        isError = true,
+        title = "⚠️ Το Live API δεν είναι διαθέσιμο ($timeStr)",
+        detail = "Δεν υπάρχει σύνδεση ή ο διακομιστής είναι απασχολημένος – διατηρούνται τα τελευταία αποθηκευμένα δεδομένα."
+    )
+}
+
 /**
  * Linke Courtside-Sidebar ohne sichtbare Ctrl+1..5 Badges (Tastatur-Shortcuts laufen unsichtbar im Hintergrund):
  * - Oben: Leuchtendes EuroLeague-Basketball-Logo
  * - Mitte: Clean zentrierte Icon-Buttons mit orangenem Radial-Glow bei aktivem Tab
- * - Unten: 6-Sprachen-Schnellumschalter (EN, DE, FR, IT, ES, EL) + Live-Refresh-Trigger
+ * - Unten: 6-Sprachen-Schnellumschalter (EN, DE, FR, IT, ES, EL) + Live-Refresh-Trigger mit aktivem Ladeindikator
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -442,6 +705,7 @@ private fun CourtsideLeftSidebar(
     activeLanguage: AppLanguage,
     strings: CourtsideStrings,
     isExpanded: Boolean,
+    isSyncing: Boolean = false,
     onSelectDestination: (CourtsideDestination) -> Unit,
     onSelectLanguage: (AppLanguage) -> Unit,
     onLiveRefresh: () -> Unit
@@ -614,24 +878,60 @@ private fun CourtsideLeftSidebar(
                 }
             }
 
-            // Bottom Live-Refresh Trigger
+            // Bottom Live-Refresh Trigger mit aktivem Lade-Indikator
             Surface(
-                color = Color(0x24FF6600),
+                color = if (isSyncing) Color(0x40FF6600) else Color(0x24FF6600),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, Color(0x66FF6600), RoundedCornerShape(12.dp))
-                    .clickable { onLiveRefresh() }
+                    .border(
+                        width = if (isSyncing) 1.5.dp else 1.dp,
+                        color = if (isSyncing) CourtsideDesignTokens.EuroLeagueOrange else Color(0x66FF6600),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .clickable(enabled = !isSyncing) { onLiveRefresh() }
                     .pointerHoverIcon(PointerIcon.Hand)
             ) {
-                Text(
-                    text = if (isExpanded) strings.liveSimButton else "⚡",
-                    color = CourtsideDesignTokens.EuroLeagueOrange,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(vertical = 10.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp, horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (isSyncing) {
+                        CircularProgressIndicator(
+                            color = CourtsideDesignTokens.EuroLeagueOrange,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        if (isExpanded) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            val syncingLabel = when (activeLanguage) {
+                                AppLanguage.EN -> "Syncing…"
+                                AppLanguage.DE -> "Synchronisiere…"
+                                AppLanguage.FR -> "Sync en cours…"
+                                AppLanguage.IT -> "Sincronizzo…"
+                                AppLanguage.ES -> "Sincronizando…"
+                                AppLanguage.EL -> "Συγχρονισμός…"
+                            }
+                            Text(
+                                text = syncingLabel,
+                                color = Color.White,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 11.sp
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = if (isExpanded) strings.liveSimButton else "⚡",
+                            color = CourtsideDesignTokens.EuroLeagueOrange,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
             }
         }
     }

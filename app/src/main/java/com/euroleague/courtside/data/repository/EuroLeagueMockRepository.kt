@@ -332,6 +332,18 @@ class EuroLeagueMockRepository @Inject constructor() {
         _favoriteTeamIds.update { it + teamId }
     }
 
+    fun restoreSavedTeamSelection(primaryTeamId: String, favoriteIds: Set<String> = emptySet()) {
+        if (primaryTeamId.isBlank()) return
+        val matched = findTeam(primaryTeamId)
+        _selectedTeamId.value = primaryTeamId
+        val extraIds = setOfNotNull(primaryTeamId, matched?.id, matched?.code)
+        _favoriteTeamIds.value = if (favoriteIds.isNotEmpty()) {
+            favoriteIds + extraIds
+        } else {
+            _favoriteTeamIds.value + extraIds
+        }
+    }
+
     fun getStandings(): List<EuroLeagueTeam> =
         _teams.value.sortedWith(compareByDescending<EuroLeagueTeam> { it.wins }.thenByDescending { it.pointDiff })
 

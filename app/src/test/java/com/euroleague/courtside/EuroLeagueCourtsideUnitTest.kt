@@ -157,5 +157,14 @@ class EuroLeagueCourtsideUnitTest {
             assertTrue(payload.bigText.isNotBlank())
         }
     }
+
+    @Test
+    fun `saved My Team selection restores cleanly across app restarts`() {
+        val freshRepo = EuroLeagueMockRepository()
+        freshRepo.restoreSavedTeamSelection("OLY", setOf("OLY", "PAN"))
+        assertEquals("OLY", freshRepo.selectedTeamId.value)
+        assertTrue(freshRepo.favoriteTeamIds.value.contains("OLY"))
+        assertEquals("Olympiacos Piraeus", freshRepo.findTeam(freshRepo.selectedTeamId.value)?.name)
+    }
 }
 

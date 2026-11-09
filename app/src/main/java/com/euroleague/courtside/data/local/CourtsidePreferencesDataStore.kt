@@ -20,8 +20,8 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
 )
 
 data class UserPreferencesState(
-    val primaryTeamId: String = "BAY",
-    val favoriteTeamIds: Set<String> = setOf("BAY", "PAO"),
+    val primaryTeamId: String = "MUN",
+    val favoriteTeamIds: Set<String> = setOf("MUN", "PAN"),
     val tipOffAlarmEnabled: Boolean = true,
     val halftimeFinalScoreEnabled: Boolean = true,
     val closeGameAlertEnabled: Boolean = true,
@@ -29,13 +29,26 @@ data class UserPreferencesState(
 )
 
 /**
- * Persistiert Favoriten-Teams, das primäre Vereins-Theme, die gewählte Sprache (EN, DE, FR, IT, ES, EL)
- * sowie die Benachrichtigungs-Einstellungen reaktiv via Jetpack DataStore.
+ * Persistiert das gewählte "My Team" (`primaryTeamId`), Favoriten-Teams, die gewählte Sprache
+ * (`EN`, `DE`, `FR`, `IT`, `ES`, `EL`) sowie die Benachrichtigungs-Einstellungen dauerhaft über
+ * App-Neustarts hinweg (sowohl synchron in `SharedPreferences` für sofortigen Cold-Boot ohne Flackern
+ * als auch reaktiv in Jetpack DataStore).
  */
 @Singleton
 class CourtsidePreferencesDataStore @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    companion object {
+        private const val QUICK_BOOT_PREFS = "courtside_quick_boot_prefs"
+        private const val KEY_QUICK_TEAM_ID = "primary_team_id"
+        private const val KEY_QUICK_FAV_IDS = "favorite_team_ids"
+        private const val KEY_QUICK_LANG = "app_language_code"
+    }
+
+    private val quickBootPrefs by lazy {
+        context.getSharedPreferences(QUICK_BOOT_PREFS, Context.MODE_PRIVATE)
+    }
+
     private object Keys {
         val PRIMARY_TEAM_ID = stringPreferencesKey("primary_team_id")
         val FAVORITE_TEAM_IDS = stringSetPreferencesKey("favorite_team_ids")
@@ -45,43 +58,100 @@ class CourtsidePreferencesDataStore @Inject constructor(
         val APP_LANGUAGE = stringPreferencesKey("app_language_code")
     }
 
+    fun getSavedPrimaryTeamImmediate(): String? =
+        quickBootPrefs.getString(KEY_QUICK_TEAM_ID, null)?.takeIf { it.isNotBlank() }
+
+    fun getSavedFavoriteTeamsImmediate(): Set<String>? =
+        quickBootPrefs.getStringSet(KEY_QUICK_FAV_IDS, null)?.toSet()
+
+    fun getSavedLanguageImmediate(): AppLanguage? =
+        quickBootPrefs.getString(KEY_QUICK_LANG, null)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { AppLanguage.fromCode(it) }
+
+    /**
+     * Speichert das gewählte "My Team" sofort synchron auf dem Gerät, damit die Auswahl selbst dann
+     * erhalten bleibt, wenn die App unmittelbar nach dem Antippen geschlossen oder beendet wird.
+     */
+    fun savePrimaryTeamImmediate(teamId: String) {
+        if (teamId.isBlank()) return
+        val existingFavs = getSavedFavoriteTeamsImmediate() ?: setOf("MUN", "PAN")
+        val updatedFavs = (existingFavs + teamId).toSet()
+        quickBootPrefs.edit()
+            .putString(KEY_QUICK_TEAM_ID, teamId)
+            .putStringSet(KEY_QUICK_FAV_IDS, updatedFavs)
+            .commit()
+    }
+
+    fun saveLanguageImmediate(language: AppLanguage) {
+        quickBootPrefs.edit()
+            .putString(KEY_QUICK_LANG, language.code)
+            .commit()
+    }
+
     val userPreferencesFlow: Flow<UserPreferencesState> = context.dataStore.data.map { prefs ->
+        val resolvedTeamId = prefs[Keys.PRIMARY_TEAM_ID]
+            ?: getSavedPrimaryTeamImmediate()
+            ?: "MUN"
+        val resolvedFavs = (prefs[Keys.FAVORITE_TEAM_IDS]
+            ?: getSavedFavoriteTeamsImmediate()
+            ?: setOf(resolvedTeamId)) + resolvedTeamId
+        val resolvedLangCode = prefs[Keys.APP_LANGUAGE]
+            ?: quickBootPrefs.getString(KEY_QUICK_LANG, null)
+
+        // Synchronisiere DataStore-Werte in den Quick-Boot-Speicher für den nächsten Kaltstart
+        if (prefs[Keys.PRIMARY_TEAM_ID] != null && getSavedPrimaryTeamImmediate() == null) {
+            quickBootPrefs.edit()
+                .putString(KEY_QUICK_TEAM_ID, resolvedTeamId)
+                .putStringSet(KEY_QUICK_FAV_IDS, resolvedFavs)
+                .apply()
+        }
+
         UserPreferencesState(
-            primaryTeamId = prefs[Keys.PRIMARY_TEAM_ID] ?: "BAY",
-            favoriteTeamIds = prefs[Keys.FAVORITE_TEAM_IDS] ?: setOf("BAY", "PAO"),
+            primaryTeamId = resolvedTeamId,
+            favoriteTeamIds = resolvedFavs,
             tipOffAlarmEnabled = prefs[Keys.TIP_OFF_ALARM] ?: true,
             halftimeFinalScoreEnabled = prefs[Keys.HALFTIME_FINAL_SCORE] ?: true,
             closeGameAlertEnabled = prefs[Keys.CLOSE_GAME_ALERT] ?: true,
-            language = AppLanguage.fromCode(prefs[Keys.APP_LANGUAGE])
+            language = AppLanguage.fromCode(resolvedLangCode)
         )
     }
 
     suspend fun setLanguage(language: AppLanguage) {
+        saveLanguageImmediate(language)
         context.dataStore.edit { prefs ->
             prefs[Keys.APP_LANGUAGE] = language.code
         }
     }
 
     suspend fun setPrimaryTeam(teamId: String) {
+        savePrimaryTeamImmediate(teamId)
         context.dataStore.edit { prefs ->
             prefs[Keys.PRIMARY_TEAM_ID] = teamId
-            val currentFavs = prefs[Keys.FAVORITE_TEAM_IDS] ?: setOf("BAY", "PAO")
+            val currentFavs = prefs[Keys.FAVORITE_TEAM_IDS] ?: setOf("MUN", "PAN")
             prefs[Keys.FAVORITE_TEAM_IDS] = currentFavs + teamId
         }
     }
 
     suspend fun toggleFavoriteTeam(teamId: String) {
         context.dataStore.edit { prefs ->
-            val current = prefs[Keys.FAVORITE_TEAM_IDS] ?: setOf("BAY", "PAO")
+            val current = prefs[Keys.FAVORITE_TEAM_IDS] ?: setOf("MUN", "PAN")
             val updated = if (current.contains(teamId) && current.size > 1) {
                 current - teamId
             } else {
                 current + teamId
             }
             prefs[Keys.FAVORITE_TEAM_IDS] = updated
-            if (!updated.contains(prefs[Keys.PRIMARY_TEAM_ID])) {
-                prefs[Keys.PRIMARY_TEAM_ID] = updated.first()
+            val nextPrimary = if (!updated.contains(prefs[Keys.PRIMARY_TEAM_ID])) {
+                updated.first()
+            } else {
+                prefs[Keys.PRIMARY_TEAM_ID] ?: updated.first()
             }
+            prefs[Keys.PRIMARY_TEAM_ID] = nextPrimary
+            quickBootPrefs.edit()
+                .putString(KEY_QUICK_TEAM_ID, nextPrimary)
+                .putStringSet(KEY_QUICK_FAV_IDS, updated)
+                .apply()
         }
     }
 
