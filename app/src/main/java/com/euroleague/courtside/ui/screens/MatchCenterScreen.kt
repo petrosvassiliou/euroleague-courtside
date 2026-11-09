@@ -413,7 +413,7 @@ fun MatchCenterScreen(
                                     CalendarExportHelper.exportSingleGameToNativeCalendar(context, game)
                                 },
                                 onScheduleTipOffAlarm = {
-                                    notificationManager.scheduleTipOffAlarm(game)
+                                    notificationManager.scheduleTipOffAlarm(game, strings.language)
                                 },
                                 onOpenTeamStats = onOpenTeamStats
                             )
@@ -431,7 +431,24 @@ fun MatchCenterScreen(
                             CalendarExportHelper.exportSingleGameToNativeCalendar(context, selectedGame)
                         },
                         onTriggerCloseGameAlert = {
-                            notificationManager.evaluateAndSendCloseGameAlert(selectedGame)
+                            when (selectedGame.status) {
+                                GameStatus.FINAL -> notificationManager.sendHalftimeOrFinalNotification(
+                                    game = selectedGame,
+                                    isFinal = true,
+                                    language = strings.language
+                                )
+                                GameStatus.UPCOMING -> notificationManager.scheduleTipOffAlarm(
+                                    game = selectedGame,
+                                    language = strings.language
+                                )
+                                GameStatus.LIVE -> {
+                                    if (selectedGame.isCloseGameFourthQuarter) {
+                                        notificationManager.evaluateAndSendCloseGameAlert(selectedGame, strings.language)
+                                    } else {
+                                        notificationManager.sendInstantTestPushNotification(selectedGame, strings.language)
+                                    }
+                                }
+                            }
                         },
                         onOpenTeamStats = onOpenTeamStats
                     )

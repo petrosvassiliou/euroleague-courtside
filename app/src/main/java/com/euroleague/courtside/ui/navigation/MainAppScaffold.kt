@@ -165,8 +165,13 @@ fun MainAppScaffold(
     val activeLanguage by repository.appLanguageFlow.collectAsState()
     val strings = remember(activeLanguage) { CourtsideTranslations.forLanguage(activeLanguage) }
 
+    LaunchedEffect(activeLanguage) {
+        notificationManager.setLanguage(activeLanguage)
+    }
+
     val onChangeLanguage: (AppLanguage) -> Unit = { newLang ->
         repository.selectLanguage(newLang)
+        notificationManager.setLanguage(newLang)
         scope.launch {
             preferencesDataStore?.setLanguage(newLang)
         }
@@ -1919,6 +1924,9 @@ private fun SettingsAndNotificationTestScreen(
             modifier = Modifier.weight(1.1f).fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            val previewPayload = remember(sampleLiveGame, activeLanguage) {
+                notificationManager.buildTestPushContent(sampleLiveGame, activeLanguage)
+            }
             CourtsideDualToneBanner(
                 leftColor = sampleLiveGame.homeTeam.primaryColor,
                 rightColor = sampleLiveGame.awayTeam.primaryColor,
@@ -1931,13 +1939,14 @@ private fun SettingsAndNotificationTestScreen(
                     )
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
-                        text = "${sampleLiveGame.homeTeam.name} ${sampleLiveGame.homeScore} : ${sampleLiveGame.awayScore} ${sampleLiveGame.awayTeam.name}",
+                        text = previewPayload.title,
                         color = Color.White,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 18.sp
+                        fontSize = 16.sp
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "BigTextStyle Notification • Channel: euroleague_close_game_channel",
+                        text = previewPayload.bigText,
                         color = CourtsideDesignTokens.MutedText,
                         fontSize = 12.sp
                     )
@@ -1946,8 +1955,8 @@ private fun SettingsAndNotificationTestScreen(
 
             Button(
                 onClick = {
-                    notificationManager.sendInstantTestPushNotification(sampleLiveGame)
-                    statusBanner = "${strings.testPushSentPrefix} '${sampleLiveGame.homeTeam.code} ${sampleLiveGame.homeScore}:${sampleLiveGame.awayScore} ${sampleLiveGame.awayTeam.code}'"
+                    notificationManager.sendInstantTestPushNotification(sampleLiveGame, activeLanguage)
+                    statusBanner = "${strings.testPushSentPrefix} '${previewPayload.title}'"
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = CourtsideDesignTokens.EuroLeagueOrange),
                 shape = RoundedCornerShape(14.dp),

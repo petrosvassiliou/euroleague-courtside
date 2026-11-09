@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(Unit) {
                 preferencesDataStore.userPreferencesFlow.collect { prefs ->
                     repository.selectLanguage(prefs.language)
+                    notificationManager.setLanguage(prefs.language)
                 }
             }
 

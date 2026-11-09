@@ -127,5 +127,35 @@ class EuroLeagueCourtsideUnitTest {
         assertTrue(bracket.isNotEmpty())
         assertTrue(bracket.all { it.homeWins in 0..2 && it.awayWins in 0..2 })
     }
+
+    @Test
+    fun `notifications format in all 6 selected languages instead of hardcoded German`() {
+        val enTipOff = com.euroleague.courtside.notifications.EuroLeagueNotificationManager.formatTipOffAlarm(
+            matchup = "Panathinaikos AKTOR Athens vs. Olympiacos Piraeus",
+            arena = "OAKA Altion",
+            round = 30,
+            language = AppLanguage.EN
+        )
+        val elTipOff = com.euroleague.courtside.notifications.EuroLeagueNotificationManager.formatTipOffAlarm(
+            matchup = "Panathinaikos AKTOR Athens vs. Olympiacos Piraeus",
+            arena = "OAKA Altion",
+            round = 30,
+            language = AppLanguage.EL
+        )
+        assertTrue(enTipOff.title.contains("Minutes"))
+        assertFalse(enTipOff.title.contains("Minuten"))
+        assertTrue(elTipOff.title.contains("Τζάμπολ"))
+
+        AppLanguage.entries.forEach { lang ->
+            val payload = com.euroleague.courtside.notifications.EuroLeagueNotificationManager.formatTipOffAlarm(
+                matchup = "FC Bayern Munich vs. Real Madrid",
+                arena = "SAP Garden",
+                round = 12,
+                language = lang
+            )
+            assertTrue(payload.title.isNotBlank())
+            assertTrue(payload.bigText.isNotBlank())
+        }
+    }
 }
 

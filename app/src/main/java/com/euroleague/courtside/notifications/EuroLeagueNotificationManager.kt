@@ -23,6 +23,8 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.euroleague.courtside.data.remote.EuroLeagueOfflineFirstRepository
 import com.euroleague.courtside.data.repository.EuroLeagueGame
+import com.euroleague.courtside.i18n.AppLanguage
+import com.euroleague.courtside.i18n.CourtsideTranslations
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -32,8 +34,16 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
+data class LocalizedNotificationPayload(
+    val title: String,
+    val shortText: String,
+    val bigText: String,
+    val summaryText: String
+)
+
 /**
- * Verwaltet die dedizierten EuroLeague-Notification-Channels sowie WorkManager-Jobs für:
+ * Verwaltet die dedizierten EuroLeague-Notification-Channels sowie WorkManager-Jobs in allen
+ * 6 unterstützten Sprachen (EN, DE, FR, IT, ES, EL) für:
  * - Tip-Off-Alarme (15 Min. vor Spielbeginn)
  * - Halbzeit- & Endergebnisse
  * - Close-Game-Alerts (Q4 < 3:00 Restzeit & <= 5 Punkte Differenz)
@@ -49,42 +59,121 @@ class EuroLeagueNotificationManager @Inject constructor(
         const val CHANNEL_SCORES = "euroleague_scores_channel"
         const val CHANNEL_CLOSE_GAME = "euroleague_close_game_channel"
 
+        private const val PREFS_NAME = "courtside_notification_prefs"
+        private const val KEY_ACTIVE_LANGUAGE = "active_language_code"
+
         private const val NOTIFICATION_ID_TIP_OFF = 4101
         private const val NOTIFICATION_ID_SCORE = 4102
         private const val NOTIFICATION_ID_CLOSE_GAME = 4103
         private const val NOTIFICATION_ID_TEST_PUSH = 4199
+
+        fun formatTipOffAlarm(
+            matchup: String,
+            arena: String,
+            round: Int,
+            language: AppLanguage
+        ): LocalizedNotificationPayload {
+            val strings = CourtsideTranslations.forLanguage(language)
+            return when (language) {
+                AppLanguage.EN -> LocalizedNotificationPayload(
+                    title = "⏰ Tip-Off in 15 Minutes! (${strings.roundPrefix} $round)",
+                    shortText = "$matchup • $arena",
+                    bigText = "Get ready for ${strings.roundPrefix} $round: $matchup live from $arena. Open EuroLeague Courtside for live boxscore & shot chart!",
+                    summaryText = "Live Match Center"
+                )
+                AppLanguage.DE -> LocalizedNotificationPayload(
+                    title = "⏰ Tip-Off in 15 Minuten! (${strings.roundPrefix} $round)",
+                    shortText = "$matchup • $arena",
+                    bigText = "Mach dich bereit für ${strings.roundPrefix} $round: $matchup live aus der $arena. Öffne EuroLeague Courtside für Live-Boxscore & Shot-Chart!",
+                    summaryText = "Live Match Center"
+                )
+                AppLanguage.FR -> LocalizedNotificationPayload(
+                    title = "⏰ Entre-deux dans 15 minutes ! (${strings.roundPrefix} $round)",
+                    shortText = "$matchup • $arena",
+                    bigText = "Préparez-vous pour la ${strings.roundPrefix} $round : $matchup en direct de $arena. Ouvrez EuroLeague Courtside pour le boxscore et la carte des tirs en direct !",
+                    summaryText = "Match Center en Direct"
+                )
+                AppLanguage.IT -> LocalizedNotificationPayload(
+                    title = "⏰ Palla a due tra 15 minuti! (${strings.roundPrefix} $round)",
+                    shortText = "$matchup • $arena",
+                    bigText = "Preparati per la ${strings.roundPrefix} $round: $matchup in diretta da $arena. Apri EuroLeague Courtside per boxscore e shot-chart live!",
+                    summaryText = "Match Center Live"
+                )
+                AppLanguage.ES -> LocalizedNotificationPayload(
+                    title = "⏰ ¡Salto inicial en 15 minutos! (${strings.roundPrefix} $round)",
+                    shortText = "$matchup • $arena",
+                    bigText = "Prepárate para la ${strings.roundPrefix} $round: $matchup en directo desde $arena. ¡Abre EuroLeague Courtside para estadísticas y mapa de tiros en vivo!",
+                    summaryText = "Match Center en Vivo"
+                )
+                AppLanguage.EL -> LocalizedNotificationPayload(
+                    title = "⏰ Τζάμπολ σε 15 λεπτά! (${strings.roundPrefix} $round)",
+                    shortText = "$matchup • $arena",
+                    bigText = "Ετοιμαστείτε για την ${strings.roundPrefix} $round: $matchup ζωντανά από το $arena. Ανοίξτε το EuroLeague Courtside για live στατιστικά & γράφημα σουτ!",
+                    summaryText = "Ζωντανό Match Center"
+                )
+            }
+        }
     }
+
+    @Volatile
+    private var currentLanguage: AppLanguage = loadSavedLanguage()
 
     init {
-        createNotificationChannels()
+        createNotificationChannels(currentLanguage)
     }
 
-    fun createNotificationChannels() {
+    private fun loadSavedLanguage(): AppLanguage {
+        val code = runCatching {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(KEY_ACTIVE_LANGUAGE, null)
+        }.getOrNull()
+        return AppLanguage.fromCode(code)
+    }
+
+    fun resolveActiveLanguage(): AppLanguage = loadSavedLanguage()
+
+    /**
+     * Aktualisiert die aktive Sprache für alle System-Benachrichtigungen, WorkManager-Alarme
+     * und Android-Notification-Channels.
+     */
+    fun setLanguage(language: AppLanguage) {
+        currentLanguage = language
+        runCatching {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_ACTIVE_LANGUAGE, language.code)
+                .apply()
+        }
+        createNotificationChannels(language)
+    }
+
+    fun createNotificationChannels(language: AppLanguage = resolveActiveLanguage()) {
+        val strings = CourtsideTranslations.forLanguage(language)
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         val tipOffChannel = NotificationChannel(
             CHANNEL_TIP_OFF,
-            "Tip-Off-Alarm (15 Min. vorher)",
+            strings.tipOffChannelTitle,
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "Erinnert 15 Minuten vor Spielbeginn deines Lieblingsteams inkl. Arena & H2H."
+            description = strings.tipOffChannelSubtitle
             enableVibration(true)
         }
 
         val scoresChannel = NotificationChannel(
             CHANNEL_SCORES,
-            "Halbzeit- & Endergebnisse",
+            strings.scoresChannelTitle,
             NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
-            description = "Live-Zwischenstände zur Halbzeit sowie offizielle Endergebnisse mit Top-PIR."
+            description = strings.scoresChannelSubtitle
         }
 
         val closeGameChannel = NotificationChannel(
             CHANNEL_CLOSE_GAME,
-            "Crunch-Time Close-Game-Alert",
+            strings.closeGameChannelTitle,
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "Sofort-Alarm, wenn ein Spiel im 4. Viertel (< 3:00 Min.) <= 5 Punkte Differenz hat."
+            description = strings.closeGameChannelSubtitle
             enableVibration(true)
         }
 
@@ -94,17 +183,41 @@ class EuroLeagueNotificationManager @Inject constructor(
     }
 
     /**
-     * Plant einen WorkManager-Job exakt 15 Minuten vor Tip-Off des ausgewählten Spiels.
+     * Plant einen WorkManager-Job exakt 15 Minuten vor Tip-Off des ausgewählten Spiels
+     * in der aktuell gewählten App-Sprache.
      */
-    fun scheduleTipOffAlarm(game: EuroLeagueGame) {
+    fun scheduleTipOffAlarm(
+        game: EuroLeagueGame,
+        language: AppLanguage = resolveActiveLanguage()
+    ) {
+        setLanguage(language)
+        val matchupTitle = "${game.homeTeam.name} vs. ${game.awayTeam.name}"
+        val arenaLabel = "${game.homeTeam.arena} (${game.homeTeam.city})"
+        val payload = buildTipOffAlarmContent(
+            matchup = matchupTitle,
+            arena = arenaLabel,
+            round = game.round,
+            language = language
+        )
+        dispatchNotification(
+            channelId = CHANNEL_TIP_OFF,
+            notificationId = NOTIFICATION_ID_TIP_OFF,
+            title = payload.title,
+            shortText = payload.shortText,
+            bigText = payload.bigText,
+            summaryText = payload.summaryText,
+            priority = NotificationCompat.PRIORITY_HIGH
+        )
+
         val triggerAtMillis = game.tipOffEpochMillis - TimeUnit.MINUTES.toMillis(15)
         val delayMillis = (triggerAtMillis - System.currentTimeMillis()).coerceAtLeast(1_000L)
 
         val data = workDataOf(
             "GAME_ID" to game.id,
-            "MATCHUP_TITLE" to "${game.homeTeam.name} vs. ${game.awayTeam.name}",
-            "ARENA" to "${game.homeTeam.arena} (${game.homeTeam.city})",
-            "ROUND" to game.round
+            "MATCHUP_TITLE" to matchupTitle,
+            "ARENA" to arenaLabel,
+            "ROUND" to game.round,
+            "LANGUAGE_CODE" to language.code
         )
 
         val request = OneTimeWorkRequestBuilder<TipOffNotificationWorker>()
@@ -121,40 +234,256 @@ class EuroLeagueNotificationManager @Inject constructor(
     }
 
     /**
-     * Feuert automatisch einen Close-Game-Alert, falls das Spiel im 4. Viertel unter 3 Minuten
-     * Spielzeit <= 5 Punkte Differenz aufweist.
+     * Feuert automatisch einen lokalisierten Close-Game-Alert, falls das Spiel im 4. Viertel
+     * unter 3 Minuten Spielzeit <= 5 Punkte Differenz aufweist.
      */
-    fun evaluateAndSendCloseGameAlert(game: EuroLeagueGame) {
+    fun evaluateAndSendCloseGameAlert(
+        game: EuroLeagueGame,
+        language: AppLanguage = resolveActiveLanguage()
+    ) {
         if (!game.isCloseGameFourthQuarter) return
-
-        val diff = kotlin.math.abs(game.homeScore - game.awayScore)
-        val title = "🔥 CRUNCH-TIME ALERT (Q${game.currentQuarter} • ${game.remainingClock})"
-        val summary = "${game.homeTeam.code} ${game.homeScore} : ${game.awayScore} ${game.awayTeam.code} (Nur $diff Pkt. Differenz!)"
-        val bigText = buildString {
-            appendLine("$summary in der ${game.homeTeam.arena}!")
-            appendLine("Viertelstände: Q1 ${game.quarters.q1Home}:${game.quarters.q1Away} | Q2 ${game.quarters.q2Home}:${game.quarters.q2Away} | Q3 ${game.quarters.q3Home}:${game.quarters.q3Away}")
-            val topPlayer = (game.boxscoreHome + game.boxscoreAway).maxByOrNull { it.pir }
-            if (topPlayer != null) {
-                append("MVP-Watch: ${topPlayer.playerName} (${topPlayer.points} PTS, PIR ${topPlayer.pir})")
-            }
-        }
+        val payload = buildCloseGameAlertContent(game, language)
 
         dispatchNotification(
             channelId = CHANNEL_CLOSE_GAME,
             notificationId = NOTIFICATION_ID_CLOSE_GAME,
-            title = title,
-            shortText = summary,
-            bigText = bigText,
+            title = payload.title,
+            shortText = payload.shortText,
+            bigText = payload.bigText,
+            summaryText = payload.summaryText,
             priority = NotificationCompat.PRIORITY_HIGH
         )
     }
 
     /**
-     * Sendet eine Halbzeit- oder Endergebnis-Benachrichtigung für das Lieblingsteam.
+     * Sendet eine Halbzeit- oder Endergebnis-Benachrichtigung in der gewählten App-Sprache.
      */
-    fun sendHalftimeOrFinalNotification(game: EuroLeagueGame, isFinal: Boolean) {
-        val statusLabel = if (isFinal) "ENDERGEBNIS" else "HALBZEIT-STAND"
-        val title = "🏀 $statusLabel • Round ${game.round}"
+    fun sendHalftimeOrFinalNotification(
+        game: EuroLeagueGame,
+        isFinal: Boolean,
+        language: AppLanguage = resolveActiveLanguage()
+    ) {
+        val payload = buildHalftimeOrFinalContent(game, isFinal, language)
+
+        dispatchNotification(
+            channelId = CHANNEL_SCORES,
+            notificationId = NOTIFICATION_ID_SCORE,
+            title = payload.title,
+            shortText = payload.shortText,
+            bigText = payload.bigText,
+            summaryText = payload.summaryText,
+            priority = NotificationCompat.PRIORITY_DEFAULT
+        )
+    }
+
+    /**
+     * Sofortiger Test-Push-Button im Einstellungs-Screen: Feuert eine echte native System-Notification
+     * mit `BigTextStyle` und Live-Score-Aufschlüsselung in der aktuell ausgewählten App-Sprache.
+     */
+    fun sendInstantTestPushNotification(
+        game: EuroLeagueGame,
+        language: AppLanguage = resolveActiveLanguage()
+    ) {
+        setLanguage(language)
+        val payload = buildTestPushContent(game, language)
+
+        dispatchNotification(
+            channelId = CHANNEL_CLOSE_GAME,
+            notificationId = NOTIFICATION_ID_TEST_PUSH,
+            title = payload.title,
+            shortText = payload.shortText,
+            bigText = payload.bigText,
+            summaryText = payload.summaryText,
+            priority = NotificationCompat.PRIORITY_MAX
+        )
+    }
+
+    fun buildTipOffAlarmContent(
+        matchup: String,
+        arena: String,
+        round: Int,
+        language: AppLanguage
+    ): LocalizedNotificationPayload {
+        val strings = CourtsideTranslations.forLanguage(language)
+        return when (language) {
+            AppLanguage.EN -> LocalizedNotificationPayload(
+                title = "⏰ Tip-Off in 15 Minutes! (${strings.roundPrefix} $round)",
+                shortText = "$matchup • $arena",
+                bigText = "Get ready for ${strings.roundPrefix} $round: $matchup live from $arena. Open EuroLeague Courtside for live boxscore & shot chart!",
+                summaryText = "Live Match Center"
+            )
+            AppLanguage.DE -> LocalizedNotificationPayload(
+                title = "⏰ Tip-Off in 15 Minuten! (${strings.roundPrefix} $round)",
+                shortText = "$matchup • $arena",
+                bigText = "Mach dich bereit für ${strings.roundPrefix} $round: $matchup live aus der $arena. Öffne EuroLeague Courtside für Live-Boxscore & Shot-Chart!",
+                summaryText = "Live Match Center"
+            )
+            AppLanguage.FR -> LocalizedNotificationPayload(
+                title = "⏰ Entre-deux dans 15 minutes ! (${strings.roundPrefix} $round)",
+                shortText = "$matchup • $arena",
+                bigText = "Préparez-vous pour la ${strings.roundPrefix} $round : $matchup en direct de $arena. Ouvrez EuroLeague Courtside pour le boxscore et la carte des tirs en direct !",
+                summaryText = "Match Center en Direct"
+            )
+            AppLanguage.IT -> LocalizedNotificationPayload(
+                title = "⏰ Palla a due tra 15 minuti! (${strings.roundPrefix} $round)",
+                shortText = "$matchup • $arena",
+                bigText = "Preparati per la ${strings.roundPrefix} $round: $matchup in diretta da $arena. Apri EuroLeague Courtside per boxscore e shot-chart live!",
+                summaryText = "Match Center Live"
+            )
+            AppLanguage.ES -> LocalizedNotificationPayload(
+                title = "⏰ ¡Salto inicial en 15 minutos! (${strings.roundPrefix} $round)",
+                shortText = "$matchup • $arena",
+                bigText = "Prepárate para la ${strings.roundPrefix} $round: $matchup en directo desde $arena. ¡Abre EuroLeague Courtside para estadísticas y mapa de tiros en vivo!",
+                summaryText = "Match Center en Vivo"
+            )
+            AppLanguage.EL -> LocalizedNotificationPayload(
+                title = "⏰ Τζάμπολ σε 15 λεπτά! (${strings.roundPrefix} $round)",
+                shortText = "$matchup • $arena",
+                bigText = "Ετοιμαστείτε για την ${strings.roundPrefix} $round: $matchup ζωντανά από το $arena. Ανοίξτε το EuroLeague Courtside για live στατιστικά & γράφημα σουτ!",
+                summaryText = "Ζωντανό Match Center"
+            )
+        }
+    }
+
+    fun buildCloseGameAlertContent(
+        game: EuroLeagueGame,
+        language: AppLanguage
+    ): LocalizedNotificationPayload {
+        val diff = kotlin.math.abs(game.homeScore - game.awayScore)
+        val topPlayer = (game.boxscoreHome + game.boxscoreAway).maxByOrNull { it.pir }
+        val qLine = "Q1 ${game.quarters.q1Home}:${game.quarters.q1Away} | Q2 ${game.quarters.q2Home}:${game.quarters.q2Away} | Q3 ${game.quarters.q3Home}:${game.quarters.q3Away}"
+
+        return when (language) {
+            AppLanguage.EN -> {
+                val summary = "${game.homeTeam.code} ${game.homeScore} : ${game.awayScore} ${game.awayTeam.code} (Only $diff pts difference!)"
+                val bigText = buildString {
+                    appendLine("$summary at ${game.homeTeam.arena}!")
+                    appendLine("Quarters: $qLine")
+                    if (topPlayer != null) {
+                        append("MVP Watch: ${topPlayer.playerName} (${topPlayer.points} PTS, PIR ${topPlayer.pir})")
+                    }
+                }
+                LocalizedNotificationPayload(
+                    title = "🔥 CRUNCH-TIME ALERT (Q${game.currentQuarter} • ${game.remainingClock})",
+                    shortText = summary,
+                    bigText = bigText.trim(),
+                    summaryText = "Live Match Center"
+                )
+            }
+            AppLanguage.DE -> {
+                val summary = "${game.homeTeam.code} ${game.homeScore} : ${game.awayScore} ${game.awayTeam.code} (Nur $diff Pkt. Differenz!)"
+                val bigText = buildString {
+                    appendLine("$summary in der ${game.homeTeam.arena}!")
+                    appendLine("Viertelstände: $qLine")
+                    if (topPlayer != null) {
+                        append("MVP-Watch: ${topPlayer.playerName} (${topPlayer.points} PTS, PIR ${topPlayer.pir})")
+                    }
+                }
+                LocalizedNotificationPayload(
+                    title = "🔥 CRUNCH-TIME ALERT (Q${game.currentQuarter} • ${game.remainingClock})",
+                    shortText = summary,
+                    bigText = bigText.trim(),
+                    summaryText = "Live Match Center"
+                )
+            }
+            AppLanguage.FR -> {
+                val summary = "${game.homeTeam.code} ${game.homeScore} : ${game.awayScore} ${game.awayTeam.code} (Seulement $diff pts d'écart !)"
+                val bigText = buildString {
+                    appendLine("$summary à ${game.homeTeam.arena} !")
+                    appendLine("Quart-temps : $qLine")
+                    if (topPlayer != null) {
+                        append("MVP à suivre : ${topPlayer.playerName} (${topPlayer.points} PTS, PIR ${topPlayer.pir})")
+                    }
+                }
+                LocalizedNotificationPayload(
+                    title = "🔥 ALERTE MONEY-TIME (Q${game.currentQuarter} • ${game.remainingClock})",
+                    shortText = summary,
+                    bigText = bigText.trim(),
+                    summaryText = "Match Center en Direct"
+                )
+            }
+            AppLanguage.IT -> {
+                val summary = "${game.homeTeam.code} ${game.homeScore} : ${game.awayScore} ${game.awayTeam.code} (Solo $diff pt di scarto!)"
+                val bigText = buildString {
+                    appendLine("$summary alla ${game.homeTeam.arena}!")
+                    appendLine("Parziali: $qLine")
+                    if (topPlayer != null) {
+                        append("MVP Watch: ${topPlayer.playerName} (${topPlayer.points} PTS, PIR ${topPlayer.pir})")
+                    }
+                }
+                LocalizedNotificationPayload(
+                    title = "🔥 ALLERTA FINALE PUNTO A PUNTO (Q${game.currentQuarter} • ${game.remainingClock})",
+                    shortText = summary,
+                    bigText = bigText.trim(),
+                    summaryText = "Match Center Live"
+                )
+            }
+            AppLanguage.ES -> {
+                val summary = "${game.homeTeam.code} ${game.homeScore} : ${game.awayScore} ${game.awayTeam.code} (¡Solo $diff pts de diferencia!)"
+                val bigText = buildString {
+                    appendLine("¡$summary en ${game.homeTeam.arena}!")
+                    appendLine("Cuartos: $qLine")
+                    if (topPlayer != null) {
+                        append("MVP en pista: ${topPlayer.playerName} (${topPlayer.points} PTS, PIR ${topPlayer.pir})")
+                    }
+                }
+                LocalizedNotificationPayload(
+                    title = "🔥 ALERTA DE FINAL APRETADO (Q${game.currentQuarter} • ${game.remainingClock})",
+                    shortText = summary,
+                    bigText = bigText.trim(),
+                    summaryText = "Match Center en Vivo"
+                )
+            }
+            AppLanguage.EL -> {
+                val summary = "${game.homeTeam.code} ${game.homeScore} : ${game.awayScore} ${game.awayTeam.code} (Μόλις $diff πόντοι διαφορά!)"
+                val bigText = buildString {
+                    appendLine("$summary στο ${game.homeTeam.arena}!")
+                    appendLine("Δεκάλεπτα: $qLine")
+                    if (topPlayer != null) {
+                        append("Κορυφαίος MVP: ${topPlayer.playerName} (${topPlayer.points} PTS, PIR ${topPlayer.pir})")
+                    }
+                }
+                LocalizedNotificationPayload(
+                    title = "🔥 ΕΙΔΟΠΟΙΗΣΗ ΝΤΕΡΜΠΙ (Q${game.currentQuarter} • ${game.remainingClock})",
+                    shortText = summary,
+                    bigText = bigText.trim(),
+                    summaryText = "Ζωντανό Match Center"
+                )
+            }
+        }
+    }
+
+    fun buildHalftimeOrFinalContent(
+        game: EuroLeagueGame,
+        isFinal: Boolean,
+        language: AppLanguage
+    ): LocalizedNotificationPayload {
+        val strings = CourtsideTranslations.forLanguage(language)
+        val statusLabel = when (language) {
+            AppLanguage.EN -> if (isFinal) "FINAL SCORE" else "HALFTIME SCORE"
+            AppLanguage.DE -> if (isFinal) "ENDERGEBNIS" else "HALBZEIT-STAND"
+            AppLanguage.FR -> if (isFinal) "SCORE FINAL" else "SCORE À LA MI-TEMPS"
+            AppLanguage.IT -> if (isFinal) "RISULTATO FINALE" else "FINE PRIMO TEMPO"
+            AppLanguage.ES -> if (isFinal) "RESULTADO FINAL" else "DESCANSO"
+            AppLanguage.EL -> if (isFinal) "ΤΕΛΙΚΟ ΣΚΟΡ" else "ΗΜΙΧΡΟΝΟ"
+        }
+        val topPerformerLabel = when (language) {
+            AppLanguage.EN -> "Top Performer"
+            AppLanguage.DE -> "Top-Performer"
+            AppLanguage.FR -> "Meilleur joueur"
+            AppLanguage.IT -> "Miglior giocatore"
+            AppLanguage.ES -> "Jugador destacado"
+            AppLanguage.EL -> "Κορυφαίος παίκτης"
+        }
+        val summaryText = when (language) {
+            AppLanguage.EN, AppLanguage.DE -> "Live Match Center"
+            AppLanguage.FR -> "Match Center en Direct"
+            AppLanguage.IT -> "Match Center Live"
+            AppLanguage.ES -> "Match Center en Vivo"
+            AppLanguage.EL -> "Ζωντανό Match Center"
+        }
+
+        val title = "🏀 $statusLabel • ${strings.roundPrefix} ${game.round}"
         val shortText = "${game.homeTeam.name} ${game.homeScore} : ${game.awayScore} ${game.awayTeam.name}"
         val topHome = game.boxscoreHome.maxByOrNull { it.pir }
         val topAway = game.boxscoreAway.maxByOrNull { it.pir }
@@ -162,54 +491,113 @@ class EuroLeagueNotificationManager @Inject constructor(
         val bigText = buildString {
             appendLine(shortText)
             if (topHome != null) {
-                appendLine("${game.homeTeam.code} Top-Performer: ${topHome.playerName} (${topHome.points} PTS, ${topHome.totalRebounds} REB, PIR ${topHome.pir})")
+                appendLine("${game.homeTeam.code} $topPerformerLabel: ${topHome.playerName} (${topHome.points} PTS, ${topHome.totalRebounds} REB, PIR ${topHome.pir})")
             }
             if (topAway != null) {
-                append("${game.awayTeam.code} Top-Performer: ${topAway.playerName} (${topAway.points} PTS, ${topAway.assists} AST, PIR ${topAway.pir})")
+                append("${game.awayTeam.code} $topPerformerLabel: ${topAway.playerName} (${topAway.points} PTS, ${topAway.assists} AST, PIR ${topAway.pir})")
             }
         }
 
-        dispatchNotification(
-            channelId = CHANNEL_SCORES,
-            notificationId = NOTIFICATION_ID_SCORE,
+        return LocalizedNotificationPayload(
             title = title,
             shortText = shortText,
-            bigText = bigText,
-            priority = NotificationCompat.PRIORITY_DEFAULT
+            bigText = bigText.trim(),
+            summaryText = summaryText
         )
     }
 
-    /**
-     * Sofortiger Test-Push-Button im Einstellungs-Screen: Feuert eine echte native System-Notification
-     * mit `BigTextStyle` und Live-Score-Aufschlüsselung auf Googlebook OS und Android.
-     */
-    fun sendInstantTestPushNotification(game: EuroLeagueGame) {
-        val title = "🚨 LIVE CRUNCH-TIME • ${game.homeTeam.code} ${game.homeScore} : ${game.awayScore} ${game.awayTeam.code}"
-        val shortText = "Q${game.currentQuarter} (${game.remainingClock}) – ${game.homeTeam.arena}"
+    fun buildTestPushContent(
+        game: EuroLeagueGame,
+        language: AppLanguage
+    ): LocalizedNotificationPayload {
+        val diff = kotlin.math.abs(game.homeScore - game.awayScore)
         val topPlayer = (game.boxscoreHome + game.boxscoreAway).maxByOrNull { it.pir }
+        val quartersStr = "Q1 ${game.quarters.q1Home}-${game.quarters.q1Away} • " +
+                "Q2 ${game.quarters.q2Home}-${game.quarters.q2Away} • " +
+                "Q3 ${game.quarters.q3Home}-${game.quarters.q3Away} • " +
+                "Q4 ${game.quarters.q4Home}-${game.quarters.q4Away}"
+        val shortText = "Q${game.currentQuarter} (${game.remainingClock}) – ${game.homeTeam.arena}"
 
-        val expandedBody = buildString {
-            appendLine("${game.homeTeam.name} (${game.homeScore}) vs. ${game.awayTeam.name} (${game.awayScore})")
-            appendLine("Status: Q${game.currentQuarter} | Restzeit ${game.remainingClock} | Nur ${kotlin.math.abs(game.homeScore - game.awayScore)} Punkte Differenz!")
-            appendLine(
-                "Quarters: Q1 ${game.quarters.q1Home}-${game.quarters.q1Away} • " +
-                        "Q2 ${game.quarters.q2Home}-${game.quarters.q2Away} • " +
-                        "Q3 ${game.quarters.q3Home}-${game.quarters.q3Away} • " +
-                        "Q4 ${game.quarters.q4Home}-${game.quarters.q4Away}"
+        return when (language) {
+            AppLanguage.EN -> LocalizedNotificationPayload(
+                title = "🚨 LIVE CRUNCH-TIME • ${game.homeTeam.code} ${game.homeScore} : ${game.awayScore} ${game.awayTeam.code}",
+                shortText = shortText,
+                bigText = buildString {
+                    appendLine("${game.homeTeam.name} (${game.homeScore}) vs. ${game.awayTeam.name} (${game.awayScore})")
+                    appendLine("Status: Q${game.currentQuarter} | Remaining ${game.remainingClock} | Only $diff points difference!")
+                    appendLine("Quarters: $quartersStr")
+                    if (topPlayer != null) {
+                        append("Top PIR on court: ${topPlayer.playerName} with ${topPlayer.points} PTS & PIR ${topPlayer.pir}")
+                    }
+                }.trim(),
+                summaryText = "Live Match Center"
             )
-            if (topPlayer != null) {
-                append("Top-PIR auf dem Parkett: ${topPlayer.playerName} mit ${topPlayer.points} PTS & PIR ${topPlayer.pir}")
-            }
+            AppLanguage.DE -> LocalizedNotificationPayload(
+                title = "🚨 LIVE CRUNCH-TIME • ${game.homeTeam.code} ${game.homeScore} : ${game.awayScore} ${game.awayTeam.code}",
+                shortText = shortText,
+                bigText = buildString {
+                    appendLine("${game.homeTeam.name} (${game.homeScore}) vs. ${game.awayTeam.name} (${game.awayScore})")
+                    appendLine("Status: Q${game.currentQuarter} | Restzeit ${game.remainingClock} | Nur $diff Punkte Differenz!")
+                    appendLine("Viertel: $quartersStr")
+                    if (topPlayer != null) {
+                        append("Top-PIR auf dem Parkett: ${topPlayer.playerName} mit ${topPlayer.points} PTS & PIR ${topPlayer.pir}")
+                    }
+                }.trim(),
+                summaryText = "Live Match Center"
+            )
+            AppLanguage.FR -> LocalizedNotificationPayload(
+                title = "🚨 MONEY-TIME EN DIRECT • ${game.homeTeam.code} ${game.homeScore} : ${game.awayScore} ${game.awayTeam.code}",
+                shortText = shortText,
+                bigText = buildString {
+                    appendLine("${game.homeTeam.name} (${game.homeScore}) vs. ${game.awayTeam.name} (${game.awayScore})")
+                    appendLine("Statut : Q${game.currentQuarter} | Temps restant ${game.remainingClock} | Seulement $diff points d'écart !")
+                    appendLine("Quart-temps : $quartersStr")
+                    if (topPlayer != null) {
+                        append("Meilleur PIR sur le parquet : ${topPlayer.playerName} avec ${topPlayer.points} PTS & PIR ${topPlayer.pir}")
+                    }
+                }.trim(),
+                summaryText = "Match Center en Direct"
+            )
+            AppLanguage.IT -> LocalizedNotificationPayload(
+                title = "🚨 FINALE PUNTO A PUNTO LIVE • ${game.homeTeam.code} ${game.homeScore} : ${game.awayScore} ${game.awayTeam.code}",
+                shortText = shortText,
+                bigText = buildString {
+                    appendLine("${game.homeTeam.name} (${game.homeScore}) vs. ${game.awayTeam.name} (${game.awayScore})")
+                    appendLine("Stato: Q${game.currentQuarter} | Tempo restante ${game.remainingClock} | Solo $diff punti di scarto!")
+                    appendLine("Parziali: $quartersStr")
+                    if (topPlayer != null) {
+                        append("Miglior PIR sul parquet: ${topPlayer.playerName} con ${topPlayer.points} PTS & PIR ${topPlayer.pir}")
+                    }
+                }.trim(),
+                summaryText = "Match Center Live"
+            )
+            AppLanguage.ES -> LocalizedNotificationPayload(
+                title = "🚨 FINAL APRETADO EN VIVO • ${game.homeTeam.code} ${game.homeScore} : ${game.awayScore} ${game.awayTeam.code}",
+                shortText = shortText,
+                bigText = buildString {
+                    appendLine("${game.homeTeam.name} (${game.homeScore}) vs. ${game.awayTeam.name} (${game.awayScore})")
+                    appendLine("Estado: Q${game.currentQuarter} | Tiempo restante ${game.remainingClock} | ¡Solo $diff puntos de diferencia!")
+                    appendLine("Cuartos: $quartersStr")
+                    if (topPlayer != null) {
+                        append("Mejor PIR en pista: ${topPlayer.playerName} con ${topPlayer.points} PTS y PIR ${topPlayer.pir}")
+                    }
+                }.trim(),
+                summaryText = "Match Center en Vivo"
+            )
+            AppLanguage.EL -> LocalizedNotificationPayload(
+                title = "🚨 ΖΩΝΤΑΝΟ ΝΤΕΡΜΠΙ • ${game.homeTeam.code} ${game.homeScore} : ${game.awayScore} ${game.awayTeam.code}",
+                shortText = shortText,
+                bigText = buildString {
+                    appendLine("${game.homeTeam.name} (${game.homeScore}) vs. ${game.awayTeam.name} (${game.awayScore})")
+                    appendLine("Κατάσταση: Q${game.currentQuarter} | Υπόλοιπο ${game.remainingClock} | Μόλις $diff πόντοι διαφορά!")
+                    appendLine("Δεκάλεπτα: $quartersStr")
+                    if (topPlayer != null) {
+                        append("Κορυφαίο PIR στο παρκέ: ${topPlayer.playerName} με ${topPlayer.points} PTS & PIR ${topPlayer.pir}")
+                    }
+                }.trim(),
+                summaryText = "Ζωντανό Match Center"
+            )
         }
-
-        dispatchNotification(
-            channelId = CHANNEL_CLOSE_GAME,
-            notificationId = NOTIFICATION_ID_TEST_PUSH,
-            title = title,
-            shortText = shortText,
-            bigText = expandedBody,
-            priority = NotificationCompat.PRIORITY_MAX
-        )
     }
 
     internal fun dispatchNotification(
@@ -218,6 +606,7 @@ class EuroLeagueNotificationManager @Inject constructor(
         title: String,
         shortText: String,
         bigText: String,
+        summaryText: String = "Live Match Center",
         priority: Int
     ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -247,7 +636,7 @@ class EuroLeagueNotificationManager @Inject constructor(
                 NotificationCompat.BigTextStyle()
                     .setBigContentTitle(title)
                     .bigText(bigText)
-                    .setSummaryText("Live Match Center")
+                    .setSummaryText(summaryText)
             )
             .setPriority(priority)
             .setCategory(NotificationCompat.CATEGORY_EVENT)
@@ -310,7 +699,7 @@ class DailyEuroLeagueSyncWorker(
 }
 
 /**
- * WorkManager-Worker für geplante Tip-Off-Alarme (15 Minuten vor Spielbeginn).
+ * WorkManager-Worker für geplante Tip-Off-Alarme (15 Minuten vor Spielbeginn) in der ausgewählten Sprache.
  */
 class TipOffNotificationWorker(
     appContext: Context,
@@ -323,12 +712,26 @@ class TipOffNotificationWorker(
         val round = inputData.getInt("ROUND", 1)
 
         val helper = EuroLeagueNotificationManager(applicationContext)
+        val langCode = inputData.getString("LANGUAGE_CODE")
+        val language = if (!langCode.isNullOrBlank()) {
+            AppLanguage.fromCode(langCode)
+        } else {
+            helper.resolveActiveLanguage()
+        }
+        val payload = helper.buildTipOffAlarmContent(
+            matchup = matchup,
+            arena = arena,
+            round = round,
+            language = language
+        )
+
         helper.dispatchNotification(
             channelId = EuroLeagueNotificationManager.CHANNEL_TIP_OFF,
             notificationId = 4101,
-            title = "⏰ Tip-Off in 15 Minuten! (Round $round)",
-            shortText = "$matchup • $arena",
-            bigText = "Mach dich bereit für Round $round: $matchup live aus der $arena. Öffne EuroLeague Courtside für Live-Boxscore & Shot-Chart!",
+            title = payload.title,
+            shortText = payload.shortText,
+            bigText = payload.bigText,
+            summaryText = payload.summaryText,
             priority = NotificationCompat.PRIORITY_HIGH
         )
         return Result.success()
