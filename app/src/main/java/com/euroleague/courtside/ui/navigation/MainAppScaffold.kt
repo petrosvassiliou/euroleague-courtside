@@ -448,7 +448,7 @@ fun MainAppScaffold(
                     }
 
                     // Sichtbarer Live-Sync-Status-Hinweis unten links im Arbeitsbereich (neben dem Live-Sync-Button)
-                    AnimatedVisibility(
+                    androidx.compose.animation.AnimatedVisibility(
                         visible = syncFeedbackBanner != null,
                         enter = fadeIn(),
                         exit = fadeOut(),
