@@ -169,7 +169,7 @@ fun MatchCenterScreen(
         ?: filteredGames.firstOrNull()
         ?: games.firstOrNull()
 
-    androidx.compose.runtime.LaunchedEffect(selectedGame?.id) {
+    androidx.compose.runtime.LaunchedEffect(selectedGame?.id, selectedGame?.boxscoreHome?.isEmpty()) {
         if (selectedGame != null) {
             onRefreshSelectedGameStats(selectedGame)
         }
@@ -580,19 +580,21 @@ private fun MatchSummaryCard(
                 ) {
                     ClubCrestColumn(
                         team = game.homeTeam,
-                        modifier = Modifier.weight(2.7f)
+                        modifier = Modifier.weight(3.3f)
                     )
 
                     val q = game.quarters
                     Column(
-                        modifier = Modifier.weight(5.6f),
+                        modifier = Modifier
+                            .weight(4.4f)
+                            .padding(horizontal = 6.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         if (game.status == GameStatus.UPCOMING) {
                             // Unplayed scheduled game: Show VS, Season Records & Arena instead of 0-0-0-0
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
                                     text = "${game.homeTeam.wins}${strings.winLetter}-${game.homeTeam.losses}${strings.lossLetter}",
@@ -618,8 +620,6 @@ private fun MatchSummaryCard(
                                 text = game.homeTeam.arena,
                                 color = Color(0xFF8E8E93),
                                 fontSize = 11.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
                                 textAlign = TextAlign.Center
                             )
                         } else {
@@ -692,7 +692,7 @@ private fun MatchSummaryCard(
 
                     ClubCrestColumn(
                         team = game.awayTeam,
-                        modifier = Modifier.weight(2.7f)
+                        modifier = Modifier.weight(3.3f)
                     )
                 }
             }
@@ -719,7 +719,7 @@ private fun MatchSummaryCard(
                 }
             )
             DropdownMenuItem(
-                text = { Text("${game.homeTeam.code} • ${strings.contextOpenTeamStatsSuffix}") },
+                text = { Text("${game.homeTeam.name} • ${strings.contextOpenTeamStatsSuffix}") },
                 onClick = {
                     showContextMenu = false
                     onOpenTeamStats(game.homeTeam.id)
@@ -744,12 +744,12 @@ private fun ClubCrestColumn(
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = team.name.substringBefore(" AKTOR").substringBefore(" Beko").substringBefore(" Mozzart"),
+            text = team.name,
             color = Color(0xFFE5E5EA),
             fontSize = 11.sp,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            lineHeight = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center
         )
     }
 }
@@ -1305,7 +1305,7 @@ private fun SortableBoxscoreTable(
         HorizontalDivider(color = Color(0x1AFFFFFF))
 
         LazyColumn(modifier = Modifier.fillMaxSize()) {
-            itemsIndexed(stats, key = { _, item -> item.playerId }) { index, row ->
+            itemsIndexed(stats, key = { index, item -> "${item.teamId}_${item.playerId}_$index" }) { index, row ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1313,7 +1313,7 @@ private fun SortableBoxscoreTable(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${index + 1}. ${row.playerName}",
+                        text = "${index + 1}. #${row.jerseyNumber} ${row.playerName}",
                         modifier = Modifier.weight(2.8f),
                         color = Color(0xFFE5E5EA),
                         fontSize = 12.sp,

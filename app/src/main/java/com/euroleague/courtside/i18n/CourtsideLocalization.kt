@@ -511,3 +511,92 @@ fun InjuryStatus.localizedLabel(strings: CourtsideStrings): String = when (this)
     InjuryStatus.GAME_TIME_DECISION, InjuryStatus.QUESTIONABLE -> strings.injuryQuestionable
     InjuryStatus.OUT -> strings.injuryOut
 }
+
+/**
+ * Formatiert die verbleibende Zeit bis zum Tip-Off lesbar in Tagen & Stunden
+ * (z. B. "3 Tage 15 Stunden" statt "87:12:04") in allen 6 unterstützten Sprachen.
+ */
+fun CourtsideStrings.formatTipOffCountdown(remainingMillis: Long): String {
+    val safeMillis = remainingMillis.coerceAtLeast(0L)
+    val totalMinutes = safeMillis / 60_000L
+    val totalHours = totalMinutes / 60L
+    val days = totalHours / 24L
+    val hours = totalHours % 24L
+    val minutes = totalMinutes % 60L
+
+    return when (language) {
+        AppLanguage.DE -> when {
+            days > 0L -> {
+                val dLabel = if (days == 1L) "1 Tag" else "$days Tage"
+                val hLabel = if (hours == 1L) "1 Stunde" else "$hours Stunden"
+                "$dLabel $hLabel"
+            }
+            hours > 0L -> {
+                val hLabel = if (hours == 1L) "1 Stunde" else "$hours Stunden"
+                "$hLabel $minutes Min."
+            }
+            else -> "$minutes Min."
+        }
+        AppLanguage.EN -> when {
+            days > 0L -> {
+                val dLabel = if (days == 1L) "1 Day" else "$days Days"
+                val hLabel = if (hours == 1L) "1 Hour" else "$hours Hours"
+                "$dLabel $hLabel"
+            }
+            hours > 0L -> {
+                val hLabel = if (hours == 1L) "1 Hour" else "$hours Hours"
+                "$hLabel $minutes Min"
+            }
+            else -> "$minutes Min"
+        }
+        AppLanguage.FR -> when {
+            days > 0L -> {
+                val dLabel = if (days == 1L) "1 Jour" else "$days Jours"
+                val hLabel = if (hours == 1L) "1 Heure" else "$hours Heures"
+                "$dLabel $hLabel"
+            }
+            hours > 0L -> {
+                val hLabel = if (hours == 1L) "1 Heure" else "$hours Heures"
+                "$hLabel $minutes Min"
+            }
+            else -> "$minutes Min"
+        }
+        AppLanguage.IT -> when {
+            days > 0L -> {
+                val dLabel = if (days == 1L) "1 Giorno" else "$days Giorni"
+                val hLabel = if (hours == 1L) "1 Ora" else "$hours Ore"
+                "$dLabel $hLabel"
+            }
+            hours > 0L -> {
+                val hLabel = if (hours == 1L) "1 Ora" else "$hours Ore"
+                "$hLabel $minutes Min"
+            }
+            else -> "$minutes Min"
+        }
+        AppLanguage.ES -> when {
+            days > 0L -> {
+                val dLabel = if (days == 1L) "1 Día" else "$days Días"
+                val hLabel = if (hours == 1L) "1 Hora" else "$hours Horas"
+                "$dLabel $hLabel"
+            }
+            hours > 0L -> {
+                val hLabel = if (hours == 1L) "1 Hora" else "$hours Horas"
+                "$hLabel $minutes Min"
+            }
+            else -> "$minutes Min"
+        }
+        AppLanguage.EL -> when {
+            days > 0L -> {
+                val dLabel = if (days == 1L) "1 Ημέρα" else "$days Ημέρες"
+                val hLabel = if (hours == 1L) "1 Ώρα" else "$hours Ώρες"
+                "$dLabel $hLabel"
+            }
+            hours > 0L -> {
+                val hLabel = if (hours == 1L) "1 Ώρα" else "$hours Ώρες"
+                "$hLabel $minutes Λεπτά"
+            }
+            else -> "$minutes Λεπτά"
+        }
+    }
+}
+

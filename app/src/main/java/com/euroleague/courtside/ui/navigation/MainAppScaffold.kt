@@ -101,6 +101,7 @@ import com.euroleague.courtside.i18n.CourtsideStrings
 import com.euroleague.courtside.i18n.CourtsideTranslations
 import com.euroleague.courtside.i18n.LocalAppLanguage
 import com.euroleague.courtside.i18n.LocalCourtsideStrings
+import com.euroleague.courtside.i18n.formatTipOffCountdown
 import com.euroleague.courtside.i18n.localizedLabel
 import com.euroleague.courtside.notifications.EuroLeagueNotificationManager
 import com.euroleague.courtside.ui.screens.MatchCenterScreen
@@ -737,10 +738,8 @@ private fun MyTeamDashboardScreen(
                 }
             }
 
-            // Countdown Broadcast Card
-            val hrs = TimeUnit.MILLISECONDS.toHours(remainingMillis)
-            val mins = TimeUnit.MILLISECONDS.toMinutes(remainingMillis) % 60
-            val secs = TimeUnit.MILLISECONDS.toSeconds(remainingMillis) % 60
+            // Countdown Broadcast Card ("3 Tage 15 Stunden" statt reiner Stundenanzeige + beide Mannschaftsnamen komplett)
+            val countdownLabel = strings.formatTipOffCountdown(remainingMillis)
 
             CourtsideGlassCard(isSelected = true, modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(14.dp)) {
@@ -751,7 +750,7 @@ private fun MyTeamDashboardScreen(
                     ) {
                         CourtsideLivePill(
                             badgeText = strings.nextTipOffBadge,
-                            detailText = "%02d:%02d:%02d".format(hrs, mins, secs),
+                            detailText = countdownLabel,
                             badgeColor = CourtsideDesignTokens.EuroLeagueOrange
                         )
                         Text(
@@ -766,15 +765,60 @@ private fun MyTeamDashboardScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
                             CourtsideClubCrest(nextGame.homeTeam)
                             Column {
-                                Text(nextGame.homeTeam.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                Text(nextGame.homeTeam.arena, color = CourtsideDesignTokens.MutedText, fontSize = 11.sp)
+                                Text(
+                                    text = nextGame.homeTeam.name,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    lineHeight = 16.sp
+                                )
+                                Text(
+                                    text = nextGame.homeTeam.arena,
+                                    color = CourtsideDesignTokens.MutedText,
+                                    fontSize = 11.sp
+                                )
                             }
                         }
-                        Text("VS", color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.ExtraBold)
-                        CourtsideClubCrest(nextGame.awayTeam)
+                        Text(
+                            text = "VS",
+                            color = CourtsideDesignTokens.EuroLeagueOrange,
+                            fontWeight = FontWeight.ExtraBold,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.End,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.End,
+                                modifier = Modifier.weight(1f, fill = false)
+                            ) {
+                                Text(
+                                    text = nextGame.awayTeam.name,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    lineHeight = 16.sp,
+                                    textAlign = TextAlign.End
+                                )
+                                Text(
+                                    text = nextGame.awayTeam.city,
+                                    color = CourtsideDesignTokens.MutedText,
+                                    fontSize = 11.sp,
+                                    textAlign = TextAlign.End
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            CourtsideClubCrest(nextGame.awayTeam)
+                        }
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -978,18 +1022,42 @@ private fun StandingsAndBracketScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
                                     CourtsideClubCrest(series.homeTeam, size = 34.dp)
-                                    Text("#${series.homeSeed} ${series.homeTeam.code}", color = Color.White, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = "#${series.homeSeed} ${series.homeTeam.name}",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        lineHeight = 15.sp
+                                    )
                                 }
                                 Text(
                                     text = "${series.homeWins} : ${series.awayWins}",
                                     color = CourtsideDesignTokens.EuroLeagueOrange,
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 18.sp
+                                    fontSize = 18.sp,
+                                    modifier = Modifier.padding(horizontal = 8.dp)
                                 )
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("#${series.awaySeed} ${series.awayTeam.code}", color = Color.White, fontWeight = FontWeight.Bold)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.End,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = "#${series.awaySeed} ${series.awayTeam.name}",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        lineHeight = 15.sp,
+                                        textAlign = TextAlign.End,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     CourtsideClubCrest(series.awayTeam, size = 34.dp)
                                 }
                             }
@@ -1463,18 +1531,18 @@ private fun SeasonLeadersAndComparisonScreen(
                     ) {
                         CourtsideClubCrest(teamA, size = 38.dp)
                         Column {
-                            Text(teamA.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
+                            Text(teamA.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, lineHeight = 16.sp)
                             Text("${teamA.wins}${strings.winLetter}-${teamA.losses}${strings.lossLetter} • OFF ${teamA.offensiveRating}", color = CourtsideDesignTokens.EuroLeagueOrange, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
-                    Text("VS", color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+                    Text("VS", color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 6.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.End,
                         modifier = Modifier.weight(1f)
                     ) {
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(teamB.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
+                        Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f, fill = false)) {
+                            Text(teamB.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, lineHeight = 16.sp, textAlign = TextAlign.End)
                             Text("${teamB.wins}${strings.winLetter}-${teamB.losses}${strings.lossLetter} • OFF ${teamB.offensiveRating}", color = CourtsideDesignTokens.NeonMadeGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                         Spacer(modifier = Modifier.width(10.dp))
