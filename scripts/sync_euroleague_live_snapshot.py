@@ -384,12 +384,12 @@ def main():
             "pointsFor": rec["pointsFor"],
             "pointsAgainst": rec["pointsAgainst"],
             "streak": last5,
-            "offensiveRating": round(ppg * 1.38, 1),
-            "defensiveRating": round(opp_ppg * 1.38, 1),
-            "pace": round(71.0 + (ppg - 78.0) * 0.25, 1),
+            "offensiveRating": round(ppg * 1.32, 1),
+            "defensiveRating": round(opp_ppg * 1.32, 1),
+            "pace": round(70.0 + (ppg - 78.0) * 0.35, 1),
             "threePointPct": round(three_pct, 1),
             "twoPointPct": round(two_pct, 1),
-            "reboundRate": round(min(58.0, max(45.0, reb_raw * 1.45)), 1)
+            "reboundRate": round(min(57.5, max(44.5, reb_raw * 1.42)), 1)
         })
 
         # Fetch live club roster from /seasons/{seasonCode}/clubs/{code}/people
@@ -465,43 +465,18 @@ def main():
 
         print(f"[ROSTER] {code} ({name}): verified {club_players_count} active players")
 
-    # Determine active round from /rounds
-    rounds_payload = fetch_json(f"{V2_BASE}/seasons/{season_code}/rounds")
-    rounds_raw = extract_rows(rounds_payload)
-    now_ms = int(time.time() * 1000)
-    active_round = 1
-    rs_rounds = [r for r in rounds_raw if str(r.get("phaseTypeCode") or "RS") == "RS"] or rounds_raw
-    if rs_rounds:
-        # Find round closest to today
-        best_dist = None
-        for r in rs_rounds:
-            rnd_num = int(r.get("round") or 1)
-            min_ms = parse_iso_epoch_millis(str(r.get("minGameStartDate") or ""))
-            max_ms = parse_iso_epoch_millis(str(r.get("maxGameStartDate") or ""))
-            if min_ms <= now_ms <= max_ms + 86400_000:
-                active_round = rnd_num
-                break
-            dist = min(abs(now_ms - min_ms), abs(now_ms - max_ms))
-            if best_dist is None or dist < best_dist:
-                best_dist = dist
-                active_round = rnd_num
-
-    # Also check which rounds actually have games
+    # Check which rounds actually have played games
     played_rounds = sorted({int(g.get("round") or 1) for g in all_games_raw if g.get("played")})
-    latest_played_round = played_rounds[-1] if played_rounds else active_round
-    print(f"[INFO] Active round for today: Round {active_round} (latest played round: {latest_played_round})")
+    latest_played_round = played_rounds[-1] if played_rounds else 1
+    active_round = latest_played_round
+    print(f"[INFO] Active round set to latest played round: Round {active_round}")
 
-    # Select rounds to fetch full boxscore + shot chart details for (latest played round + active round + next round)
-    detail_rounds = {active_round, latest_played_round, max(1, active_round - 1), min(38, active_round + 1)}
+    # Select rounds to fetch full boxscore + shot chart details for
+    detail_rounds = {latest_played_round, max(1, latest_played_round - 1)}
 
     games_out = []
     for g in sorted_games:
         rnd = int(g.get("round") or 1)
-        if rnd not in detail_rounds and len(games_out) > 80:
-            # Keep all games for favorite clubs or within +/- 3 rounds, to keep asset compact & fast
-            if abs(rnd - active_round) > 3:
-                continue
-
         game_code = int(g.get("gameCode") or 0)
         played = bool(g.get("played"))
         game_status_str = str(g.get("gameStatus") or "").lower()

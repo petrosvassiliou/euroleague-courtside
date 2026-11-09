@@ -101,13 +101,14 @@ enum class BoxscoreSortColumn {
 fun MatchCenterScreen(
     games: List<EuroLeagueGame>,
     selectedRound: Int,
-    syncStatus: String = "LIVE API • E2026",
+    syncStatus: String = "",
     filterOnlyFavorites: Boolean,
     favoriteTeamIds: Set<String>,
     hingeInBookPosture: Boolean,
     notificationManager: EuroLeagueNotificationManager,
     onPreviousRound: () -> Unit,
     onNextRound: () -> Unit,
+    onSelectRound: (Int) -> Unit = {},
     onToggleFavoriteFilter: () -> Unit,
     onTriggerLiveRefresh: () -> Unit,
     onRefreshSelectedGameStats: (EuroLeagueGame) -> Unit = {},
@@ -118,16 +119,21 @@ fun MatchCenterScreen(
     val scope = rememberCoroutineScope()
     val navigator = rememberListDetailPaneScaffoldNavigator<String>()
     var searchQuery by rememberSaveable { mutableStateOf("") }
+    var showRoundDropdown by remember { mutableStateOf(false) }
+
+    val availableRounds = remember(games) {
+        val roundsFromGames = games.map { it.round }.distinct().sorted()
+        if (roundsFromGames.size >= 10) roundsFromGames else (1..38).toList()
+    }
 
     val filteredGames = remember(games, selectedRound, filterOnlyFavorites, favoriteTeamIds, searchQuery) {
         val q = searchQuery.trim().lowercase()
         val roundFiltered = if (q.isEmpty()) {
-            val inRound = games.filter { it.round == selectedRound }
-            inRound.ifEmpty { games }
+            games.filter { it.round == selectedRound }
         } else {
             games
         }
-        roundFiltered.filter { game ->
+        val favAndSearchFiltered = roundFiltered.filter { game ->
             val matchesFav = !filterOnlyFavorites ||
                     favoriteTeamIds.contains(game.homeTeam.id) ||
                     favoriteTeamIds.contains(game.awayTeam.id) ||
@@ -137,18 +143,36 @@ fun MatchCenterScreen(
                     game.homeTeam.name.lowercase().contains(q) ||
                     game.awayTeam.name.lowercase().contains(q) ||
                     game.homeTeam.code.lowercase().contains(q) ||
-                    game.awayTeam.code.lowercase().contains(q)
+                    game.awayTeam.code.lowercase().contains(q) ||
+                    game.homeTeam.city.lowercase().contains(q) ||
+                    game.awayTeam.city.lowercase().contains(q)
             matchesFav && matchesSearch
-        }.ifEmpty { roundFiltered.ifEmpty { games } }
+        }
+        if (q.isEmpty() && filterOnlyFavorites && favAndSearchFiltered.isEmpty()) {
+            roundFiltered
+        } else {
+            favAndSearchFiltered
+        }
     }
 
     var activeGameId by rememberSaveable {
-        mutableStateOf(filteredGames.firstOrNull()?.id ?: games.first().id)
+        mutableStateOf(filteredGames.firstOrNull()?.id ?: games.firstOrNull()?.id.orEmpty())
     }
-    val selectedGame = filteredGames.find { it.id == activeGameId } ?: filteredGames.first()
 
-    androidx.compose.runtime.LaunchedEffect(selectedGame.id) {
-        onRefreshSelectedGameStats(selectedGame)
+    androidx.compose.runtime.LaunchedEffect(selectedRound, filteredGames.size) {
+        if (filteredGames.isNotEmpty() && filteredGames.none { it.id == activeGameId }) {
+            activeGameId = filteredGames.first().id
+        }
+    }
+
+    val selectedGame = filteredGames.find { it.id == activeGameId }
+        ?: filteredGames.firstOrNull()
+        ?: games.firstOrNull()
+
+    androidx.compose.runtime.LaunchedEffect(selectedGame?.id) {
+        if (selectedGame != null) {
+            onRefreshSelectedGameStats(selectedGame)
+        }
     }
 
     ListDetailPaneScaffold(
@@ -165,44 +189,59 @@ fun MatchCenterScreen(
                         .fillMaxSize()
                         .padding(end = 12.dp)
                 ) {
-                    // Header: "EuroLeague" + Dark Search Pill
+                    // Clean Header without "LIVE API..." clutter + Wide Search Box
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                            .padding(bottom = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
-                            Text(
-                                text = strings.matchCenterTitle,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = syncStatus,
-                                color = Color(0xFF00E676),
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                        Text(
+                            text = strings.matchCenterTitle,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White
+                        )
 
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
-                            placeholder = { Text(strings.searchPlaceholder, fontSize = 12.sp, color = Color(0xFF8E8E93)) },
+                            placeholder = {
+                                Text(
+                                    text = "${strings.searchPlaceholder} (Team, Code, City)...",
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF8E8E93),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
                             leadingIcon = {
                                 Icon(
                                     Icons.Default.Search,
                                     contentDescription = strings.searchPlaceholder,
-                                    tint = Color(0xFF8E8E93),
-                                    modifier = Modifier.size(16.dp)
+                                    tint = Color(0xFFFF6600),
+                                    modifier = Modifier.size(18.dp)
                                 )
                             },
+                            trailingIcon = if (searchQuery.isNotEmpty()) {
+                                {
+                                    Text(
+                                        text = "✕",
+                                        color = Color(0xFF9CA3AF),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        modifier = Modifier
+                                            .clickable { searchQuery = "" }
+                                            .padding(8.dp)
+                                    )
+                                }
+                            } else null,
                             singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                color = Color.White,
+                                fontSize = 13.sp
+                            ),
                             shape = RoundedCornerShape(12.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedContainerColor = Color(0xFF1B1B21),
@@ -213,12 +252,12 @@ fun MatchCenterScreen(
                                 unfocusedTextColor = Color.White
                             ),
                             modifier = Modifier
-                                .width(152.dp)
-                                .height(46.dp)
+                                .weight(1f)
+                                .height(52.dp)
                         )
                     }
 
-                    // Round Switcher Bar
+                    // Round Switcher Bar (1..38) with Direct Dropdown Picker
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -241,16 +280,81 @@ fun MatchCenterScreen(
                                 Text(
                                     text = "◀",
                                     color = Color.White,
-                                    fontSize = 11.sp,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                 )
                             }
-                            Text(
-                                text = "${strings.roundPrefix} $selectedRound",
-                                color = Color(0xFFFF6600),
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 12.sp
-                            )
+
+                            Box {
+                                Surface(
+                                    color = Color(0x26FF6600),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .border(1.dp, Color(0x88FF6600), RoundedCornerShape(8.dp))
+                                        .clickable { showRoundDropdown = true }
+                                        .pointerHoverIcon(PointerIcon.Hand)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    ) {
+                                        Text(
+                                            text = "${strings.roundPrefix} $selectedRound",
+                                            color = Color(0xFFFF6600),
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 13.sp
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Icon(
+                                            Icons.Default.KeyboardArrowDown,
+                                            contentDescription = null,
+                                            tint = Color(0xFFFF6600),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+
+                                DropdownMenu(
+                                    expanded = showRoundDropdown,
+                                    onDismissRequest = { showRoundDropdown = false },
+                                    modifier = Modifier
+                                        .background(Color(0xFF1B1B21))
+                                        .height(360.dp)
+                                ) {
+                                    availableRounds.forEach { rnd ->
+                                        val roundGames = games.filter { it.round == rnd }
+                                        val isPlayedRound = roundGames.any { it.status == GameStatus.FINAL }
+                                        DropdownMenuItem(
+                                            text = {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        text = "${strings.roundPrefix} $rnd",
+                                                        color = if (rnd == selectedRound) Color(0xFFFF6600) else Color.White,
+                                                        fontWeight = if (rnd == selectedRound) FontWeight.ExtraBold else FontWeight.Medium,
+                                                        fontSize = 13.sp
+                                                    )
+                                                    Spacer(modifier = Modifier.width(12.dp))
+                                                    Text(
+                                                        text = if (isPlayedRound) strings.statusFinal else strings.statusUpcoming,
+                                                        color = if (isPlayedRound) Color(0xFF00E676) else Color(0xFF8E8E93),
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                }
+                                            },
+                                            onClick = {
+                                                showRoundDropdown = false
+                                                onSelectRound(rnd)
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
                             Surface(
                                 color = Color(0xFF1B1B21),
                                 shape = RoundedCornerShape(8.dp),
@@ -262,8 +366,8 @@ fun MatchCenterScreen(
                                 Text(
                                     text = "▶",
                                     color = Color.White,
-                                    fontSize = 11.sp,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                 )
                             }
                         }
@@ -285,7 +389,7 @@ fun MatchCenterScreen(
                                 color = if (filterOnlyFavorites) Color(0xFFFF6600) else Color(0xFFD1D5DB),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                             )
                         }
                     }
@@ -297,7 +401,7 @@ fun MatchCenterScreen(
                         items(filteredGames, key = { it.id }) { game ->
                             MatchSummaryCard(
                                 game = game,
-                                isSelected = game.id == selectedGame.id,
+                                isSelected = game.id == selectedGame?.id,
                                 onSelect = {
                                     activeGameId = game.id
                                     onRefreshSelectedGameStats(game)
@@ -320,24 +424,37 @@ fun MatchCenterScreen(
         },
         detailPane = {
             AnimatedPane {
-                MatchDetailPane(
-                    game = selectedGame,
-                    onExportCalendar = {
-                        CalendarExportHelper.exportSingleGameToNativeCalendar(context, selectedGame)
-                    },
-                    onTriggerCloseGameAlert = {
-                        notificationManager.evaluateAndSendCloseGameAlert(selectedGame)
-                    }
-                )
+                if (selectedGame != null) {
+                    MatchDetailPane(
+                        game = selectedGame,
+                        onExportCalendar = {
+                            CalendarExportHelper.exportSingleGameToNativeCalendar(context, selectedGame)
+                        },
+                        onTriggerCloseGameAlert = {
+                            notificationManager.evaluateAndSendCloseGameAlert(selectedGame)
+                        },
+                        onOpenTeamStats = onOpenTeamStats
+                    )
+                }
             }
         }
     )
 }
 
+private fun formatTipOffDateTime(epochMillis: Long): String {
+    return runCatching {
+        val formatter = java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy • HH:mm")
+            .withZone(java.time.ZoneId.systemDefault())
+        formatter.format(java.time.Instant.ofEpochMilli(epochMillis))
+    }.getOrDefault("")
+}
+
 /**
  * Broadcast-Spielkarte im Courtside UI Design:
- * - Oben links: `[LIVE | Q4 01:42]` Pill mit leuchtend orangenem Rand, oben rechts `•••`
- * - Mitte: 3-Spalten-Layout (Heim-Wappen links | `Q1 Q2 Q3 Q4 PIR` Tabelle mittig | Gast-Wappen rechts)
+ * - Oben links: `[ENDE | R10 • 05.11.2026]` bzw. `[GEPLANT | R11 • 12.11.2026 • 19:30]`
+ * - Mitte:
+ *   - Bei gespielten/laufenden Spielen: Großes Endergebnis (`112 : 115`) + echte Viertelwerte (`Q1 Q2 Q3 Q4`)
+ *   - Bei geplanten Spielen (`UPCOMING`): Tip-Off Uhrzeit, Arena & aktuelle Saisonbilanzen (`S-N`) statt künstlicher `0 0 0 0` Werte!
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -360,8 +477,7 @@ private fun MatchSummaryCard(
         else -> Color(0xFF26262E)
     }
 
-    val homePirSum = remember(game.boxscoreHome) { game.boxscoreHome.sumOf { it.pir } }
-    val awayPirSum = remember(game.boxscoreAway) { game.boxscoreAway.sumOf { it.pir } }
+    val formattedDate = remember(game.tipOffEpochMillis) { formatTipOffDateTime(game.tipOffEpochMillis) }
 
     Box {
         Card(
@@ -394,7 +510,7 @@ private fun MatchSummaryCard(
                 )
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
-                // Top Row: [LIVE | Q4 01:42] Pill + Three Dots Menu Button
+                // Top Row: Status + Round + Date Pill + Three Dots Menu Button
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -412,20 +528,29 @@ private fun MatchSummaryCard(
                             GameStatus.FINAL -> strings.statusFinal
                             GameStatus.UPCOMING -> strings.statusUpcoming
                         }
+                        val badgeColor = when (game.status) {
+                            GameStatus.LIVE -> Color(0xFFFF4500)
+                            GameStatus.FINAL -> Color(0xFF00875A)
+                            GameStatus.UPCOMING -> Color(0xFF3A3A42)
+                        }
                         Surface(
-                            color = if (game.status == GameStatus.LIVE) Color(0xFFFF4500) else Color(0xFF3A3A42),
+                            color = badgeColor,
                             shape = RoundedCornerShape(6.dp)
                         ) {
                             Text(
                                 text = statusBadgeText,
                                 color = Color.White,
                                 fontWeight = FontWeight.ExtraBold,
-                                fontSize = 11.sp,
+                                fontSize = 10.sp,
                                 modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                             )
                         }
+                        val metaDetail = when (game.status) {
+                            GameStatus.LIVE -> "R${game.round} • Q${game.currentQuarter} ${game.remainingClock}"
+                            else -> "R${game.round} • $formattedDate"
+                        }
                         Text(
-                            text = if (game.status == GameStatus.LIVE) "Q${game.currentQuarter} ${game.remainingClock}" else "R${game.round}",
+                            text = metaDetail,
                             color = Color(0xFFE5E5EA),
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 11.sp,
@@ -447,67 +572,127 @@ private fun MatchSummaryCard(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // 3-Column Broadcast Layout: Home Crest | Q1 Q2 Q3 Q4 PIR | Away Crest
+                // 3-Column Broadcast Layout: Home Crest | Score & Quarters / Tip-Off Info | Away Crest
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    // Left: Home Club Crest + Short Name
                     ClubCrestColumn(
                         team = game.homeTeam,
-                        modifier = Modifier.weight(2.6f)
+                        modifier = Modifier.weight(2.7f)
                     )
 
-                    // Center: Q1 Q2 Q3 Q4 PIR Grid
                     val q = game.quarters
                     Column(
-                        modifier = Modifier.weight(5.8f),
+                        modifier = Modifier.weight(5.6f),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            listOf("Q1", "Q2", "Q3", "Q4", "PIR").forEach { col ->
+                        if (game.status == GameStatus.UPCOMING) {
+                            // Unplayed scheduled game: Show VS, Season Records & Arena instead of 0-0-0-0
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
                                 Text(
-                                    text = col,
-                                    color = Color(0xFF8E8E93),
-                                    fontSize = 11.sp,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.weight(1f)
+                                    text = "${game.homeTeam.wins}${strings.winLetter}-${game.homeTeam.losses}${strings.lossLetter}",
+                                    color = Color(0xFFD1D5DB),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
                                 )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            listOf(q.q1Home, q.q2Home, q.q3Home, q.q4Home, homePirSum).forEach { v ->
                                 Text(
-                                    text = v.toString(),
-                                    color = Color.White,
+                                    text = "VS",
+                                    color = Color(0xFFFF6600),
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 13.sp,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.weight(1f)
+                                    fontSize = 16.sp
+                                )
+                                Text(
+                                    text = "${game.awayTeam.wins}${strings.winLetter}-${game.awayTeam.losses}${strings.lossLetter}",
+                                    color = Color(0xFFD1D5DB),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp
                                 )
                             }
-                        }
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            listOf(q.q1Away, q.q2Away, q.q3Away, q.q4Away, awayPirSum).forEach { v ->
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = game.homeTeam.arena,
+                                color = Color(0xFF8E8E93),
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center
+                            )
+                        } else {
+                            // Played or Live game: Show Score prominently + Q1 Q2 Q3 Q4 breakdown
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
                                 Text(
-                                    text = v.toString(),
-                                    color = Color(0xFF8E8E93),
-                                    fontWeight = FontWeight.Medium,
-                                    fontSize = 12.sp,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.weight(1f)
+                                    text = game.homeScore.toString(),
+                                    color = if (game.homeScore >= game.awayScore) Color.White else Color(0xFF9CA3AF),
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 20.sp
                                 )
+                                Text(
+                                    text = ":",
+                                    color = Color(0xFFFF6600),
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 18.sp
+                                )
+                                Text(
+                                    text = game.awayScore.toString(),
+                                    color = if (game.awayScore >= game.homeScore) Color.White else Color(0xFF9CA3AF),
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 20.sp
+                                )
+                            }
+
+                            val hasQuarters = (q.q1Home + q.q2Home + q.q3Home + q.q4Home + q.q1Away + q.q2Away + q.q3Away + q.q4Away) > 0
+                            if (hasQuarters) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(modifier = Modifier.fillMaxWidth()) {
+                                    listOf("Q1", "Q2", "Q3", "Q4").forEach { col ->
+                                        Text(
+                                            text = col,
+                                            color = Color(0xFF8E8E93),
+                                            fontSize = 10.sp,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                                Row(modifier = Modifier.fillMaxWidth()) {
+                                    listOf(q.q1Home, q.q2Home, q.q3Home, q.q4Home).forEach { v ->
+                                        Text(
+                                            text = v.toString(),
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                                Row(modifier = Modifier.fillMaxWidth()) {
+                                    listOf(q.q1Away, q.q2Away, q.q3Away, q.q4Away).forEach { v ->
+                                        Text(
+                                            text = v.toString(),
+                                            color = Color(0xFF9CA3AF),
+                                            fontWeight = FontWeight.Medium,
+                                            fontSize = 11.sp,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
 
-                    // Right: Away Club Crest + Short Name
                     ClubCrestColumn(
                         team = game.awayTeam,
-                        modifier = Modifier.weight(2.6f)
+                        modifier = Modifier.weight(2.7f)
                     )
                 }
             }
@@ -571,16 +756,20 @@ private fun ClubCrestColumn(
 
 /**
  * Rechte Split-View-Spalte im Courtside UI Design:
- * Zeigt gleichzeitig untereinander:
- * 1. Dual-Tone Gradient Scoreboard Header
- * 2. Glowing Half-Court Shot-Chart
- * 3. `Player boxscore ⌄` mit leuchtend orangener `PIR`-Spalte
+ * - Bei gespielten/laufenden Spielen:
+ *   1. Dual-Tone Gradient Scoreboard Header
+ *   2. Glowing Half-Court Shot-Chart
+ *   3. `Player boxscore ⌄` mit leuchtend orangener `PIR`-Spalte
+ * - Bei geplanten Spielen (`UPCOMING`):
+ *   1. Dual-Tone Matchup Banner mit Tip-Off Datum & Uhrzeit
+ *   2. Direkter Team-Statistik-Vorbericht (`PPG`, `OPPG`, `OFF RTG`, `DEF RTG`, `3P%`, `2P%`, `REB%`)
  */
 @Composable
 private fun MatchDetailPane(
     game: EuroLeagueGame,
     onExportCalendar: () -> Unit,
-    onTriggerCloseGameAlert: () -> Unit
+    onTriggerCloseGameAlert: () -> Unit,
+    onOpenTeamStats: (String) -> Unit = {}
 ) {
     val strings = LocalCourtsideStrings.current
     var sortColumn by rememberSaveable { mutableStateOf(BoxscoreSortColumn.PIR) }
@@ -610,50 +799,161 @@ private fun MatchDetailPane(
             onTriggerCloseGameAlert = onTriggerCloseGameAlert
         )
 
-        // 2. Glowing Half-Court Shot-Chart Card
-        InteractiveCourtShotChart(
-            shots = game.shots,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1.1f)
-        )
+        if (game.status == GameStatus.UPCOMING) {
+            // Vorbericht & Direkter Team-Vergleich für geplante Spiele (keine erfundenen Boxscores!)
+            UpcomingMatchPreviewCard(
+                game = game,
+                onExportCalendar = onExportCalendar,
+                onOpenTeamStats = onOpenTeamStats,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
+        } else {
+            // 2. Glowing Half-Court Shot-Chart Card
+            InteractiveCourtShotChart(
+                shots = game.shots,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1.05f)
+            )
 
-        // 3. Sleek Player Boxscore Table
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 6.dp)
+            // 3. Sleek Player Boxscore Table
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
             ) {
-                Text(
-                    text = strings.playerBoxscoreHeader,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
-                )
-                Icon(
-                    Icons.Default.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = Color(0xFF8E8E93),
-                    modifier = Modifier.size(18.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                ) {
+                    Text(
+                        text = strings.playerBoxscoreHeader,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                    Icon(
+                        Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = Color(0xFF8E8E93),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                SortableBoxscoreTable(
+                    stats = combinedPlayers,
+                    sortColumn = sortColumn,
+                    sortAscending = sortAscending,
+                    onSortChange = { col ->
+                        if (sortColumn == col) sortAscending = !sortAscending
+                        else {
+                            sortColumn = col
+                            sortAscending = false
+                        }
+                    }
                 )
             }
+        }
+    }
+}
 
-            SortableBoxscoreTable(
-                stats = combinedPlayers,
-                sortColumn = sortColumn,
-                sortAscending = sortAscending,
-                onSortChange = { col ->
-                    if (sortColumn == col) sortAscending = !sortAscending
-                    else {
-                        sortColumn = col
-                        sortAscending = false
-                    }
-                }
+@Composable
+private fun UpcomingMatchPreviewCard(
+    game: EuroLeagueGame,
+    onExportCalendar: () -> Unit,
+    onOpenTeamStats: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val strings = LocalCourtsideStrings.current
+    val home = game.homeTeam
+    val away = game.awayTeam
+    val gpH = (home.wins + home.losses).coerceAtLeast(1)
+    val gpA = (away.wins + away.losses).coerceAtLeast(1)
+    val ppgH = ((home.pointsFor.toFloat() / gpH) * 10f).toInt() / 10f
+    val ppgA = ((away.pointsFor.toFloat() / gpA) * 10f).toInt() / 10f
+    val oppgH = ((home.pointsAgainst.toFloat() / gpH) * 10f).toInt() / 10f
+    val oppgA = ((away.pointsAgainst.toFloat() / gpA) * 10f).toInt() / 10f
+
+    val rows = listOf(
+        Triple("${strings.winsColumn}-${strings.lossesColumn}", "${home.wins}-${home.losses}", "${away.wins}-${away.losses}"),
+        Triple("PPG", "$ppgH", "$ppgA"),
+        Triple("OPPG", "$oppgH", "$oppgA"),
+        Triple("OFF RTG", "${home.offensiveRating}", "${away.offensiveRating}"),
+        Triple("DEF RTG", "${home.defensiveRating}", "${away.defensiveRating}"),
+        Triple("3P%", "${home.threePointPct}%", "${away.threePointPct}%"),
+        Triple("2P%", "${home.twoPointPct}%", "${away.twoPointPct}%"),
+        Triple("REB%", "${home.reboundRate}%", "${away.reboundRate}%")
+    )
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color(0xFF151519))
+            .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(18.dp))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "${home.arena} • ${home.city}",
+                color = Color(0xFFFF6600),
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp
             )
+            Text(
+                text = formatTipOffDateTime(game.tipOffEpochMillis),
+                color = Color(0xFFD1D5DB),
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 12.sp
+            )
+        }
+
+        HorizontalDivider(color = Color(0x1AFFFFFF))
+
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            items(rows) { (label, valH, valA) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF1B1B21), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = valH,
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 14.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = label,
+                        color = Color(0xFFFF6600),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1.2f)
+                    )
+                    Text(
+                        text = valA,
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
         }
     }
 }
@@ -691,8 +991,13 @@ private fun DualToneScoreboardBanner(
                 shape = RoundedCornerShape(6.dp),
                 modifier = Modifier.clickable { onTriggerCloseGameAlert() }
             ) {
+                val topPillText = when (game.status) {
+                    GameStatus.LIVE -> "${strings.statusLive} • R${game.round} • Q${game.currentQuarter} ${game.remainingClock}"
+                    GameStatus.FINAL -> "${strings.statusFinal} • ${strings.roundPrefix.uppercase()} ${game.round} • ${formatTipOffDateTime(game.tipOffEpochMillis)}"
+                    GameStatus.UPCOMING -> "${strings.statusUpcoming} • ${strings.roundPrefix.uppercase()} ${game.round} • ${formatTipOffDateTime(game.tipOffEpochMillis)}"
+                }
                 Text(
-                    text = if (game.status == GameStatus.LIVE) "${strings.statusLive}   Q${game.currentQuarter} ${game.remainingClock}" else "${strings.roundPrefix.uppercase()} ${game.round}",
+                    text = topPillText,
                     color = Color(0xFFE5E5EA),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -722,28 +1027,45 @@ private fun DualToneScoreboardBanner(
                     )
                 }
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = game.homeScore.toString(),
-                        color = Color.White,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 28.sp
-                    )
-                    Text(
-                        text = "VS",
-                        color = Color(0xFF9CA3AF),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
-                    )
-                    Text(
-                        text = game.awayScore.toString(),
-                        color = Color.White,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 28.sp
-                    )
+                if (game.status == GameStatus.UPCOMING) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "VS",
+                            color = Color(0xFFFF6600),
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 20.sp
+                        )
+                        Text(
+                            text = "${game.homeTeam.wins}-${game.homeTeam.losses}  |  ${game.awayTeam.wins}-${game.awayTeam.losses}",
+                            color = Color(0xFFD1D5DB),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = game.homeScore.toString(),
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 28.sp
+                        )
+                        Text(
+                            text = ":",
+                            color = Color(0xFFFF6600),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp
+                        )
+                        Text(
+                            text = game.awayScore.toString(),
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 28.sp
+                        )
+                    }
                 }
 
                 Row(

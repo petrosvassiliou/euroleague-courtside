@@ -120,5 +120,12 @@ class EuroLeagueCourtsideUnitTest {
             assertEquals(lang, repository.appLanguageFlow.value)
         }
     }
+
+    @Test
+    fun `playoff bracket projection computes real regular season H2H records`() {
+        val bracket = repository.getPlayoffBracket()
+        assertTrue(bracket.isNotEmpty())
+        assertTrue(bracket.all { it.homeWins in 0..2 && it.awayWins in 0..2 })
+    }
 }
 

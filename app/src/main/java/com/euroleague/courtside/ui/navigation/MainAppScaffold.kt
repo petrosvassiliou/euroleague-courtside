@@ -177,11 +177,22 @@ fun MainAppScaffold(
 
     var currentDestination by rememberSaveable { mutableStateOf(CourtsideDestination.MATCHDAY) }
     var selectedRound by rememberSaveable { mutableIntStateOf(activeRound) }
+    var userManuallySelectedRound by rememberSaveable { mutableStateOf(false) }
     var filterOnlyFavorites by rememberSaveable { mutableStateOf(false) }
-    var comparisonTeamBId by rememberSaveable { mutableStateOf("PAO") }
+    var comparisonTeamAId by rememberSaveable { mutableStateOf(primaryTeam.id) }
+    var comparisonTeamBId by rememberSaveable { mutableStateOf("PAN") }
 
     LaunchedEffect(activeRound) {
-        selectedRound = activeRound
+        if (!userManuallySelectedRound && activeRound in 1..38) {
+            selectedRound = activeRound
+        }
+    }
+
+    LaunchedEffect(primaryTeam.id) {
+        comparisonTeamAId = primaryTeam.id
+        if (comparisonTeamBId == primaryTeam.id) {
+            comparisonTeamBId = if (primaryTeam.id == "PAN") "OLY" else "PAN"
+        }
     }
 
     var isBookPosture by remember { mutableStateOf(false) }
@@ -252,9 +263,11 @@ fun MainAppScaffold(
                             triggerLiveSync(); true
                         }
                         event.key == Key.DirectionLeft -> {
+                            userManuallySelectedRound = true
                             selectedRound = (selectedRound - 1).coerceAtLeast(1); true
                         }
                         event.key == Key.DirectionRight -> {
+                            userManuallySelectedRound = true
                             selectedRound = (selectedRound + 1).coerceAtMost(38); true
                         }
                         else -> false
@@ -310,8 +323,18 @@ fun MainAppScaffold(
                             favoriteTeamIds = favoriteIds,
                             hingeInBookPosture = isBookPosture,
                             notificationManager = notificationManager,
-                            onPreviousRound = { selectedRound = (selectedRound - 1).coerceAtLeast(1) },
-                            onNextRound = { selectedRound = (selectedRound + 1).coerceAtMost(38) },
+                            onPreviousRound = {
+                                userManuallySelectedRound = true
+                                selectedRound = (selectedRound - 1).coerceAtLeast(1)
+                            },
+                            onNextRound = {
+                                userManuallySelectedRound = true
+                                selectedRound = (selectedRound + 1).coerceAtMost(38)
+                            },
+                            onSelectRound = { rnd ->
+                                userManuallySelectedRound = true
+                                selectedRound = rnd.coerceIn(1, 38)
+                            },
                             onToggleFavoriteFilter = { filterOnlyFavorites = !filterOnlyFavorites },
                             onTriggerLiveRefresh = triggerLiveSync,
                             onRefreshSelectedGameStats = { game ->
@@ -331,13 +354,31 @@ fun MainAppScaffold(
                             favoriteIds = favoriteIds
                         )
 
-                        CourtsideDestination.STATISTICS -> SeasonLeadersAndComparisonScreen(
-                            players = allPlayers,
-                            teams = allTeams,
-                            teamA = primaryTeam,
-                            teamB = repository.findTeam(comparisonTeamBId) ?: allTeams.first(),
-                            onSelectTeamB = { comparisonTeamBId = it }
-                        )
+                        CourtsideDestination.STATISTICS -> {
+                            val resolvedTeamA = repository.findTeam(comparisonTeamAId) ?: primaryTeam
+                            val resolvedTeamB = repository.findTeam(comparisonTeamBId)
+                                ?: allTeams.firstOrNull { it.id != resolvedTeamA.id }
+                                ?: allTeams.first()
+                            SeasonLeadersAndComparisonScreen(
+                                players = allPlayers,
+                                teams = allTeams,
+                                games = games,
+                                teamA = resolvedTeamA,
+                                teamB = resolvedTeamB,
+                                onSelectTeamA = { newA ->
+                                    comparisonTeamAId = newA
+                                    if (comparisonTeamBId == newA) {
+                                        comparisonTeamBId = allTeams.firstOrNull { it.id != newA }?.id ?: "OLY"
+                                    }
+                                },
+                                onSelectTeamB = { newB ->
+                                    comparisonTeamBId = newB
+                                    if (comparisonTeamAId == newB) {
+                                        comparisonTeamAId = allTeams.firstOrNull { it.id != newB }?.id ?: "PAN"
+                                    }
+                                }
+                            )
+                        }
 
                         CourtsideDestination.SETTINGS -> SettingsAndNotificationTestScreen(
                             primaryTeam = primaryTeam,
@@ -606,10 +647,17 @@ private fun MyTeamDashboardScreen(
 ) {
     val context = LocalContext.current
     val strings = LocalCourtsideStrings.current
-    val nextGame = games.firstOrNull {
-        it.homeTeam.id == primaryTeam.id || it.awayTeam.id == primaryTeam.id ||
-            it.homeTeam.code == primaryTeam.code || it.awayTeam.code == primaryTeam.code
-    } ?: games.first()
+    val teamGames = remember(games, primaryTeam.id, primaryTeam.code) {
+        games.filter {
+            it.homeTeam.id == primaryTeam.id || it.awayTeam.id == primaryTeam.id ||
+                it.homeTeam.code == primaryTeam.code || it.awayTeam.code == primaryTeam.code
+        }
+    }
+    val nextGame = remember(teamGames, games) {
+        teamGames.firstOrNull { it.status == GameStatus.UPCOMING || it.status == GameStatus.LIVE }
+            ?: teamGames.lastOrNull()
+            ?: games.first()
+    }
 
     var remainingMillis by remember(nextGame.id) {
         mutableStateOf((nextGame.tipOffEpochMillis - System.currentTimeMillis()).coerceAtLeast(0L))
@@ -645,11 +693,19 @@ private fun MyTeamDashboardScreen(
                     style = MaterialTheme.typography.titleLarge,
                     color = Color.White
                 )
-                CourtsideLivePill(
-                    badgeText = strings.liveSyncBadge,
-                    detailText = "${allTeams.size} ${strings.clubsSuffix}",
-                    badgeColor = CourtsideDesignTokens.NeonMadeGreen
-                )
+                Surface(
+                    color = Color(0xFF1B1B21),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.border(1.dp, Color(0xFF2C2C34), RoundedCornerShape(8.dp))
+                ) {
+                    Text(
+                        text = "${allTeams.size} ${strings.clubsSuffix}",
+                        color = Color(0xFFD1D5DB),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
             }
 
             // Verein-Umschalter im Pill-Design mit echten offiziellen Club-Logos
@@ -1039,16 +1095,116 @@ private fun StandingsAndBracketScreen(
 // TAB 4 (Ctrl+4): ANALYTICS, RADAR-CHART & SEASON LEADERS IM COURTSIDE DESIGN
 // =========================================================================
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SeasonLeadersAndComparisonScreen(
     players: List<PlayerProfile>,
     teams: List<EuroLeagueTeam>,
+    games: List<EuroLeagueGame> = emptyList(),
     teamA: EuroLeagueTeam,
     teamB: EuroLeagueTeam,
+    onSelectTeamA: (String) -> Unit = {},
     onSelectTeamB: (String) -> Unit
 ) {
     val strings = LocalCourtsideStrings.current
-    val topPirPlayers = remember(players) { players.sortedByDescending { it.pir } }
+
+    val h2hGames = remember(games, teamA.id, teamB.id) {
+        games.filter { g ->
+            val aHome = g.homeTeam.id == teamA.id || g.homeTeam.code == teamA.code
+            val bAway = g.awayTeam.id == teamB.id || g.awayTeam.code == teamB.code
+            val bHome = g.homeTeam.id == teamB.id || g.homeTeam.code == teamB.code
+            val aAway = g.awayTeam.id == teamA.id || g.awayTeam.code == teamA.code
+            (aHome && bAway) || (bHome && aAway)
+        }.sortedBy { it.round }
+    }
+
+    val gpA = (teamA.wins + teamA.losses).coerceAtLeast(1)
+    val gpB = (teamB.wins + teamB.losses).coerceAtLeast(1)
+    val ppgA = ((teamA.pointsFor.toFloat() / gpA) * 10f).toInt() / 10f
+    val ppgB = ((teamB.pointsFor.toFloat() / gpB) * 10f).toInt() / 10f
+    val oppgA = ((teamA.pointsAgainst.toFloat() / gpA) * 10f).toInt() / 10f
+    val oppgB = ((teamB.pointsAgainst.toFloat() / gpB) * 10f).toInt() / 10f
+
+    data class ComparisonMetric(
+        val label: String,
+        val displayA: String,
+        val displayB: String,
+        val rawA: Float,
+        val rawB: Float,
+        val lowerIsBetter: Boolean = false
+    )
+
+    val comparisonMetrics = remember(teamA, teamB, strings) {
+        listOf(
+            ComparisonMetric(
+                label = "${strings.winsColumn}-${strings.lossesColumn}",
+                displayA = "${teamA.wins}-${teamA.losses}",
+                displayB = "${teamB.wins}-${teamB.losses}",
+                rawA = teamA.wins.toFloat().coerceAtLeast(0.5f),
+                rawB = teamB.wins.toFloat().coerceAtLeast(0.5f)
+            ),
+            ComparisonMetric(
+                label = "PPG (PTS / Game)",
+                displayA = "$ppgA",
+                displayB = "$ppgB",
+                rawA = ppgA,
+                rawB = ppgB
+            ),
+            ComparisonMetric(
+                label = "OPPG (Opp PTS / Game)",
+                displayA = "$oppgA",
+                displayB = "$oppgB",
+                rawA = oppgA,
+                rawB = oppgB,
+                lowerIsBetter = true
+            ),
+            ComparisonMetric(
+                label = "+/- Diff",
+                displayA = if (teamA.pointDiff >= 0) "+${teamA.pointDiff}" else "${teamA.pointDiff}",
+                displayB = if (teamB.pointDiff >= 0) "+${teamB.pointDiff}" else "${teamB.pointDiff}",
+                rawA = (teamA.pointDiff + 150).toFloat().coerceAtLeast(10f),
+                rawB = (teamB.pointDiff + 150).toFloat().coerceAtLeast(10f)
+            ),
+            ComparisonMetric(
+                label = "OFF RTG",
+                displayA = "${teamA.offensiveRating}",
+                displayB = "${teamB.offensiveRating}",
+                rawA = teamA.offensiveRating,
+                rawB = teamB.offensiveRating
+            ),
+            ComparisonMetric(
+                label = "DEF RTG",
+                displayA = "${teamA.defensiveRating}",
+                displayB = "${teamB.defensiveRating}",
+                rawA = teamA.defensiveRating,
+                rawB = teamB.defensiveRating,
+                lowerIsBetter = true
+            ),
+            ComparisonMetric(
+                label = "3P%",
+                displayA = "${teamA.threePointPct}%",
+                displayB = "${teamB.threePointPct}%",
+                rawA = teamA.threePointPct,
+                rawB = teamB.threePointPct
+            ),
+            ComparisonMetric(
+                label = "2P%  •  REB%",
+                displayA = "${teamA.twoPointPct}% • ${teamA.reboundRate}%",
+                displayB = "${teamB.twoPointPct}% • ${teamB.reboundRate}%",
+                rawA = teamA.twoPointPct + teamA.reboundRate,
+                rawB = teamB.twoPointPct + teamB.reboundRate
+            )
+        )
+    }
+
+    val matchupAndLeaguePlayers = remember(players, teamA.id, teamB.id) {
+        val teamABStars = players.filter {
+            it.teamId == teamA.id || it.teamId == teamA.code ||
+                it.teamId == teamB.id || it.teamId == teamB.code
+        }.sortedByDescending { it.pir }.take(8)
+        val others = players.sortedByDescending { it.pir }.filterNot { p -> teamABStars.any { it.id == p.id } }
+        teamABStars + others
+    }
 
     Row(
         modifier = Modifier
@@ -1057,41 +1213,225 @@ private fun SeasonLeadersAndComparisonScreen(
             .padding(16.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Links: Team Matchup Cards zum Auswählen des Vergleichsteams
+        // Linke Spalte: Freie Team-A & Team-B Auswahl + Direkte Saison-Duelle + 8 Head-to-Head Vergleichs-Balken
         Column(
             modifier = Modifier
-                .weight(1f)
+                .weight(1.08f)
                 .fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(strings.teamAnalyticsTitle, style = MaterialTheme.typography.titleLarge, color = Color.White)
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(teams.filter { it.id != teamA.id }, key = { it.id }) { candidate ->
-                    val isSelected = candidate.id == teamB.id
-                    CourtsideGlassCard(
-                        isSelected = isSelected,
-                        onClick = { onSelectTeamB(candidate.id) },
-                        modifier = Modifier.fillMaxWidth()
+            Text(
+                text = strings.teamAnalyticsTitle,
+                style = MaterialTheme.typography.titleLarge,
+                color = Color.White
+            )
+
+            // Team A & Team B Auswahl-Karte
+            CourtsideGlassCard(isSelected = true, modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "TEAM A (ORANGE): ${teamA.name}",
+                        color = CourtsideDesignTokens.EuroLeagueOrange,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 11.sp
+                    )
+                    androidx.compose.foundation.lazy.LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            CourtsideLivePill(
-                                badgeText = if (isSelected) strings.activeBadge else strings.compareBadge,
-                                detailText = "${teamA.code} vs ${candidate.code}"
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
+                        items(teams, key = { "teamA_${it.id}" }) { candidate ->
+                            val selected = candidate.id == teamA.id
+                            Surface(
+                                color = if (selected) Color(0x38FF6600) else Color(0xFF1B1B21),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .border(
+                                        width = if (selected) 1.5.dp else 1.dp,
+                                        color = if (selected) Color(0xFFFF6600) else Color(0xFF2C2C34),
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable { onSelectTeamA(candidate.id) }
+                                    .pointerHoverIcon(PointerIcon.Hand)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                ) {
+                                    CourtsideClubCrest(team = candidate, size = 20.dp)
+                                    Text(
+                                        text = candidate.code,
+                                        color = if (selected) Color.White else Color(0xFF9CA3AF),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = Color(0x1AFFFFFF))
+
+                    Text(
+                        text = "TEAM B (GRÜN): ${teamB.name}",
+                        color = CourtsideDesignTokens.NeonMadeGreen,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 11.sp
+                    )
+                    androidx.compose.foundation.lazy.LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(teams, key = { "teamB_${it.id}" }) { candidate ->
+                            val selected = candidate.id == teamB.id
+                            Surface(
+                                color = if (selected) Color(0x3300E676) else Color(0xFF1B1B21),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .border(
+                                        width = if (selected) 1.5.dp else 1.dp,
+                                        color = if (selected) CourtsideDesignTokens.NeonMadeGreen else Color(0xFF2C2C34),
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable { onSelectTeamB(candidate.id) }
+                                    .pointerHoverIcon(PointerIcon.Hand)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                ) {
+                                    CourtsideClubCrest(team = candidate, size = 20.dp)
+                                    Text(
+                                        text = candidate.code,
+                                        color = if (selected) Color.White else Color(0xFF9CA3AF),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Direkte Saison-Duelle + 8 Visuelle Statistik-Vergleichsbalken
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                if (h2hGames.isNotEmpty()) {
+                    item {
+                        CourtsideGlassCard(isSelected = false, modifier = Modifier.fillMaxWidth()) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "H2H • ${teamA.code} vs ${teamB.code}",
+                                    color = CourtsideDesignTokens.EuroLeagueOrange,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 11.sp
+                                )
+                                h2hGames.forEach { g ->
+                                    val statusText = when (g.status) {
+                                        GameStatus.FINAL -> "${g.homeTeam.code} ${g.homeScore} : ${g.awayScore} ${g.awayTeam.code} (${strings.statusFinal})"
+                                        GameStatus.LIVE -> "${g.homeTeam.code} ${g.homeScore} : ${g.awayScore} ${g.awayTeam.code} (${strings.statusLive})"
+                                        GameStatus.UPCOMING -> "${g.homeTeam.code} vs ${g.awayTeam.code} (${strings.statusUpcoming})"
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "${strings.roundPrefix} ${g.round}",
+                                            color = CourtsideDesignTokens.MutedText,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = statusText,
+                                            color = Color.White,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                items(comparisonMetrics, key = { it.label }) { metric ->
+                    val aLeads = if (metric.lowerIsBetter) metric.rawA <= metric.rawB else metric.rawA >= metric.rawB
+                    val bLeads = if (metric.lowerIsBetter) metric.rawB <= metric.rawA else metric.rawB >= metric.rawA
+                    val total = (metric.rawA + metric.rawB).coerceAtLeast(1f)
+                    val fractionA = if (metric.lowerIsBetter) {
+                        (metric.rawB / total).coerceIn(0.15f, 0.85f)
+                    } else {
+                        (metric.rawA / total).coerceIn(0.15f, 0.85f)
+                    }
+
+                    Surface(
+                        color = Color(0xFF17171C),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(12.dp))
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                CourtsideClubCrest(teamA, size = 34.dp)
                                 Text(
-                                    text = "${strings.offRatingColumn} ${teamA.offensiveRating} vs ${candidate.offensiveRating}",
+                                    text = metric.displayA,
+                                    color = if (aLeads) CourtsideDesignTokens.EuroLeagueOrange else Color(0xFFD1D5DB),
+                                    fontWeight = if (aLeads) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                    fontSize = 13.sp,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    text = metric.label,
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp
+                                    fontSize = 11.sp,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.weight(1.4f)
                                 )
-                                CourtsideClubCrest(candidate, size = 34.dp)
+                                Text(
+                                    text = metric.displayB,
+                                    color = if (bLeads) CourtsideDesignTokens.NeonMadeGreen else Color(0xFFD1D5DB),
+                                    fontWeight = if (bLeads) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                    fontSize = 13.sp,
+                                    textAlign = TextAlign.End,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(Color(0xFF26262E))
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(fractionA)
+                                        .fillMaxHeight()
+                                        .background(CourtsideDesignTokens.EuroLeagueOrange)
+                                )
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .weight((1f - fractionA).coerceAtLeast(0.1f))
+                                        .fillMaxHeight()
+                                        .background(CourtsideDesignTokens.NeonMadeGreen)
+                                )
                             }
                         }
                     }
@@ -1099,10 +1439,10 @@ private fun SeasonLeadersAndComparisonScreen(
             }
         }
 
-        // Rechts: Dual-Tone Banner + Glowing Radar Canvas + Season Leaders Table
+        // Rechte Spalte: Dual-Tone Banner + Beschriftetes 5-Achsen-Radar + Top-Performer
         Column(
             modifier = Modifier
-                .weight(1.2f)
+                .weight(1.15f)
                 .fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -1116,48 +1456,157 @@ private fun SeasonLeadersAndComparisonScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
                         CourtsideClubCrest(teamA, size = 38.dp)
-                        Text(teamA.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Column {
+                            Text(teamA.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
+                            Text("${teamA.wins}${strings.winLetter}-${teamA.losses}${strings.lossLetter} • OFF ${teamA.offensiveRating}", color = CourtsideDesignTokens.EuroLeagueOrange, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
-                    Text(strings.radarBadge, color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(teamB.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("VS", color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(teamB.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
+                            Text("${teamB.wins}${strings.winLetter}-${teamB.losses}${strings.lossLetter} • OFF ${teamB.offensiveRating}", color = CourtsideDesignTokens.NeonMadeGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
                         CourtsideClubCrest(teamB, size = 38.dp)
                     }
                 }
             }
 
-            // Glowing Radar Chart Card
-            Box(
+            // Beschriftetes 5-Achsen-Radar-Diagramm mit Legende
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(210.dp)
+                    .height(256.dp)
                     .clip(RoundedCornerShape(18.dp))
                     .background(Color(0xFF151519))
                     .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(18.dp))
                     .padding(12.dp),
-                contentAlignment = Alignment.Center
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                TeamComparisonRadarCanvas(teamA = teamA, teamB = teamB)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    TeamComparisonRadarCanvas(teamA = teamA, teamB = teamB)
+
+                    // Top Vertex Label: OFF RTG
+                    RadarAxisBadge(
+                        title = "OFF",
+                        valA = "${teamA.offensiveRating}",
+                        valB = "${teamB.offensiveRating}",
+                        modifier = Modifier.align(Alignment.TopCenter)
+                    )
+                    // Right Vertex Label: DEF RTG
+                    RadarAxisBadge(
+                        title = "DEF",
+                        valA = "${teamA.defensiveRating}",
+                        valB = "${teamB.defensiveRating}",
+                        modifier = Modifier.align(Alignment.CenterEnd)
+                    )
+                    // Bottom-Right Vertex Label: 3P%
+                    RadarAxisBadge(
+                        title = "3P%",
+                        valA = "${teamA.threePointPct}%",
+                        valB = "${teamB.threePointPct}%",
+                        modifier = Modifier.align(Alignment.BottomEnd)
+                    )
+                    // Bottom-Left Vertex Label: 2P%
+                    RadarAxisBadge(
+                        title = "2P%",
+                        valA = "${teamA.twoPointPct}%",
+                        valB = "${teamB.twoPointPct}%",
+                        modifier = Modifier.align(Alignment.BottomStart)
+                    )
+                    // Left Vertex Label: REB%
+                    RadarAxisBadge(
+                        title = "REB%",
+                        valA = "${teamA.reboundRate}%",
+                        valB = "${teamB.reboundRate}%",
+                        modifier = Modifier.align(Alignment.CenterStart)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(CourtsideDesignTokens.EuroLeagueOrange))
+                        Text("${teamA.code} (${teamA.name})", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(CourtsideDesignTokens.NeonMadeGreen))
+                        Text("${teamB.code} (${teamB.name})", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(strings.seasonLeadersHeader, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text(
+                    text = "${teamA.code} vs ${teamB.code} • ${strings.seasonLeadersHeader}",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
                 Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = CourtsideDesignTokens.MutedText)
             }
 
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                itemsIndexed(topPirPlayers, key = { _, p -> p.id }) { idx, p ->
+                itemsIndexed(matchupAndLeaguePlayers, key = { _, p -> p.id }) { idx, p ->
+                    val isTeamA = p.teamId == teamA.id || p.teamId == teamA.code
+                    val isTeamB = p.teamId == teamB.id || p.teamId == teamB.code
+                    val teamColor = when {
+                        isTeamA -> CourtsideDesignTokens.EuroLeagueOrange
+                        isTeamB -> CourtsideDesignTokens.NeonMadeGreen
+                        else -> Color(0xFF9CA3AF)
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("${idx + 1}. ${p.name} (${p.teamId})", Modifier.weight(2.6f), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                        Text("PPG ${p.ppg}", Modifier.weight(1f), color = Color(0xFFD1D5DB), fontSize = 12.sp, textAlign = TextAlign.Center)
-                        Text("RPG ${p.rpg}", Modifier.weight(1f), color = Color(0xFFD1D5DB), fontSize = 12.sp, textAlign = TextAlign.Center)
-                        Text("APG ${p.apg}", Modifier.weight(1f), color = Color(0xFFD1D5DB), fontSize = 12.sp, textAlign = TextAlign.Center)
-                        Text(p.pir.toString(), Modifier.weight(1f), color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, textAlign = TextAlign.End)
+                        Row(
+                            modifier = Modifier.weight(2.6f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "${idx + 1}.",
+                                color = CourtsideDesignTokens.MutedText,
+                                fontSize = 11.sp
+                            )
+                            Text(
+                                text = p.teamId,
+                                color = teamColor,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 11.sp
+                            )
+                            Text(
+                                text = p.name,
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1
+                            )
+                        }
+                        Text("PPG ${p.ppg}", Modifier.weight(1f), color = Color(0xFFD1D5DB), fontSize = 11.sp, textAlign = TextAlign.Center)
+                        Text("RPG ${p.rpg}", Modifier.weight(1f), color = Color(0xFFD1D5DB), fontSize = 11.sp, textAlign = TextAlign.Center)
+                        Text("APG ${p.apg}", Modifier.weight(1f), color = Color(0xFFD1D5DB), fontSize = 11.sp, textAlign = TextAlign.Center)
+                        Text("PIR ${p.pir}", Modifier.weight(1f), color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, textAlign = TextAlign.End)
                     }
                     HorizontalDivider(color = Color(0x0DFFFFFF))
                 }
@@ -1167,43 +1616,70 @@ private fun SeasonLeadersAndComparisonScreen(
 }
 
 @Composable
+private fun RadarAxisBadge(
+    title: String,
+    valA: String,
+    valB: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        color = Color(0xCC1B1B21),
+        shape = RoundedCornerShape(8.dp),
+        modifier = modifier.border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+        ) {
+            Text(text = title, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 10.sp)
+            Text(text = valA, color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+            Text(text = "|", color = Color(0xFF6B7280), fontSize = 10.sp)
+            Text(text = valB, color = CourtsideDesignTokens.NeonMadeGreen, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+        }
+    }
+}
+
+@Composable
 private fun TeamComparisonRadarCanvas(teamA: EuroLeagueTeam, teamB: EuroLeagueTeam) {
+    // 5 Radar Axes matching the 5 RadarAxisBadges:
+    // 0 (Top): OFF RTG, 1 (Right): DEF Efficiency (215 - defRtg), 2 (Bottom-Right): 3P%, 3 (Bottom-Left): 2P%, 4 (Left): REB%
     val metricsA = listOf(
-        (teamA.offensiveRating / 130f).coerceIn(0.3f, 1f),
-        (teamA.defensiveRating / 130f).coerceIn(0.3f, 1f),
-        (teamA.pace / 85f).coerceIn(0.3f, 1f),
-        (teamA.threePointPct / 50f).coerceIn(0.3f, 1f),
-        (teamA.reboundRate / 65f).coerceIn(0.3f, 1f)
+        ((teamA.offensiveRating - 95f) / 30f).coerceIn(0.25f, 0.96f),
+        ((125f - teamA.defensiveRating) / 25f).coerceIn(0.25f, 0.96f),
+        ((teamA.threePointPct - 28f) / 16f).coerceIn(0.25f, 0.96f),
+        ((teamA.twoPointPct - 45f) / 18f).coerceIn(0.25f, 0.96f),
+        ((teamA.reboundRate - 40f) / 20f).coerceIn(0.25f, 0.96f)
     )
     val metricsB = listOf(
-        (teamB.offensiveRating / 130f).coerceIn(0.3f, 1f),
-        (teamB.defensiveRating / 130f).coerceIn(0.3f, 1f),
-        (teamB.pace / 85f).coerceIn(0.3f, 1f),
-        (teamB.threePointPct / 50f).coerceIn(0.3f, 1f),
-        (teamB.reboundRate / 65f).coerceIn(0.3f, 1f)
+        ((teamB.offensiveRating - 95f) / 30f).coerceIn(0.25f, 0.96f),
+        ((125f - teamB.defensiveRating) / 25f).coerceIn(0.25f, 0.96f),
+        ((teamB.threePointPct - 28f) / 16f).coerceIn(0.25f, 0.96f),
+        ((teamB.twoPointPct - 45f) / 18f).coerceIn(0.25f, 0.96f),
+        ((teamB.reboundRate - 40f) / 20f).coerceIn(0.25f, 0.96f)
     )
 
     Canvas(modifier = Modifier.fillMaxSize()) {
         val center = Offset(size.width / 2f, size.height / 2f)
-        val radius = size.minDimension / 2.2f
+        val radius = size.minDimension / 2.75f
 
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(Color(0x38FF5E00), Color.Transparent),
-                center = Offset(size.width * 0.2f, size.height * 0.5f),
-                radius = size.width * 0.4f
+                center = Offset(size.width * 0.25f, size.height * 0.5f),
+                radius = size.width * 0.35f
             ),
-            center = Offset(size.width * 0.2f, size.height * 0.5f),
-            radius = size.width * 0.4f
+            center = Offset(size.width * 0.25f, size.height * 0.5f),
+            radius = size.width * 0.35f
         )
         drawCircle(
             brush = Brush.radialGradient(
                 colors = listOf(Color(0x3000D26E), Color.Transparent),
-                center = Offset(size.width * 0.8f, size.height * 0.5f),
-                radius = size.width * 0.4f
+                center = Offset(size.width * 0.75f, size.height * 0.5f),
+                radius = size.width * 0.35f
             ),
-            center = Offset(size.width * 0.8f, size.height * 0.5f),
-            radius = size.width * 0.4f
+            center = Offset(size.width * 0.75f, size.height * 0.5f),
+            radius = size.width * 0.35f
         )
 
         for (level in 1..4) {
@@ -1218,7 +1694,17 @@ private fun TeamComparisonRadarCanvas(teamA: EuroLeagueTeam, teamB: EuroLeagueTe
                 if (i == 0) webPath.moveTo(pt.x, pt.y) else webPath.lineTo(pt.x, pt.y)
             }
             webPath.close()
-            drawPath(webPath, color = Color(0x44FFFFFF), style = Stroke(width = 1.5f))
+            drawPath(webPath, color = Color(0x38FFFFFF), style = Stroke(width = 1.5f))
+        }
+
+        // Draw 5 spoke lines from center to vertices
+        for (i in 0 until 5) {
+            val angle = Math.toRadians((i * 72.0) - 90.0)
+            val vertex = Offset(
+                center.x + (radius * cos(angle)).toFloat(),
+                center.y + (radius * sin(angle)).toFloat()
+            )
+            drawLine(color = Color(0x28FFFFFF), start = center, end = vertex, strokeWidth = 1.2f)
         }
 
         fun buildPolygon(values: List<Float>): Path {

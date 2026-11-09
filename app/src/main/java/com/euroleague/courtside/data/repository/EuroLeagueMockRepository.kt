@@ -338,15 +338,39 @@ class EuroLeagueMockRepository @Inject constructor() {
     fun getPlayoffBracket(): List<PlayoffSeries> {
         val ranked = getStandings()
         if (ranked.size < 10) return emptyList()
+        val playedGames = _games.value.filter { it.status == GameStatus.FINAL && (it.homeScore > 0 || it.awayScore > 0) }
+
+        fun h2hWins(teamA: EuroLeagueTeam, teamB: EuroLeagueTeam): Pair<Int, Int> {
+            var winsA = 0
+            var winsB = 0
+            playedGames.forEach { g ->
+                val hMatchA = g.homeTeam.id == teamA.id || g.homeTeam.code == teamA.code
+                val aMatchB = g.awayTeam.id == teamB.id || g.awayTeam.code == teamB.code
+                val hMatchB = g.homeTeam.id == teamB.id || g.homeTeam.code == teamB.code
+                val aMatchA = g.awayTeam.id == teamA.id || g.awayTeam.code == teamA.code
+                if (hMatchA && aMatchB) {
+                    if (g.homeScore >= g.awayScore) winsA++ else winsB++
+                } else if (hMatchB && aMatchA) {
+                    if (g.homeScore >= g.awayScore) winsB++ else winsA++
+                }
+            }
+            return winsA to winsB
+        }
+
+        val (pi78H, pi78A) = h2hWins(ranked[6], ranked[7])
+        val (pi910H, pi910A) = h2hWins(ranked[8], ranked[9])
+        val (qf18H, qf18A) = h2hWins(ranked[0], ranked[7])
+        val (qf27H, qf27A) = h2hWins(ranked[1], ranked[6])
+        val (qf36H, qf36A) = h2hWins(ranked[2], ranked[5])
+        val (qf45H, qf45A) = h2hWins(ranked[3], ranked[4])
+
         return listOf(
-            PlayoffSeries("pi_7_8", "PLAY_IN", "Play-In A (7 vs 8)", 7, 8, ranked[6], ranked[7], 1, 0),
-            PlayoffSeries("pi_9_10", "PLAY_IN", "Play-In B (9 vs 10)", 9, 10, ranked[8], ranked[9], 1, 0),
-            PlayoffSeries("qf_1_8", "QUARTERFINALS", "Best-of-5 VF 1", 1, 8, ranked[0], ranked[7], 3, 1),
-            PlayoffSeries("qf_2_7", "QUARTERFINALS", "Best-of-5 VF 2", 2, 7, ranked[1], ranked[6], 3, 2),
-            PlayoffSeries("qf_3_6", "QUARTERFINALS", "Best-of-5 VF 3", 3, 6, ranked[2], ranked[5], 3, 1),
-            PlayoffSeries("qf_4_5", "QUARTERFINALS", "Best-of-5 VF 4", 4, 5, ranked[3], ranked[4], 2, 3),
-            PlayoffSeries("f4_s1", "FINAL_FOUR_SEMI", "Final Four Halbfinale 1", 1, 5, ranked[0], ranked[4], 1, 0),
-            PlayoffSeries("f4_s2", "FINAL_FOUR_SEMI", "Final Four Halbfinale 2", 2, 3, ranked[1], ranked[2], 0, 1)
+            PlayoffSeries("qf_1_8", "PLAYOFF_SEED", "Projektion VF 1 (#1 vs #8) • Saison-H2H", 1, 8, ranked[0], ranked[7], qf18H, qf18A),
+            PlayoffSeries("qf_2_7", "PLAYOFF_SEED", "Projektion VF 2 (#2 vs #7) • Saison-H2H", 2, 7, ranked[1], ranked[6], qf27H, qf27A),
+            PlayoffSeries("qf_3_6", "PLAYOFF_SEED", "Projektion VF 3 (#3 vs #6) • Saison-H2H", 3, 6, ranked[2], ranked[5], qf36H, qf36A),
+            PlayoffSeries("qf_4_5", "PLAYOFF_SEED", "Projektion VF 4 (#4 vs #5) • Saison-H2H", 4, 5, ranked[3], ranked[4], qf45H, qf45A),
+            PlayoffSeries("pi_7_8", "PLAY_IN", "Play-In A (#7 vs #8) • Saison-H2H", 7, 8, ranked[6], ranked[7], pi78H, pi78A),
+            PlayoffSeries("pi_9_10", "PLAY_IN", "Play-In B (#9 vs #10) • Saison-H2H", 9, 10, ranked[8], ranked[9], pi910H, pi910A)
         )
     }
 
