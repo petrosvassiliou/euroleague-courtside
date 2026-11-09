@@ -113,8 +113,8 @@ class EuroLeagueCourtsideUnitTest {
             assertTrue(strings.navMyTeam.isNotBlank())
             assertTrue(strings.navStandings.isNotBlank())
             assertTrue(strings.navSettings.isNotBlank())
-            assertTrue(strings.boxscoreTitle.isNotBlank())
-            assertTrue(strings.settingsLanguageTitle.isNotBlank())
+            assertTrue(strings.playerBoxscoreHeader.isNotBlank())
+            assertTrue(strings.myTeamHubTitle.isNotBlank())
 
             repository.selectLanguage(lang)
             assertEquals(lang, repository.appLanguageFlow.value)
