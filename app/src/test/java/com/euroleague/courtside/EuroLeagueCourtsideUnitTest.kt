@@ -3,6 +3,8 @@ package com.euroleague.courtside
 import com.euroleague.courtside.data.repository.EuroLeagueMockRepository
 import com.euroleague.courtside.data.repository.GameStatus
 import com.euroleague.courtside.data.repository.PlayerBoxscoreStat
+import com.euroleague.courtside.i18n.AppLanguage
+import com.euroleague.courtside.i18n.CourtsideTranslations
 import com.euroleague.courtside.util.CalendarExportHelper
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -14,6 +16,7 @@ import org.junit.Test
  * 1. Offizielle EuroLeague PIR-Formel (Performance Index Rating)
  * 2. RFC 5545 Standard-Konformität des `.ics`-Saison-Exporters (`CalendarExportHelper`)
  * 3. Crunch-Time Close-Game-Alert-Erkennung (Q4, < 3:00 Restzeit, <= 5 Punkte Differenz)
+ * 4. Mehrsprachige Lokalisierung in allen 6 Sprachen (EN, DE, FR, IT, ES, EL)
  */
 class EuroLeagueCourtsideUnitTest {
 
@@ -101,4 +104,21 @@ class EuroLeagueCourtsideUnitTest {
         assertTrue(syncedBayernPlayers.isNotEmpty())
         assertTrue(syncedBayernPlayers.all { it.injuryDetail == "Verified Active Roster" })
     }
+
+    @Test
+    fun `all 6 supported languages EN DE FR IT ES EL provide complete translations and update state`() {
+        assertEquals(6, AppLanguage.entries.size)
+        AppLanguage.entries.forEach { lang ->
+            val strings = CourtsideTranslations.forLanguage(lang)
+            assertTrue(strings.navMyTeam.isNotBlank())
+            assertTrue(strings.navStandings.isNotBlank())
+            assertTrue(strings.navSettings.isNotBlank())
+            assertTrue(strings.boxscoreTitle.isNotBlank())
+            assertTrue(strings.settingsLanguageTitle.isNotBlank())
+
+            repository.selectLanguage(lang)
+            assertEquals(lang, repository.appLanguageFlow.value)
+        }
+    }
 }
+

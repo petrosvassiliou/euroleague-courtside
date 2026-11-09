@@ -206,6 +206,13 @@ class EuroLeagueMockRepository @Inject constructor() {
     private val _lastSyncStatus = MutableStateFlow("LIVE API • Saison 2026/27 • Kader & Verletzungen geprüft")
     val lastSyncStatusFlow: StateFlow<String> = _lastSyncStatus.asStateFlow()
 
+    private val _appLanguage = MutableStateFlow(com.euroleague.courtside.i18n.AppLanguage.fromCode(null))
+    val appLanguageFlow: StateFlow<com.euroleague.courtside.i18n.AppLanguage> = _appLanguage.asStateFlow()
+
+    fun selectLanguage(language: com.euroleague.courtside.i18n.AppLanguage) {
+        _appLanguage.value = language
+    }
+
     fun applyLiveDataset(
         liveTeams: List<EuroLeagueTeam>,
         livePlayers: List<PlayerProfile>,

@@ -86,6 +86,8 @@ import androidx.compose.ui.unit.sp
 import androidx.window.core.layout.WindowWidthSizeClass
 import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
+import androidx.compose.runtime.CompositionLocalProvider
+import com.euroleague.courtside.data.local.CourtsidePreferencesDataStore
 import com.euroleague.courtside.data.remote.EuroLeagueOfflineFirstRepository
 import com.euroleague.courtside.data.repository.EuroLeagueGame
 import com.euroleague.courtside.data.repository.EuroLeagueMockRepository
@@ -94,6 +96,12 @@ import com.euroleague.courtside.data.repository.GameStatus
 import com.euroleague.courtside.data.repository.InjuryStatus
 import com.euroleague.courtside.data.repository.PlayerProfile
 import com.euroleague.courtside.data.repository.PlayoffSeries
+import com.euroleague.courtside.i18n.AppLanguage
+import com.euroleague.courtside.i18n.CourtsideStrings
+import com.euroleague.courtside.i18n.CourtsideTranslations
+import com.euroleague.courtside.i18n.LocalAppLanguage
+import com.euroleague.courtside.i18n.LocalCourtsideStrings
+import com.euroleague.courtside.i18n.localizedLabel
 import com.euroleague.courtside.notifications.EuroLeagueNotificationManager
 import com.euroleague.courtside.ui.screens.MatchCenterScreen
 import com.euroleague.courtside.ui.theme.CourtsideClubCrest
@@ -115,16 +123,24 @@ enum class CourtsideDestination(
     val icon: ImageVector
 ) {
     MY_TEAM("Mein Team", "Ctrl+1", Icons.Default.Home),
-    MATCHDAY("EuroLeagues", "Ctrl+2", Icons.Default.SportsBasketball),
+    MATCHDAY("EuroLeague", "Ctrl+2", Icons.Default.SportsBasketball),
     STANDINGS_PLAYOFFS("Standings", "Ctrl+3", Icons.Default.EmojiEvents),
     STATISTICS("Analytics", "Ctrl+4", Icons.Default.Analytics),
-    SETTINGS("Settings", "Ctrl+5", Icons.Default.Settings)
+    SETTINGS("Settings", "Ctrl+5", Icons.Default.Settings);
+
+    fun localizedTitle(strings: CourtsideStrings): String = when (this) {
+        MY_TEAM -> strings.navMyTeam
+        MATCHDAY -> strings.navMatchday
+        STANDINGS_PLAYOFFS -> strings.navStandings
+        STATISTICS -> strings.navAnalytics
+        SETTINGS -> strings.navSettings
+    }
 }
 
 /**
- * Gesamtes App-Scaffold in der einheitlichen "Courtside UI" Design-Sprache:
- * - Links auf Desktop/Foldables: Obsidian-Sidebar (`#0B0B0E`) mit leuchtendem Basketball-Brand-Icon
- *   und orangenen Glow-Icon-Buttons (ohne sichtbare Ctrl+1..5 Badges).
+ * Gesamtes App-Scaffold in der einheitlichen "Courtside UI" Design-Sprache (in 6 Sprachen: EN, DE, FR, IT, ES, EL):
+ * - Links auf Desktop/Foldables: Obsidian-Sidebar (`#0B0B0E`) mit leuchtendem Basketball-Brand-Icon,
+ *   orangenen Glow-Icon-Buttons (ohne sichtbare Ctrl+1..5 Badges) und 6-Sprachen-Schnellumschalter.
  * - Unten auf Smartphones (`COMPACT`): Abgedunkelte Broadcast-NavigationBar.
  * - Alle 5 Screens nutzen Live-Daten der offiziellen EuroLeague-API, echte Vereins-Logos und
  *   geprüfte Kader inkl. täglichem Injury-Report.
@@ -133,7 +149,8 @@ enum class CourtsideDestination(
 fun MainAppScaffold(
     repository: EuroLeagueMockRepository,
     notificationManager: EuroLeagueNotificationManager,
-    offlineFirstRepository: EuroLeagueOfflineFirstRepository? = null
+    offlineFirstRepository: EuroLeagueOfflineFirstRepository? = null,
+    preferencesDataStore: CourtsidePreferencesDataStore? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -144,6 +161,15 @@ fun MainAppScaffold(
     val games by repository.games.collectAsState()
     val activeRound by repository.activeRoundFlow.collectAsState()
     val syncStatus by repository.lastSyncStatusFlow.collectAsState()
+    val activeLanguage by repository.appLanguageFlow.collectAsState()
+    val strings = remember(activeLanguage) { CourtsideTranslations.forLanguage(activeLanguage) }
+
+    val onChangeLanguage: (AppLanguage) -> Unit = { newLang ->
+        repository.selectLanguage(newLang)
+        scope.launch {
+            preferencesDataStore?.setLanguage(newLang)
+        }
+    }
 
     val primaryTeam = remember(primaryTeamId, allTeams) {
         repository.findTeam(primaryTeamId) ?: allTeams.first()
@@ -190,151 +216,163 @@ fun MainAppScaffold(
         focusRequester.requestFocus()
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(CourtsideDesignTokens.ShellObsidian)
-            .focusRequester(focusRequester)
-            .focusTarget()
-            .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                val ctrlOrCmd = event.isCtrlPressed || event.isMetaPressed
-                when {
-                    ctrlOrCmd && event.key == Key.One -> {
-                        currentDestination = CourtsideDestination.MY_TEAM; true
-                    }
-                    ctrlOrCmd && event.key == Key.Two -> {
-                        currentDestination = CourtsideDestination.MATCHDAY; true
-                    }
-                    ctrlOrCmd && event.key == Key.Three -> {
-                        currentDestination = CourtsideDestination.STANDINGS_PLAYOFFS; true
-                    }
-                    ctrlOrCmd && event.key == Key.Four -> {
-                        currentDestination = CourtsideDestination.STATISTICS; true
-                    }
-                    ctrlOrCmd && event.key == Key.Five -> {
-                        currentDestination = CourtsideDestination.SETTINGS; true
-                    }
-                    event.key == Key.F -> {
-                        filterOnlyFavorites = !filterOnlyFavorites; true
-                    }
-                    event.key == Key.R -> {
-                        triggerLiveSync(); true
-                    }
-                    event.key == Key.DirectionLeft -> {
-                        selectedRound = (selectedRound - 1).coerceAtLeast(1); true
-                    }
-                    event.key == Key.DirectionRight -> {
-                        selectedRound = (selectedRound + 1).coerceAtMost(38); true
-                    }
-                    else -> false
-                }
-            }
+    CompositionLocalProvider(
+        LocalAppLanguage provides activeLanguage,
+        LocalCourtsideStrings provides strings
     ) {
-        Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            // Linke Courtside-Sidebar für Desktop (Expanded) & Foldable/Tablet (Medium)
-            if (!isCompact) {
-                CourtsideLeftSidebar(
-                    currentDestination = currentDestination,
-                    isExpanded = widthClass == WindowWidthSizeClass.EXPANDED,
-                    onSelectDestination = { currentDestination = it },
-                    onLiveRefresh = triggerLiveSync
-                )
-            }
-
-            // Haupt-Arbeitsbereich
-            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                when (currentDestination) {
-                    CourtsideDestination.MY_TEAM -> MyTeamDashboardScreen(
-                        primaryTeam = primaryTeam,
-                        allTeams = allTeams,
-                        favoriteTeamIds = favoriteIds,
-                        roster = allPlayers.filter {
-                            it.teamId == primaryTeam.id || it.teamId == primaryTeam.code
-                        },
-                        games = games,
-                        syncStatus = syncStatus,
-                        isTableTopPosture = isTableTopPosture,
-                        onSelectPrimaryTeam = { teamId ->
-                            repository.selectPrimaryTeam(teamId)
-                            scope.launch {
-                                offlineFirstRepository?.verifyAndSyncClubRoster(teamId)
-                            }
-                        },
-                        onVerifyRosterNow = {
-                            scope.launch {
-                                offlineFirstRepository?.verifyAndSyncClubRoster(primaryTeam.id)
-                            }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(CourtsideDesignTokens.ShellObsidian)
+                .focusRequester(focusRequester)
+                .focusTarget()
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    val ctrlOrCmd = event.isCtrlPressed || event.isMetaPressed
+                    when {
+                        ctrlOrCmd && event.key == Key.One -> {
+                            currentDestination = CourtsideDestination.MY_TEAM; true
                         }
-                    )
-
-                    CourtsideDestination.MATCHDAY -> MatchCenterScreen(
-                        games = games,
-                        selectedRound = selectedRound,
-                        syncStatus = syncStatus,
-                        filterOnlyFavorites = filterOnlyFavorites,
-                        favoriteTeamIds = favoriteIds,
-                        hingeInBookPosture = isBookPosture,
-                        notificationManager = notificationManager,
-                        onPreviousRound = { selectedRound = (selectedRound - 1).coerceAtLeast(1) },
-                        onNextRound = { selectedRound = (selectedRound + 1).coerceAtMost(38) },
-                        onToggleFavoriteFilter = { filterOnlyFavorites = !filterOnlyFavorites },
-                        onTriggerLiveRefresh = triggerLiveSync,
-                        onRefreshSelectedGameStats = { game ->
-                            scope.launch {
-                                offlineFirstRepository?.refreshSelectedGameLiveStats(game)
-                            }
-                        },
-                        onOpenTeamStats = { teamId ->
-                            comparisonTeamBId = teamId
-                            currentDestination = CourtsideDestination.STATISTICS
+                        ctrlOrCmd && event.key == Key.Two -> {
+                            currentDestination = CourtsideDestination.MATCHDAY; true
                         }
-                    )
-
-                    CourtsideDestination.STANDINGS_PLAYOFFS -> StandingsAndBracketScreen(
-                        standings = repository.getStandings(),
-                        bracketSeries = repository.getPlayoffBracket(),
-                        favoriteIds = favoriteIds
-                    )
-
-                    CourtsideDestination.STATISTICS -> SeasonLeadersAndComparisonScreen(
-                        players = allPlayers,
-                        teams = allTeams,
-                        teamA = primaryTeam,
-                        teamB = repository.findTeam(comparisonTeamBId) ?: allTeams.first(),
-                        onSelectTeamB = { comparisonTeamBId = it }
-                    )
-
-                    CourtsideDestination.SETTINGS -> SettingsAndNotificationTestScreen(
-                        primaryTeam = primaryTeam,
-                        games = games,
-                        notificationManager = notificationManager
+                        ctrlOrCmd && event.key == Key.Three -> {
+                            currentDestination = CourtsideDestination.STANDINGS_PLAYOFFS; true
+                        }
+                        ctrlOrCmd && event.key == Key.Four -> {
+                            currentDestination = CourtsideDestination.STATISTICS; true
+                        }
+                        ctrlOrCmd && event.key == Key.Five -> {
+                            currentDestination = CourtsideDestination.SETTINGS; true
+                        }
+                        event.key == Key.F -> {
+                            filterOnlyFavorites = !filterOnlyFavorites; true
+                        }
+                        event.key == Key.R -> {
+                            triggerLiveSync(); true
+                        }
+                        event.key == Key.DirectionLeft -> {
+                            selectedRound = (selectedRound - 1).coerceAtLeast(1); true
+                        }
+                        event.key == Key.DirectionRight -> {
+                            selectedRound = (selectedRound + 1).coerceAtMost(38); true
+                        }
+                        else -> false
+                    }
+                }
+        ) {
+            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                // Linke Courtside-Sidebar für Desktop (Expanded) & Foldable/Tablet (Medium)
+                if (!isCompact) {
+                    CourtsideLeftSidebar(
+                        currentDestination = currentDestination,
+                        activeLanguage = activeLanguage,
+                        strings = strings,
+                        isExpanded = widthClass == WindowWidthSizeClass.EXPANDED,
+                        onSelectDestination = { currentDestination = it },
+                        onSelectLanguage = onChangeLanguage,
+                        onLiveRefresh = triggerLiveSync
                     )
                 }
-            }
-        }
 
-        // Untere NavigationBar auf Smartphones / zugeklappten Foldables (COMPACT)
-        if (isCompact) {
-            NavigationBar(
-                containerColor = CourtsideDesignTokens.SidebarObsidian,
-                tonalElevation = 0.dp
-            ) {
-                CourtsideDestination.entries.forEach { dest ->
-                    val selected = currentDestination == dest
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = { currentDestination = dest },
-                        icon = { Icon(dest.icon, contentDescription = dest.title) },
-                        label = { Text(dest.title, fontSize = 11.sp) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = CourtsideDesignTokens.EuroLeagueOrange,
-                            selectedTextColor = CourtsideDesignTokens.EuroLeagueOrange,
-                            indicatorColor = Color(0x33FF6600),
-                            unselectedIconColor = CourtsideDesignTokens.MutedText,
-                            unselectedTextColor = CourtsideDesignTokens.MutedText
+                // Haupt-Arbeitsbereich
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    when (currentDestination) {
+                        CourtsideDestination.MY_TEAM -> MyTeamDashboardScreen(
+                            primaryTeam = primaryTeam,
+                            allTeams = allTeams,
+                            favoriteTeamIds = favoriteIds,
+                            roster = allPlayers.filter {
+                                it.teamId == primaryTeam.id || it.teamId == primaryTeam.code
+                            },
+                            games = games,
+                            syncStatus = syncStatus,
+                            isTableTopPosture = isTableTopPosture,
+                            onSelectPrimaryTeam = { teamId ->
+                                repository.selectPrimaryTeam(teamId)
+                                scope.launch {
+                                    preferencesDataStore?.setPrimaryTeam(teamId)
+                                    offlineFirstRepository?.verifyAndSyncClubRoster(teamId)
+                                }
+                            },
+                            onVerifyRosterNow = {
+                                scope.launch {
+                                    offlineFirstRepository?.verifyAndSyncClubRoster(primaryTeam.id)
+                                }
+                            }
                         )
-                    )
+
+                        CourtsideDestination.MATCHDAY -> MatchCenterScreen(
+                            games = games,
+                            selectedRound = selectedRound,
+                            syncStatus = syncStatus,
+                            filterOnlyFavorites = filterOnlyFavorites,
+                            favoriteTeamIds = favoriteIds,
+                            hingeInBookPosture = isBookPosture,
+                            notificationManager = notificationManager,
+                            onPreviousRound = { selectedRound = (selectedRound - 1).coerceAtLeast(1) },
+                            onNextRound = { selectedRound = (selectedRound + 1).coerceAtMost(38) },
+                            onToggleFavoriteFilter = { filterOnlyFavorites = !filterOnlyFavorites },
+                            onTriggerLiveRefresh = triggerLiveSync,
+                            onRefreshSelectedGameStats = { game ->
+                                scope.launch {
+                                    offlineFirstRepository?.refreshSelectedGameLiveStats(game)
+                                }
+                            },
+                            onOpenTeamStats = { teamId ->
+                                comparisonTeamBId = teamId
+                                currentDestination = CourtsideDestination.STATISTICS
+                            }
+                        )
+
+                        CourtsideDestination.STANDINGS_PLAYOFFS -> StandingsAndBracketScreen(
+                            standings = repository.getStandings(),
+                            bracketSeries = repository.getPlayoffBracket(),
+                            favoriteIds = favoriteIds
+                        )
+
+                        CourtsideDestination.STATISTICS -> SeasonLeadersAndComparisonScreen(
+                            players = allPlayers,
+                            teams = allTeams,
+                            teamA = primaryTeam,
+                            teamB = repository.findTeam(comparisonTeamBId) ?: allTeams.first(),
+                            onSelectTeamB = { comparisonTeamBId = it }
+                        )
+
+                        CourtsideDestination.SETTINGS -> SettingsAndNotificationTestScreen(
+                            primaryTeam = primaryTeam,
+                            games = games,
+                            activeLanguage = activeLanguage,
+                            onSelectLanguage = onChangeLanguage,
+                            notificationManager = notificationManager
+                        )
+                    }
+                }
+            }
+
+            // Untere NavigationBar auf Smartphones / zugeklappten Foldables (COMPACT)
+            if (isCompact) {
+                NavigationBar(
+                    containerColor = CourtsideDesignTokens.SidebarObsidian,
+                    tonalElevation = 0.dp
+                ) {
+                    CourtsideDestination.entries.forEach { dest ->
+                        val selected = currentDestination == dest
+                        val navTitle = dest.localizedTitle(strings)
+                        NavigationBarItem(
+                            selected = selected,
+                            onClick = { currentDestination = dest },
+                            icon = { Icon(dest.icon, contentDescription = navTitle) },
+                            label = { Text(navTitle, fontSize = 11.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = CourtsideDesignTokens.EuroLeagueOrange,
+                                selectedTextColor = CourtsideDesignTokens.EuroLeagueOrange,
+                                indicatorColor = Color(0x33FF6600),
+                                unselectedIconColor = CourtsideDesignTokens.MutedText,
+                                unselectedTextColor = CourtsideDesignTokens.MutedText
+                            )
+                        )
+                    }
                 }
             }
         }
@@ -345,17 +383,22 @@ fun MainAppScaffold(
  * Linke Courtside-Sidebar ohne sichtbare Ctrl+1..5 Badges (Tastatur-Shortcuts laufen unsichtbar im Hintergrund):
  * - Oben: Leuchtendes EuroLeague-Basketball-Logo
  * - Mitte: Clean zentrierte Icon-Buttons mit orangenem Radial-Glow bei aktivem Tab
+ * - Unten: 6-Sprachen-Schnellumschalter (EN, DE, FR, IT, ES, EL) + Live-Refresh-Trigger
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CourtsideLeftSidebar(
     currentDestination: CourtsideDestination,
+    activeLanguage: AppLanguage,
+    strings: CourtsideStrings,
     isExpanded: Boolean,
     onSelectDestination: (CourtsideDestination) -> Unit,
+    onSelectLanguage: (AppLanguage) -> Unit,
     onLiveRefresh: () -> Unit
 ) {
     Column(
         modifier = Modifier
-            .width(if (isExpanded) 168.dp else 76.dp)
+            .width(if (isExpanded) 172.dp else 76.dp)
             .fillMaxHeight()
             .background(CourtsideDesignTokens.SidebarObsidian)
             .border(width = 1.dp, color = Color(0x14FFFFFF))
@@ -368,7 +411,7 @@ private fun CourtsideLeftSidebar(
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.padding(bottom = 28.dp)
+                modifier = Modifier.padding(bottom = 26.dp)
             ) {
                 Box(
                     modifier = Modifier
@@ -410,6 +453,7 @@ private fun CourtsideLeftSidebar(
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 CourtsideDestination.entries.forEach { dest ->
                     val isSelected = currentDestination == dest
+                    val navTitle = dest.localizedTitle(strings)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -444,7 +488,7 @@ private fun CourtsideLeftSidebar(
                         ) {
                             Icon(
                                 imageVector = dest.icon,
-                                contentDescription = dest.title,
+                                contentDescription = navTitle,
                                 tint = if (isSelected) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.MutedText,
                                 modifier = Modifier.size(21.dp)
                             )
@@ -452,7 +496,7 @@ private fun CourtsideLeftSidebar(
 
                         if (isExpanded) {
                             Text(
-                                text = dest.title,
+                                text = navTitle,
                                 color = if (isSelected) Color.White else CourtsideDesignTokens.MutedText,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                 fontSize = 13.sp
@@ -463,24 +507,82 @@ private fun CourtsideLeftSidebar(
             }
         }
 
-        // Bottom Live-Refresh Trigger
-        Surface(
-            color = Color(0x24FF6600),
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, Color(0x66FF6600), RoundedCornerShape(12.dp))
-                .clickable { onLiveRefresh() }
-                .pointerHoverIcon(PointerIcon.Hand)
-        ) {
-            Text(
-                text = if (isExpanded) "⚡ Live-Sim" else "⚡",
-                color = CourtsideDesignTokens.EuroLeagueOrange,
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(vertical = 10.dp)
-            )
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // 6-Language Quick Switcher (EN, DE, FR, IT, ES, EL)
+            if (isExpanded) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    AppLanguage.entries.forEach { lang ->
+                        val isLangSelected = lang == activeLanguage
+                        Surface(
+                            color = if (isLangSelected) Color(0x33FF6600) else Color(0xFF16161B),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isLangSelected) Color(0xFFFF6600) else Color(0x22FFFFFF),
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                                .clickable { onSelectLanguage(lang) }
+                                .pointerHoverIcon(PointerIcon.Hand)
+                        ) {
+                            Text(
+                                text = "${lang.flagEmoji} ${lang.shortLabel}",
+                                color = if (isLangSelected) Color.White else CourtsideDesignTokens.MutedText,
+                                fontWeight = if (isLangSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            } else {
+                // Compact Rail Mode: Click cycles through the 6 languages
+                Surface(
+                    color = Color(0xFF16161B),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, Color(0x66FF6600), RoundedCornerShape(10.dp))
+                        .clickable {
+                            val nextIdx = (AppLanguage.entries.indexOf(activeLanguage) + 1) % AppLanguage.entries.size
+                            onSelectLanguage(AppLanguage.entries[nextIdx])
+                        }
+                        .pointerHoverIcon(PointerIcon.Hand)
+                ) {
+                    Text(
+                        text = "${activeLanguage.flagEmoji} ${activeLanguage.shortLabel}",
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 10.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(vertical = 6.dp)
+                    )
+                }
+            }
+
+            // Bottom Live-Refresh Trigger
+            Surface(
+                color = Color(0x24FF6600),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, Color(0x66FF6600), RoundedCornerShape(12.dp))
+                    .clickable { onLiveRefresh() }
+                    .pointerHoverIcon(PointerIcon.Hand)
+            ) {
+                Text(
+                    text = if (isExpanded) strings.liveSimButton else "⚡",
+                    color = CourtsideDesignTokens.EuroLeagueOrange,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 10.dp)
+                )
+            }
         }
     }
 }
@@ -503,6 +605,7 @@ private fun MyTeamDashboardScreen(
     onVerifyRosterNow: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val strings = LocalCourtsideStrings.current
     val nextGame = games.firstOrNull {
         it.homeTeam.id == primaryTeam.id || it.awayTeam.id == primaryTeam.id ||
             it.homeTeam.code == primaryTeam.code || it.awayTeam.code == primaryTeam.code
@@ -538,13 +641,13 @@ private fun MyTeamDashboardScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "My Team Hub",
+                    text = strings.myTeamHubTitle,
                     style = MaterialTheme.typography.titleLarge,
                     color = Color.White
                 )
                 CourtsideLivePill(
-                    badgeText = "LIVE SYNC",
-                    detailText = "${allTeams.size} Clubs",
+                    badgeText = strings.liveSyncBadge,
+                    detailText = "${allTeams.size} ${strings.clubsSuffix}",
                     badgeColor = CourtsideDesignTokens.NeonMadeGreen
                 )
             }
@@ -591,12 +694,12 @@ private fun MyTeamDashboardScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         CourtsideLivePill(
-                            badgeText = "NEXT TIP-OFF",
+                            badgeText = strings.nextTipOffBadge,
                             detailText = "%02d:%02d:%02d".format(hrs, mins, secs),
                             badgeColor = CourtsideDesignTokens.EuroLeagueOrange
                         )
                         Text(
-                            text = "Round ${nextGame.round}",
+                            text = "${strings.roundPrefix} ${nextGame.round}",
                             color = CourtsideDesignTokens.MutedText,
                             fontSize = 12.sp
                         )
@@ -626,7 +729,7 @@ private fun MyTeamDashboardScreen(
                         ) {
                             Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Google Kalender", color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
+                            Text(strings.googleCalendarButton, color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
                         }
                         Button(
                             onClick = { CalendarExportHelper.exportTeamSeasonToIcsFile(context, primaryTeam, games) },
@@ -635,7 +738,7 @@ private fun MyTeamDashboardScreen(
                         ) {
                             Icon(Icons.Default.Share, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Saison .ics", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text(strings.seasonIcsButton, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                     }
                 }
@@ -667,17 +770,28 @@ private fun MyTeamDashboardScreen(
                         }
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("${primaryTeam.wins}W - ${primaryTeam.losses}L", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp)
+                        Text(
+                            text = "${primaryTeam.wins}${strings.winLetter} - ${primaryTeam.losses}${strings.lossLetter}",
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 22.sp
+                        )
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             primaryTeam.streak.forEach { res ->
+                                val isWin = res == "S" || res == "W"
                                 Box(
                                     modifier = Modifier
                                         .size(18.dp)
                                         .clip(CircleShape)
-                                        .background(if (res == "S") CourtsideDesignTokens.NeonMadeGreen else CourtsideDesignTokens.NeonMissedRed),
+                                        .background(if (isWin) CourtsideDesignTokens.NeonMadeGreen else CourtsideDesignTokens.NeonMissedRed),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(res, color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 10.sp)
+                                    Text(
+                                        text = if (isWin) strings.winLetter else strings.lossLetter,
+                                        color = Color.Black,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 10.sp
+                                    )
                                 }
                             }
                         }
@@ -693,7 +807,7 @@ private fun MyTeamDashboardScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "Active Club Roster (${roster.size} Spieler)",
+                        text = "${strings.activeRosterHeader} (${roster.size} ${strings.playersWord})",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp
@@ -709,7 +823,7 @@ private fun MyTeamDashboardScreen(
                         .pointerHoverIcon(PointerIcon.Hand)
                 ) {
                     Text(
-                        text = "✓ Kader & Injury-Report geprüft",
+                        text = strings.rosterVerifiedBadge,
                         color = CourtsideDesignTokens.NeonMadeGreen,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
@@ -721,7 +835,7 @@ private fun MyTeamDashboardScreen(
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 item {
                     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Text("Player", Modifier.weight(2.6f), color = CourtsideDesignTokens.MutedText, fontSize = 12.sp)
+                        Text(strings.playerColumn, Modifier.weight(2.6f), color = CourtsideDesignTokens.MutedText, fontSize = 12.sp)
                         Text("POS", Modifier.weight(0.8f), color = CourtsideDesignTokens.MutedText, fontSize = 12.sp, textAlign = TextAlign.Center)
                         Text("PPG", Modifier.weight(1f), color = CourtsideDesignTokens.MutedText, fontSize = 12.sp, textAlign = TextAlign.Center)
                         Text("RPG", Modifier.weight(1f), color = CourtsideDesignTokens.MutedText, fontSize = 12.sp, textAlign = TextAlign.Center)
@@ -742,10 +856,11 @@ private fun MyTeamDashboardScreen(
                                 InjuryStatus.GAME_TIME_DECISION, InjuryStatus.QUESTIONABLE -> CourtsideDesignTokens.EuroLeagueOrange
                                 InjuryStatus.OUT -> CourtsideDesignTokens.NeonMissedRed
                             }
+                            val localizedInjuryLabel = p.injuryStatus.localizedLabel(strings)
                             val injText = if (p.injuryDetail.isNotBlank()) {
-                                "${p.injuryStatus.label} • ${p.injuryDetail}"
+                                "$localizedInjuryLabel • ${p.injuryDetail}"
                             } else {
-                                "${p.injuryStatus.label} • ${p.nationality} • ${p.heightCm}cm"
+                                "$localizedInjuryLabel • ${p.nationality} • ${p.heightCm}cm"
                             }
                             Text(injText, color = injColor, fontSize = 10.sp)
                         }
@@ -772,6 +887,7 @@ private fun StandingsAndBracketScreen(
     bracketSeries: List<PlayoffSeries>,
     favoriteIds: Set<String>
 ) {
+    val strings = LocalCourtsideStrings.current
     Row(
         modifier = Modifier
             .fillMaxSize()
@@ -786,7 +902,7 @@ private fun StandingsAndBracketScreen(
                 .fillMaxHeight()
         ) {
             Text(
-                text = "Playoff & Play-In Bracket",
+                text = strings.playoffBracketTitle,
                 style = MaterialTheme.typography.titleLarge,
                 color = Color.White,
                 modifier = Modifier.padding(bottom = 12.dp)
@@ -850,14 +966,14 @@ private fun StandingsAndBracketScreen(
                         CourtsideClubCrest(top1, size = 40.dp)
                         Column {
                             Text("#1 ${top1.name}", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
-                            Text("${top1.wins}W - ${top1.losses}L", color = CourtsideDesignTokens.NeonMadeGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("${top1.wins}${strings.winLetter} - ${top1.losses}${strings.lossLetter}", color = CourtsideDesignTokens.NeonMadeGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
-                    Text("REGULAR SEASON", color = CourtsideDesignTokens.MutedText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text(strings.regularSeasonLabel, color = CourtsideDesignTokens.MutedText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Column(horizontalAlignment = Alignment.End) {
                             Text("#2 ${top2.name}", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
-                            Text("${top2.wins}W - ${top2.losses}L", color = CourtsideDesignTokens.NeonMadeGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("${top2.wins}${strings.winLetter} - ${top2.losses}${strings.lossLetter}", color = CourtsideDesignTokens.NeonMadeGreen, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                         CourtsideClubCrest(top2, size = 40.dp)
                     }
@@ -865,17 +981,17 @@ private fun StandingsAndBracketScreen(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("EuroLeague Standings (1–6 Playoffs • 7–10 Play-In)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text(strings.standingsHeader, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = CourtsideDesignTokens.MutedText)
             }
 
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 item {
                     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Text("Club", Modifier.weight(3f), color = CourtsideDesignTokens.MutedText, fontSize = 12.sp)
-                        Text("W", Modifier.weight(0.8f), color = CourtsideDesignTokens.MutedText, fontSize = 12.sp, textAlign = TextAlign.Center)
-                        Text("L", Modifier.weight(0.8f), color = CourtsideDesignTokens.MutedText, fontSize = 12.sp, textAlign = TextAlign.Center)
-                        Text("OFF", Modifier.weight(1f), color = CourtsideDesignTokens.MutedText, fontSize = 12.sp, textAlign = TextAlign.Center)
+                        Text(strings.clubColumn, Modifier.weight(3f), color = CourtsideDesignTokens.MutedText, fontSize = 12.sp)
+                        Text(strings.winsColumn, Modifier.weight(0.8f), color = CourtsideDesignTokens.MutedText, fontSize = 12.sp, textAlign = TextAlign.Center)
+                        Text(strings.lossesColumn, Modifier.weight(0.8f), color = CourtsideDesignTokens.MutedText, fontSize = 12.sp, textAlign = TextAlign.Center)
+                        Text(strings.offRatingColumn, Modifier.weight(1f), color = CourtsideDesignTokens.MutedText, fontSize = 12.sp, textAlign = TextAlign.Center)
                         Text("+/- ⌄", Modifier.weight(1f), color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.End)
                     }
                     HorizontalDivider(color = Color(0x1AFFFFFF))
@@ -931,6 +1047,7 @@ private fun SeasonLeadersAndComparisonScreen(
     teamB: EuroLeagueTeam,
     onSelectTeamB: (String) -> Unit
 ) {
+    val strings = LocalCourtsideStrings.current
     val topPirPlayers = remember(players) { players.sortedByDescending { it.pir } }
 
     Row(
@@ -947,7 +1064,7 @@ private fun SeasonLeadersAndComparisonScreen(
                 .fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text("Team Analytics Comparison", style = MaterialTheme.typography.titleLarge, color = Color.White)
+            Text(strings.teamAnalyticsTitle, style = MaterialTheme.typography.titleLarge, color = Color.White)
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(teams.filter { it.id != teamA.id }, key = { it.id }) { candidate ->
                     val isSelected = candidate.id == teamB.id
@@ -958,7 +1075,7 @@ private fun SeasonLeadersAndComparisonScreen(
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             CourtsideLivePill(
-                                badgeText = if (isSelected) "ACTIVE" else "COMPARE",
+                                badgeText = if (isSelected) strings.activeBadge else strings.compareBadge,
                                 detailText = "${teamA.code} vs ${candidate.code}"
                             )
                             Spacer(modifier = Modifier.height(8.dp))
@@ -969,7 +1086,7 @@ private fun SeasonLeadersAndComparisonScreen(
                             ) {
                                 CourtsideClubCrest(teamA, size = 34.dp)
                                 Text(
-                                    text = "OFF ${teamA.offensiveRating} vs ${candidate.offensiveRating}",
+                                    text = "${strings.offRatingColumn} ${teamA.offensiveRating} vs ${candidate.offensiveRating}",
                                     color = Color.White,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp
@@ -1003,7 +1120,7 @@ private fun SeasonLeadersAndComparisonScreen(
                         CourtsideClubCrest(teamA, size = 38.dp)
                         Text(teamA.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
-                    Text("RADAR", color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
+                    Text(strings.radarBadge, color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(teamB.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         CourtsideClubCrest(teamB, size = 38.dp)
@@ -1026,7 +1143,7 @@ private fun SeasonLeadersAndComparisonScreen(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Season MVP & PIR Leaders", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text(strings.seasonLeadersHeader, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = CourtsideDesignTokens.MutedText)
             }
 
@@ -1130,15 +1247,19 @@ private fun TeamComparisonRadarCanvas(teamA: EuroLeagueTeam, teamB: EuroLeagueTe
 }
 
 // =========================================================================
-// TAB 5 (Ctrl+5): SETTINGS & PUSH NOTIFICATION STUDIO IM COURTSIDE DESIGN
+// TAB 5 (Ctrl+5): SETTINGS, 6-LANGUAGE SWITCHER & PUSH NOTIFICATION STUDIO
 // =========================================================================
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SettingsAndNotificationTestScreen(
     primaryTeam: EuroLeagueTeam,
     games: List<EuroLeagueGame>,
+    activeLanguage: AppLanguage,
+    onSelectLanguage: (AppLanguage) -> Unit,
     notificationManager: EuroLeagueNotificationManager
 ) {
+    val strings = LocalCourtsideStrings.current
     var tipOffEnabled by rememberSaveable { mutableStateOf(true) }
     var halftimeFinalEnabled by rememberSaveable { mutableStateOf(true) }
     var closeGameAlertEnabled by rememberSaveable { mutableStateOf(true) }
@@ -1157,13 +1278,65 @@ private fun SettingsAndNotificationTestScreen(
             modifier = Modifier.weight(1f).fillMaxHeight(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("Notification Channels", style = MaterialTheme.typography.titleLarge, color = Color.White)
+            // 6-Language Selector Card (EN, DE, FR, IT, ES, EL)
+            CourtsideGlassCard(isSelected = true, modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = strings.languageSectionTitle,
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp
+                    )
+                    Text(
+                        text = strings.languageSectionSubtitle,
+                        color = CourtsideDesignTokens.MutedText,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 2.dp, bottom = 10.dp)
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        AppLanguage.entries.forEach { lang ->
+                            val isSelected = lang == activeLanguage
+                            Surface(
+                                color = if (isSelected) Color(0x33FF6600) else Color(0xFF1B1B21),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .border(
+                                        width = if (isSelected) 1.5.dp else 1.dp,
+                                        color = if (isSelected) Color(0xFFFF6600) else Color(0xFF2C2C34),
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable { onSelectLanguage(lang) }
+                                    .pointerHoverIcon(PointerIcon.Hand)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                ) {
+                                    Text(text = lang.flagEmoji, fontSize = 14.sp)
+                                    Text(
+                                        text = lang.nativeName,
+                                        color = if (isSelected) Color.White else Color(0xFFD1D5DB),
+                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Text(strings.notificationChannelsTitle, style = MaterialTheme.typography.titleLarge, color = Color.White)
 
             CourtsideGlassCard(isSelected = tipOffEnabled, modifier = Modifier.fillMaxWidth()) {
                 ChannelToggleRow(
                     badge = "WORKMANAGER",
-                    title = "Tip-Off-Alarm (${primaryTeam.code})",
-                    subtitle = "15 Minuten vor Spielbeginn inkl. Arena & H2H",
+                    title = "${strings.tipOffChannelTitle} (${primaryTeam.code})",
+                    subtitle = strings.tipOffChannelSubtitle,
                     checked = tipOffEnabled,
                     onCheckedChange = { tipOffEnabled = it }
                 )
@@ -1171,8 +1344,8 @@ private fun SettingsAndNotificationTestScreen(
             CourtsideGlassCard(isSelected = halftimeFinalEnabled, modifier = Modifier.fillMaxWidth()) {
                 ChannelToggleRow(
                     badge = "SCORES",
-                    title = "Halbzeit- & Endergebnis",
-                    subtitle = "Push-Update mit Viertelständen & Top-PIR-Performer",
+                    title = strings.scoresChannelTitle,
+                    subtitle = strings.scoresChannelSubtitle,
                     checked = halftimeFinalEnabled,
                     onCheckedChange = { halftimeFinalEnabled = it }
                 )
@@ -1180,8 +1353,8 @@ private fun SettingsAndNotificationTestScreen(
             CourtsideGlassCard(isSelected = closeGameAlertEnabled, modifier = Modifier.fillMaxWidth()) {
                 ChannelToggleRow(
                     badge = "CRUNCH TIME",
-                    title = "Close-Game-Alert (Q4 < 3:00)",
-                    subtitle = "Sofort-Alarm bei <= 5 Punkten Differenz in der Schlussphase",
+                    title = strings.closeGameChannelTitle,
+                    subtitle = strings.closeGameChannelSubtitle,
                     checked = closeGameAlertEnabled,
                     onCheckedChange = { closeGameAlertEnabled = it }
                 )
@@ -1199,7 +1372,7 @@ private fun SettingsAndNotificationTestScreen(
             ) {
                 Column {
                     CourtsideLivePill(
-                        badgeText = "LIVE PUSH PREVIEW",
+                        badgeText = strings.livePushPreviewBadge,
                         detailText = "Q${sampleLiveGame.currentQuarter} ${sampleLiveGame.remainingClock}"
                     )
                     Spacer(modifier = Modifier.height(10.dp))
@@ -1220,7 +1393,7 @@ private fun SettingsAndNotificationTestScreen(
             Button(
                 onClick = {
                     notificationManager.sendInstantTestPushNotification(sampleLiveGame)
-                    statusBanner = "System-Notification ('${sampleLiveGame.homeTeam.code} ${sampleLiveGame.homeScore}:${sampleLiveGame.awayScore} ${sampleLiveGame.awayTeam.code}') abgefeuert!"
+                    statusBanner = "${strings.testPushSentPrefix} '${sampleLiveGame.homeTeam.code} ${sampleLiveGame.homeScore}:${sampleLiveGame.awayScore} ${sampleLiveGame.awayTeam.code}'"
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = CourtsideDesignTokens.EuroLeagueOrange),
                 shape = RoundedCornerShape(14.dp),
@@ -1232,7 +1405,7 @@ private fun SettingsAndNotificationTestScreen(
                 Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = Color.Black)
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
-                    text = "Test-Push-Benachrichtigung senden",
+                    text = strings.sendTestPushButton,
                     color = Color.Black,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 14.sp

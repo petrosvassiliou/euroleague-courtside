@@ -8,6 +8,7 @@ import com.euroleague.courtside.data.remote.EuroLeagueOfflineFirstRepository
 import com.euroleague.courtside.data.repository.EuroLeagueGame
 import com.euroleague.courtside.data.repository.EuroLeagueMockRepository
 import com.euroleague.courtside.data.repository.EuroLeagueTeam
+import com.euroleague.courtside.i18n.AppLanguage
 import com.euroleague.courtside.notifications.EuroLeagueNotificationManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
@@ -30,7 +31,8 @@ data class CourtsideUiState(
     val halftimeFinalScoreEnabled: Boolean = true,
     val closeGameAlertEnabled: Boolean = true,
     val isSyncing: Boolean = false,
-    val syncStatus: String = "LIVE API • E2026"
+    val syncStatus: String = "LIVE API • E2026",
+    val language: AppLanguage = AppLanguage.DE
 )
 
 sealed interface CourtsideUiEvent {
@@ -39,6 +41,7 @@ sealed interface CourtsideUiEvent {
     data class ChangeRound(val round: Int) : CourtsideUiEvent
     data object ToggleFavoriteFilter : CourtsideUiEvent
     data object TriggerLiveRefresh : CourtsideUiEvent
+    data class SelectLanguage(val language: AppLanguage) : CourtsideUiEvent
     data class UpdateNotificationPrefs(
         val tipOff: Boolean,
         val halftimeFinal: Boolean,
@@ -49,7 +52,8 @@ sealed interface CourtsideUiEvent {
 /**
  * Unidirectional Data Flow (UDF) ViewModel für EuroLeague Courtside.
  * Kombiniert Jetpack DataStore Preferences, Live-API / Offline-First Room Sync,
- * automatische Kader-Verifikation (`/people`) und Crunch-Time-Alarme.
+ * 6-Sprachen-Lokalisierung (EN, DE, FR, IT, ES, EL), automatische Kader-Verifikation (`/people`)
+ * und Crunch-Time-Alarme.
  */
 @HiltViewModel
 class CourtsideViewModel @Inject constructor(
@@ -84,7 +88,8 @@ class CourtsideViewModel @Inject constructor(
             halftimeFinalScoreEnabled = prefs.halftimeFinalScoreEnabled,
             closeGameAlertEnabled = prefs.closeGameAlertEnabled,
             isSyncing = syncing,
-            syncStatus = mockRepository.lastSyncStatusFlow.value
+            syncStatus = mockRepository.lastSyncStatusFlow.value,
+            language = prefs.language
         )
     }.stateIn(
         scope = viewModelScope,
@@ -95,7 +100,8 @@ class CourtsideViewModel @Inject constructor(
             allTeams = mockRepository.teams,
             games = mockRepository.games.value,
             selectedRound = mockRepository.activeRoundFlow.value,
-            syncStatus = mockRepository.lastSyncStatusFlow.value
+            syncStatus = mockRepository.lastSyncStatusFlow.value,
+            language = mockRepository.appLanguageFlow.value
         )
     )
 
@@ -140,6 +146,10 @@ class CourtsideViewModel @Inject constructor(
                             .forEach { notificationManager.evaluateAndSendCloseGameAlert(it) }
                     }
                 }
+            }
+            is CourtsideUiEvent.SelectLanguage -> viewModelScope.launch {
+                mockRepository.selectLanguage(event.language)
+                preferencesDataStore.setLanguage(event.language)
             }
             is CourtsideUiEvent.UpdateNotificationPrefs -> viewModelScope.launch {
                 preferencesDataStore.updateNotificationChannels(

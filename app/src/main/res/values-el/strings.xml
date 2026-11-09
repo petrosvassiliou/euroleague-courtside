@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EuroLeague Courtside</string>
+    <string name="nav_my_team">Η Ομάδα Μου</string>
+    <string name="nav_matchday">Αγωνιστική</string>
+    <string name="nav_standings">Βαθμολογία</string>
+    <string name="nav_analytics">Στατιστικά</string>
+    <string name="nav_settings">Ρυθμίσεις</string>
+    <string name="search_placeholder">Αναζήτηση</string>
+    <string name="filter_favorites">★ Αγαπημένα</string>
+    <string name="filter_all_games">Όλοι οι αγώνες</string>
+    <string name="player_boxscore">Στατιστικά παικτών</string>
+    <string name="send_test_push">Αποστολή Δοκιμαστικής Ειδοποίησης Push</string>
+</resources>

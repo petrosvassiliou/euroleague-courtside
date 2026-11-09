@@ -22,7 +22,8 @@
         android:name=".EuroLeagueApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="EuroLeague Courtside"
+        android:label="@string/app_name"
+        android:localeConfig="@xml/locales_config"
         android:supportsRtl="true"
         android:theme="@style/Theme.EuroLeagueCourtside"
         android:resizeableActivity="true">

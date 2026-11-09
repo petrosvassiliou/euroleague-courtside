@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EuroLeague Courtside</string>
+    <string name="nav_my_team">Mi Equipo</string>
+    <string name="nav_matchday">Jornada</string>
+    <string name="nav_standings">Clasificación</string>
+    <string name="nav_analytics">Estadísticas</string>
+    <string name="nav_settings">Ajustes</string>
+    <string name="search_placeholder">Buscar</string>
+    <string name="filter_favorites">★ Favoritos</string>
+    <string name="filter_all_games">Todos los partidos</string>
+    <string name="player_boxscore">Estadísticas de jugadores</string>
+    <string name="send_test_push">Enviar notificación push de prueba</string>
+</resources>

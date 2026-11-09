@@ -79,6 +79,7 @@ import com.euroleague.courtside.data.repository.EuroLeagueTeam
 import com.euroleague.courtside.data.repository.GameStatus
 import com.euroleague.courtside.data.repository.PlayerBoxscoreStat
 import com.euroleague.courtside.data.repository.ShotAttempt
+import com.euroleague.courtside.i18n.LocalCourtsideStrings
 import com.euroleague.courtside.notifications.EuroLeagueNotificationManager
 import com.euroleague.courtside.util.CalendarExportHelper
 import kotlinx.coroutines.launch
@@ -113,6 +114,7 @@ fun MatchCenterScreen(
     onOpenTeamStats: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val strings = LocalCourtsideStrings.current
     val scope = rememberCoroutineScope()
     val navigator = rememberListDetailPaneScaffoldNavigator<String>()
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -163,7 +165,7 @@ fun MatchCenterScreen(
                         .fillMaxSize()
                         .padding(end = 12.dp)
                 ) {
-                    // Header: "EuroLeagues" + Dark Search Pill
+                    // Header: "EuroLeague" + Dark Search Pill
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -173,7 +175,7 @@ fun MatchCenterScreen(
                     ) {
                         Column {
                             Text(
-                                text = "EuroLeagues",
+                                text = strings.matchCenterTitle,
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color.White
@@ -191,11 +193,11 @@ fun MatchCenterScreen(
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
-                            placeholder = { Text("Search", fontSize = 12.sp, color = Color(0xFF8E8E93)) },
+                            placeholder = { Text(strings.searchPlaceholder, fontSize = 12.sp, color = Color(0xFF8E8E93)) },
                             leadingIcon = {
                                 Icon(
                                     Icons.Default.Search,
-                                    contentDescription = "Search",
+                                    contentDescription = strings.searchPlaceholder,
                                     tint = Color(0xFF8E8E93),
                                     modifier = Modifier.size(16.dp)
                                 )
@@ -244,7 +246,7 @@ fun MatchCenterScreen(
                                 )
                             }
                             Text(
-                                text = "Round $selectedRound",
+                                text = "${strings.roundPrefix} $selectedRound",
                                 color = Color(0xFFFF6600),
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 12.sp
@@ -279,7 +281,7 @@ fun MatchCenterScreen(
                                 .pointerHoverIcon(PointerIcon.Hand)
                         ) {
                             Text(
-                                text = if (filterOnlyFavorites) "★ Favoriten" else "Alle Spiele",
+                                text = if (filterOnlyFavorites) strings.filterFavorites else strings.filterAllGames,
                                 color = if (filterOnlyFavorites) Color(0xFFFF6600) else Color(0xFFD1D5DB),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
@@ -347,6 +349,7 @@ private fun MatchSummaryCard(
     onScheduleTipOffAlarm: () -> Unit,
     onOpenTeamStats: (String) -> Unit
 ) {
+    val strings = LocalCourtsideStrings.current
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
     var showContextMenu by remember { mutableStateOf(false) }
@@ -404,12 +407,17 @@ private fun MatchSummaryCard(
                             .border(1.dp, Color(0x99FF5E00), RoundedCornerShape(8.dp))
                             .padding(2.dp)
                     ) {
+                        val statusBadgeText = when (game.status) {
+                            GameStatus.LIVE -> strings.statusLive
+                            GameStatus.FINAL -> strings.statusFinal
+                            GameStatus.UPCOMING -> strings.statusUpcoming
+                        }
                         Surface(
                             color = if (game.status == GameStatus.LIVE) Color(0xFFFF4500) else Color(0xFF3A3A42),
                             shape = RoundedCornerShape(6.dp)
                         ) {
                             Text(
-                                text = if (game.status == GameStatus.LIVE) "LIVE" else game.status.name,
+                                text = statusBadgeText,
                                 color = Color.White,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 11.sp,
@@ -431,7 +439,7 @@ private fun MatchSummaryCard(
                     ) {
                         Icon(
                             Icons.Default.MoreHoriz,
-                            contentDescription = "Kontextmenü",
+                            contentDescription = "Menu",
                             tint = Color(0xFF8E8E93)
                         )
                     }
@@ -510,7 +518,7 @@ private fun MatchSummaryCard(
             onDismissRequest = { showContextMenu = false }
         ) {
             DropdownMenuItem(
-                text = { Text("In Google Kalender exportieren") },
+                text = { Text(strings.contextExportCalendar) },
                 leadingIcon = { Icon(Icons.Default.CalendarMonth, contentDescription = null) },
                 onClick = {
                     showContextMenu = false
@@ -518,7 +526,7 @@ private fun MatchSummaryCard(
                 }
             )
             DropdownMenuItem(
-                text = { Text("15-Min. Tip-Off-Alarm planen") },
+                text = { Text(strings.contextScheduleTipOff) },
                 leadingIcon = { Icon(Icons.Default.NotificationsActive, contentDescription = null) },
                 onClick = {
                     showContextMenu = false
@@ -526,7 +534,7 @@ private fun MatchSummaryCard(
                 }
             )
             DropdownMenuItem(
-                text = { Text("${game.homeTeam.code} Team-Statistiken öffnen") },
+                text = { Text("${game.homeTeam.code} • ${strings.contextOpenTeamStatsSuffix}") },
                 onClick = {
                     showContextMenu = false
                     onOpenTeamStats(game.homeTeam.id)
@@ -574,6 +582,7 @@ private fun MatchDetailPane(
     onExportCalendar: () -> Unit,
     onTriggerCloseGameAlert: () -> Unit
 ) {
+    val strings = LocalCourtsideStrings.current
     var sortColumn by rememberSaveable { mutableStateOf(BoxscoreSortColumn.PIR) }
     var sortAscending by rememberSaveable { mutableStateOf(false) }
 
@@ -620,7 +629,7 @@ private fun MatchDetailPane(
                 modifier = Modifier.padding(bottom = 6.dp)
             ) {
                 Text(
-                    text = "Player boxscore",
+                    text = strings.playerBoxscoreHeader,
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp
@@ -655,6 +664,7 @@ private fun DualToneScoreboardBanner(
     onExportCalendar: () -> Unit,
     onTriggerCloseGameAlert: () -> Unit
 ) {
+    val strings = LocalCourtsideStrings.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -682,7 +692,7 @@ private fun DualToneScoreboardBanner(
                 modifier = Modifier.clickable { onTriggerCloseGameAlert() }
             ) {
                 Text(
-                    text = if (game.status == GameStatus.LIVE) "LIVE   Q${game.currentQuarter} ${game.remainingClock}" else "ROUND ${game.round}",
+                    text = if (game.status == GameStatus.LIVE) "${strings.statusLive}   Q${game.currentQuarter} ${game.remainingClock}" else "${strings.roundPrefix.uppercase()} ${game.round}",
                     color = Color(0xFFE5E5EA),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -776,6 +786,7 @@ private fun InteractiveCourtShotChart(
     shots: List<ShotAttempt>,
     modifier: Modifier = Modifier
 ) {
+    val strings = LocalCourtsideStrings.current
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
@@ -913,7 +924,7 @@ private fun InteractiveCourtShotChart(
                         .border(2.dp, Color(0xFF00E676), CircleShape)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Made", color = Color(0xFFD1D5DB), fontSize = 12.sp)
+                Text(strings.shotMade, color = Color(0xFFD1D5DB), fontSize = 12.sp)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
@@ -923,7 +934,7 @@ private fun InteractiveCourtShotChart(
                         .border(2.dp, Color(0xFFFF3B5C), CircleShape)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Missed", color = Color(0xFFD1D5DB), fontSize = 12.sp)
+                Text(strings.shotMissed, color = Color(0xFFD1D5DB), fontSize = 12.sp)
             }
         }
     }
@@ -939,6 +950,7 @@ private fun SortableBoxscoreTable(
     sortAscending: Boolean,
     onSortChange: (BoxscoreSortColumn) -> Unit
 ) {
+    val strings = LocalCourtsideStrings.current
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
@@ -947,7 +959,7 @@ private fun SortableBoxscoreTable(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Player",
+                text = strings.playerColumn,
                 modifier = Modifier.weight(2.8f),
                 color = Color(0xFF8E8E93),
                 fontSize = 12.sp

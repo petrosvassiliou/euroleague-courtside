@@ -37,6 +37,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var notificationManager: EuroLeagueNotificationManager
 
+    @Inject
+    lateinit var preferencesDataStore: com.euroleague.courtside.data.local.CourtsidePreferencesDataStore
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -48,6 +51,12 @@ class MainActivity : ComponentActivity() {
             val selectedTeamId by repository.selectedTeamId.collectAsState()
             val teams by repository.teamsFlow.collectAsState()
             val activeTeam = repository.findTeam(selectedTeamId) ?: teams.first()
+
+            LaunchedEffect(Unit) {
+                preferencesDataStore.userPreferencesFlow.collect { prefs ->
+                    repository.selectLanguage(prefs.language)
+                }
+            }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 val permissionLauncher = rememberLauncherForActivityResult(
@@ -73,7 +82,8 @@ class MainActivity : ComponentActivity() {
                 MainAppScaffold(
                     repository = repository,
                     notificationManager = notificationManager,
-                    offlineFirstRepository = offlineFirstRepository
+                    offlineFirstRepository = offlineFirstRepository,
+                    preferencesDataStore = preferencesDataStore
                 )
             }
         }
