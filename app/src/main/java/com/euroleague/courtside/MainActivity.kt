@@ -2,6 +2,7 @@ package com.euroleague.courtside
 
 import android.Manifest
 import android.app.Application
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -40,9 +41,15 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var preferencesDataStore: com.euroleague.courtside.data.local.CourtsidePreferencesDataStore
 
+    private var shouldResetToMyTeamOnNextStart = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Beim Start der App immer ausnahmslos "My Team" anzeigen
+        repository.resetToStartDestination()
+        shouldResetToMyTeamOnNextStart = false
 
         // Stelle gespeichertes "My Team" & Sprache sofort synchron vor dem ersten UI-Frame wieder her
         preferencesDataStore.getSavedPrimaryTeamImmediate()?.let { savedTeamId ->
@@ -108,5 +115,31 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (::repository.isInitialized) {
+            repository.resetToStartDestination()
+        }
+        shouldResetToMyTeamOnNextStart = false
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (shouldResetToMyTeamOnNextStart) {
+            shouldResetToMyTeamOnNextStart = false
+            if (::repository.isInitialized) {
+                repository.resetToStartDestination()
+            }
+        }
+    }
+
+    override fun onStop() {
+        if (!isChangingConfigurations) {
+            shouldResetToMyTeamOnNextStart = true
+        }
+        super.onStop()
     }
 }
