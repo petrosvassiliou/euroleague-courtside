@@ -996,17 +996,28 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                     return@runCatching
                 }
 
+                val sortedAllGamesDto = allGamesDto.sortedWith(
+                    compareBy<EuroLeagueRemoteGameDto> { it.round }
+                        .thenBy { it.utcDate ?: "" }
+                        .thenBy { it.gameCode }
+                )
+                val activeRound = resolveCurrentActiveRound(emptyList(), sortedAllGamesDto)
+
                 val teamById = fallbackMockRepository.teams.associateBy { it.id }
                 val cachedById = fallbackMockRepository.games.value.associateBy { it.id }
                 var hasRemoteLiveGame = false
 
-                val updatedGames = allGamesDto.mapNotNull { g ->
+                val updatedGames = sortedAllGamesDto.mapNotNull { g ->
                     val homeTeam = teamById[g.local.club.code] ?: return@mapNotNull null
                     val awayTeam = teamById[g.road.club.code] ?: return@mapNotNull null
                     val gameId = "${seasonCode}_${g.gameCode}"
                     val cached = cachedById[gameId]
                     val statusRaw = (g.gameStatus ?: "").lowercase()
-                    val isLive = "live" in statusRaw || "playing" in statusRaw || "progress" in statusRaw
+                    val isStatusLive = "live" in statusRaw || "playing" in statusRaw || "progress" in statusRaw
+                    val candidateHeader = if (isStatusLive || (!g.played && g.round == activeRound)) {
+                        fetchGameLiveHeader(seasonCode, g.gameCode)
+                    } else null
+                    val isLive = isStatusLive || (candidateHeader?.live == true)
                     if (isLive) hasRemoteLiveGame = true
                     val justFinished = g.played && cached?.status != GameStatus.FINAL
 
@@ -1031,9 +1042,8 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         shots = shots.ifEmpty { cached?.shots ?: emptyList() }
                     )
 
-                    if (isLive) {
-                        val header = fetchGameLiveHeader(seasonCode, g.gameCode)
-                        if (header != null) applyLiveHeaderToGame(mapped, header) else mapped
+                    if (candidateHeader != null && (isLive || candidateHeader.live)) {
+                        applyLiveHeaderToGame(mapped, candidateHeader)
                     } else {
                         mapped
                     }
@@ -1044,9 +1054,9 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         liveTeams = fallbackMockRepository.teams,
                         livePlayers = fallbackMockRepository.players,
                         liveGames = updatedGames,
-                        activeRound = fallbackMockRepository.activeRoundFlow.value,
+                        activeRound = activeRound,
                         seasonCode = seasonCode,
-                        syncLabel = "$seasonCode • Round ${fallbackMockRepository.activeRoundFlow.value}"
+                        syncLabel = "$seasonCode • Round $activeRound"
                     )
                     if (!hasRemoteLiveGame) {
                         fallbackMockRepository.simulateLiveRefresh()
@@ -1163,15 +1173,25 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
         val clockClean = header.remainingPartialTime.trim().ifEmpty { game.remainingClock }
         val hasHeaderPartials = (header.scoreQuarter1A + header.scoreQuarter1B + header.scoreQuarter2A + header.scoreQuarter2B) > 0
         val updatedQuarters = if (hasHeaderPartials) {
+            val isCumulativeA = header.scoreQuarter2A >= header.scoreQuarter1A && header.scoreQuarter1A > 0
+            val isCumulativeB = header.scoreQuarter2B >= header.scoreQuarter1B && header.scoreQuarter1B > 0
+            val q1H = header.scoreQuarter1A
+            val q2H = if (isCumulativeA) (header.scoreQuarter2A - header.scoreQuarter1A).coerceAtLeast(0) else header.scoreQuarter2A
+            val q3H = if (isCumulativeA && header.scoreQuarter3A >= header.scoreQuarter2A) (header.scoreQuarter3A - header.scoreQuarter2A).coerceAtLeast(0) else header.scoreQuarter3A.coerceAtLeast(0)
+            val q4H = if (isCumulativeA && header.scoreQuarter4A >= header.scoreQuarter3A) (header.scoreQuarter4A - header.scoreQuarter3A).coerceAtLeast(0) else header.scoreQuarter4A.coerceAtLeast(0)
+            val q1A = header.scoreQuarter1B
+            val q2A = if (isCumulativeB) (header.scoreQuarter2B - header.scoreQuarter1B).coerceAtLeast(0) else header.scoreQuarter2B
+            val q3A = if (isCumulativeB && header.scoreQuarter3B >= header.scoreQuarter2B) (header.scoreQuarter3B - header.scoreQuarter2B).coerceAtLeast(0) else header.scoreQuarter3B.coerceAtLeast(0)
+            val q4A = if (isCumulativeB && header.scoreQuarter4B >= header.scoreQuarter3B) (header.scoreQuarter4B - header.scoreQuarter3B).coerceAtLeast(0) else header.scoreQuarter4B.coerceAtLeast(0)
             QuarterScores(
-                q1Home = header.scoreQuarter1A,
-                q1Away = header.scoreQuarter1B,
-                q2Home = header.scoreQuarter2A,
-                q2Away = header.scoreQuarter2B,
-                q3Home = header.scoreQuarter3A,
-                q3Away = header.scoreQuarter3B,
-                q4Home = header.scoreQuarter4A,
-                q4Away = header.scoreQuarter4B,
+                q1Home = q1H,
+                q1Away = q1A,
+                q2Home = q2H,
+                q2Away = q2A,
+                q3Home = q3H,
+                q3Away = q3A,
+                q4Home = q4H,
+                q4Away = q4A,
                 otHome = header.scoreExtra1A.takeIf { it > 0 },
                 otAway = header.scoreExtra1B.takeIf { it > 0 }
             )
@@ -1210,7 +1230,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
             .map { it.round }
             .filter { it in 1..38 }
         if (playedRounds.isNotEmpty()) {
-            return playedRounds.maxOrNull() ?: 10
+            return playedRounds.maxOrNull() ?: 11
         }
         if (rounds.isEmpty()) return fallbackMockRepository.activeRoundFlow.value.coerceIn(1, 38)
         val nowIso = Instant.now().toString()
