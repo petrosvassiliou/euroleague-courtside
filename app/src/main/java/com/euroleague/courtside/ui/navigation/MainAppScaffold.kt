@@ -1089,7 +1089,7 @@ private fun MyTeamDashboardScreen(
                 else -> countdownLabel
             }
             val pillBadgeColor = if (isLiveGame) {
-                CourtsideDesignTokens.LivePulseRed
+                CourtsideDesignTokens.NeonMissedRed
             } else {
                 CourtsideDesignTokens.EuroLeagueOrange
             }
