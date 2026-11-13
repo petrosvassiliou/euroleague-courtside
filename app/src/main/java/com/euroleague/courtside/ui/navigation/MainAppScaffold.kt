@@ -408,6 +408,12 @@ fun MainAppScaffold(
                             },
                             onToggleFavoriteFilter = { filterOnlyFavorites = !filterOnlyFavorites },
                             onTriggerLiveRefresh = triggerLiveSync,
+                            onLiveScoreTick = {
+                                repository.simulateLiveRefresh()
+                                scope.launch {
+                                    offlineFirstRepository?.refreshLiveMatchdayTick()
+                                }
+                            },
                             onRefreshSelectedGameStats = { game ->
                                 scope.launch {
                                     offlineFirstRepository?.refreshSelectedGameLiveStats(game)

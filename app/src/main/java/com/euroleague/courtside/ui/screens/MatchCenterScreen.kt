@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -111,6 +112,7 @@ fun MatchCenterScreen(
     onSelectRound: (Int) -> Unit = {},
     onToggleFavoriteFilter: () -> Unit,
     onTriggerLiveRefresh: () -> Unit,
+    onLiveScoreTick: () -> Unit = onTriggerLiveRefresh,
     onRefreshSelectedGameStats: (EuroLeagueGame) -> Unit = {},
     onOpenTeamStats: (String) -> Unit
 ) {
@@ -120,20 +122,37 @@ fun MatchCenterScreen(
     val navigator = rememberListDetailPaneScaffoldNavigator<String>()
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var showRoundDropdown by remember { mutableStateOf(false) }
+    var filterOnlyLive by rememberSaveable { mutableStateOf(false) }
+
+    // Automatischer Echtzeit-Live-Score-Ticker (alle 15 Sekunden), solange der EuroLeague-Screen geöffnet ist
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(15_000L)
+            onLiveScoreTick()
+        }
+    }
+
+    val liveGames = remember(games) {
+        games.filter { it.status == GameStatus.LIVE }
+            .sortedWith(
+                compareByDescending<EuroLeagueGame> { it.isCloseGameFourthQuarter }
+                    .thenByDescending { it.currentQuarter }
+            )
+    }
 
     val availableRounds = remember(games) {
         val roundsFromGames = games.map { it.round }.distinct().sorted()
         if (roundsFromGames.size >= 10) roundsFromGames else (1..38).toList()
     }
 
-    val filteredGames = remember(games, selectedRound, filterOnlyFavorites, favoriteTeamIds, searchQuery) {
+    val filteredGames = remember(games, selectedRound, filterOnlyFavorites, filterOnlyLive, favoriteTeamIds, searchQuery) {
         val q = searchQuery.trim().lowercase()
-        val roundFiltered = if (q.isEmpty()) {
-            games.filter { it.round == selectedRound }
-        } else {
-            games
+        val basePool = when {
+            filterOnlyLive -> games.filter { it.status == GameStatus.LIVE }
+            q.isEmpty() -> games.filter { it.round == selectedRound }
+            else -> games
         }
-        val favAndSearchFiltered = roundFiltered.filter { game ->
+        val favAndSearchFiltered = basePool.filter { game ->
             val matchesFav = !filterOnlyFavorites ||
                     favoriteTeamIds.contains(game.homeTeam.id) ||
                     favoriteTeamIds.contains(game.awayTeam.id) ||
@@ -148,24 +167,39 @@ fun MatchCenterScreen(
                     game.awayTeam.city.lowercase().contains(q)
             matchesFav && matchesSearch
         }
-        if (q.isEmpty() && filterOnlyFavorites && favAndSearchFiltered.isEmpty()) {
-            roundFiltered
+        val resolvedList = if (q.isEmpty() && filterOnlyFavorites && favAndSearchFiltered.isEmpty()) {
+            basePool
         } else {
             favAndSearchFiltered
         }
+        // Sortiere laufende LIVE-Spiele immer ganz nach oben, damit Live-Scores sofort im Fokus stehen
+        resolvedList.sortedWith(
+            compareBy<EuroLeagueGame> {
+                when (it.status) {
+                    GameStatus.LIVE -> 0
+                    GameStatus.FINAL -> 1
+                    GameStatus.UPCOMING -> 2
+                }
+            }.thenByDescending { it.isCloseGameFourthQuarter }
+        )
     }
 
     var activeGameId by rememberSaveable {
-        mutableStateOf(filteredGames.firstOrNull()?.id ?: games.firstOrNull()?.id.orEmpty())
+        mutableStateOf(
+            liveGames.firstOrNull()?.id
+                ?: filteredGames.firstOrNull()?.id
+                ?: games.firstOrNull()?.id.orEmpty()
+        )
     }
 
-    androidx.compose.runtime.LaunchedEffect(selectedRound, filteredGames.size) {
+    androidx.compose.runtime.LaunchedEffect(selectedRound, filterOnlyLive, filteredGames.size) {
         if (filteredGames.isNotEmpty() && filteredGames.none { it.id == activeGameId }) {
             activeGameId = filteredGames.first().id
         }
     }
 
     val selectedGame = filteredGames.find { it.id == activeGameId }
+        ?: games.find { it.id == activeGameId }
         ?: filteredGames.firstOrNull()
         ?: games.firstOrNull()
 
@@ -189,11 +223,11 @@ fun MatchCenterScreen(
                         .fillMaxSize()
                         .padding(end = 12.dp)
                 ) {
-                    // Clean Header without "LIVE API..." clutter + Wide Search Box
+                    // Clean Header + Wide Search Box
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 12.dp),
+                            .padding(bottom = 10.dp),
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -257,31 +291,34 @@ fun MatchCenterScreen(
                         )
                     }
 
-                    // Round Switcher Bar (1..38) with Direct Dropdown Picker
+                    // Round Switcher Bar (1..38) + Live Filter & Favorites Filter Pills
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 12.dp),
+                            .padding(bottom = 10.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Surface(
                                 color = Color(0xFF1B1B21),
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier
                                     .border(1.dp, Color(0xFF2C2C34), RoundedCornerShape(8.dp))
-                                    .clickable { onPreviousRound() }
+                                    .clickable {
+                                        filterOnlyLive = false
+                                        onPreviousRound()
+                                    }
                                     .pointerHoverIcon(PointerIcon.Hand)
                             ) {
                                 Text(
                                     text = "◀",
                                     color = Color.White,
                                     fontSize = 12.sp,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                 )
                             }
 
@@ -296,7 +333,7 @@ fun MatchCenterScreen(
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                     ) {
                                         Text(
                                             text = "${strings.roundPrefix} $selectedRound",
@@ -323,6 +360,7 @@ fun MatchCenterScreen(
                                 ) {
                                     availableRounds.forEach { rnd ->
                                         val roundGames = games.filter { it.round == rnd }
+                                        val hasLiveInRound = roundGames.any { it.status == GameStatus.LIVE }
                                         val isPlayedRound = roundGames.any { it.status == GameStatus.FINAL }
                                         DropdownMenuItem(
                                             text = {
@@ -339,8 +377,16 @@ fun MatchCenterScreen(
                                                     )
                                                     Spacer(modifier = Modifier.width(12.dp))
                                                     Text(
-                                                        text = if (isPlayedRound) strings.statusFinal else strings.statusUpcoming,
-                                                        color = if (isPlayedRound) Color(0xFF00E676) else Color(0xFF8E8E93),
+                                                        text = when {
+                                                            hasLiveInRound -> "● ${strings.statusLive}"
+                                                            isPlayedRound -> strings.statusFinal
+                                                            else -> strings.statusUpcoming
+                                                        },
+                                                        color = when {
+                                                            hasLiveInRound -> Color(0xFFFF4500)
+                                                            isPlayedRound -> Color(0xFF00E676)
+                                                            else -> Color(0xFF8E8E93)
+                                                        },
                                                         fontSize = 10.sp,
                                                         fontWeight = FontWeight.Bold
                                                     )
@@ -348,6 +394,7 @@ fun MatchCenterScreen(
                                             },
                                             onClick = {
                                                 showRoundDropdown = false
+                                                filterOnlyLive = false
                                                 onSelectRound(rnd)
                                             }
                                         )
@@ -360,38 +407,91 @@ fun MatchCenterScreen(
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier
                                     .border(1.dp, Color(0xFF2C2C34), RoundedCornerShape(8.dp))
-                                    .clickable { onNextRound() }
+                                    .clickable {
+                                        filterOnlyLive = false
+                                        onNextRound()
+                                    }
                                     .pointerHoverIcon(PointerIcon.Hand)
                             ) {
                                 Text(
                                     text = "▶",
                                     color = Color.White,
                                     fontSize = 12.sp,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                 )
                             }
                         }
 
-                        Surface(
-                            color = if (filterOnlyFavorites) Color(0x33FF6600) else Color(0xFF1B1B21),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier
-                                .border(
-                                    1.dp,
-                                    if (filterOnlyFavorites) Color(0xFFFF6600) else Color(0xFF2C2C34),
-                                    RoundedCornerShape(8.dp)
-                                )
-                                .clickable { onToggleFavoriteFilter() }
-                                .pointerHoverIcon(PointerIcon.Hand)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text(
-                                text = if (filterOnlyFavorites) strings.filterFavorites else strings.filterAllGames,
-                                color = if (filterOnlyFavorites) Color(0xFFFF6600) else Color(0xFFD1D5DB),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                            )
+                            if (liveGames.isNotEmpty()) {
+                                Surface(
+                                    color = if (filterOnlyLive) Color(0x38FF4500) else Color(0xFF1B1B21),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .border(
+                                            1.dp,
+                                            if (filterOnlyLive) Color(0xFFFF4500) else Color(0x66FF4500),
+                                            RoundedCornerShape(8.dp)
+                                        )
+                                        .clickable { filterOnlyLive = !filterOnlyLive }
+                                        .pointerHoverIcon(PointerIcon.Hand)
+                                ) {
+                                    Text(
+                                        text = "${strings.filterLiveOnly} (${liveGames.size})",
+                                        color = if (filterOnlyLive) Color(0xFFFF5E00) else Color(0xFFFF8A50),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                color = if (filterOnlyFavorites) Color(0x33FF6600) else Color(0xFF1B1B21),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .border(
+                                        1.dp,
+                                        if (filterOnlyFavorites) Color(0xFFFF6600) else Color(0xFF2C2C34),
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable { onToggleFavoriteFilter() }
+                                    .pointerHoverIcon(PointerIcon.Hand)
+                            ) {
+                                Text(
+                                    text = if (filterOnlyFavorites) strings.filterFavorites else strings.filterAllGames,
+                                    color = if (filterOnlyFavorites) Color(0xFFFF6600) else Color(0xFFD1D5DB),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp)
+                                )
+                            }
                         }
+                    }
+
+                    // Live Scores Ticker Strip direkt auf dem EuroLeague-Screen
+                    if (liveGames.isNotEmpty()) {
+                        LiveScoresTickerStrip(
+                            liveGames = liveGames,
+                            selectedGameId = selectedGame?.id,
+                            onSelectLiveGame = { liveGame ->
+                                activeGameId = liveGame.id
+                                if (!filterOnlyLive && selectedRound != liveGame.round) {
+                                    onSelectRound(liveGame.round)
+                                }
+                                onRefreshSelectedGameStats(liveGame)
+                                scope.launch {
+                                    navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, liveGame.id)
+                                }
+                            },
+                            onManualLiveTick = onLiveScoreTick,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 10.dp)
+                        )
                     }
 
                     LazyColumn(
@@ -458,6 +558,185 @@ fun MatchCenterScreen(
     )
 }
 
+/**
+ * Kompakter Live-Scores-Ticker am oberen Rand des "EuroLeague"-Screens:
+ * Zeigt alle laufenden Partien in Echtzeit (Spielstand, Viertel, Restzeit, Crunch-Time-Status)
+ * sowie einen direkten "⚡ Live-Ticker"-Button zur sofortigen Spielstands-Aktualisierung.
+ */
+@Composable
+private fun LiveScoresTickerStrip(
+    liveGames: List<EuroLeagueGame>,
+    selectedGameId: String?,
+    onSelectLiveGame: (EuroLeagueGame) -> Unit,
+    onManualLiveTick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val strings = LocalCourtsideStrings.current
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xFF141419))
+            .border(1.dp, Color(0x55FF4500), RoundedCornerShape(14.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFF4500))
+                )
+                Text(
+                    text = strings.liveScoresHeader,
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 11.sp
+                )
+                Surface(
+                    color = Color(0x33FF4500),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        text = "${liveGames.size} ${strings.statusLive}",
+                        color = Color(0xFFFF6600),
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            Surface(
+                color = Color(0x28FF6600),
+                shape = RoundedCornerShape(6.dp),
+                modifier = Modifier
+                    .border(1.dp, Color(0x88FF6600), RoundedCornerShape(6.dp))
+                    .clickable { onManualLiveTick() }
+                    .pointerHoverIcon(PointerIcon.Hand)
+            ) {
+                Text(
+                    text = strings.liveTickButton,
+                    color = Color(0xFFFF6600),
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 10.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+            }
+        }
+
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            items(liveGames, key = { "ticker_${it.id}" }) { game ->
+                val isSelected = game.id == selectedGameId
+                Surface(
+                    color = if (isSelected) Color(0xFF221A18) else Color(0xFF1B1B22),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .width(156.dp)
+                        .border(
+                            width = if (isSelected) 1.5.dp else 1.dp,
+                            color = if (isSelected) Color(0xFFFF6600) else Color(0xFF2E2E38),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .clickable { onSelectLiveGame(game) }
+                        .pointerHoverIcon(PointerIcon.Hand)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "● Q${game.currentQuarter} ${game.remainingClock}",
+                                color = Color(0xFFFF5E00),
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 10.sp
+                            )
+                            Text(
+                                text = if (game.isCloseGameFourthQuarter) "🔥 Q4" else "R${game.round}",
+                                color = if (game.isCloseGameFourthQuarter) Color(0xFFFFB300) else Color(0xFF9CA3AF),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.sp
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                com.euroleague.courtside.ui.theme.CourtsideClubCrest(
+                                    team = game.homeTeam,
+                                    size = 16.dp
+                                )
+                                Text(
+                                    text = game.homeTeam.code,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Text(
+                                text = game.homeScore.toString(),
+                                color = if (game.homeScore >= game.awayScore) Color.White else Color(0xFF9CA3AF),
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 12.sp
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                com.euroleague.courtside.ui.theme.CourtsideClubCrest(
+                                    team = game.awayTeam,
+                                    size = 16.dp
+                                )
+                                Text(
+                                    text = game.awayTeam.code,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Text(
+                                text = game.awayScore.toString(),
+                                color = if (game.awayScore >= game.homeScore) Color.White else Color(0xFF9CA3AF),
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 private fun formatTipOffDateTime(epochMillis: Long): String {
     return runCatching {
         val formatter = java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy • HH:mm")
@@ -468,9 +747,9 @@ private fun formatTipOffDateTime(epochMillis: Long): String {
 
 /**
  * Broadcast-Spielkarte im Courtside UI Design:
- * - Oben links: `[ENDE | R10 • 05.11.2026]` bzw. `[GEPLANT | R11 • 12.11.2026 • 19:30]`
+ * - Oben links: `[LIVE | R10 • Q4 01:42]`, `[ENDE | R10 • 05.11.2026]` bzw. `[GEPLANT | R11 • 12.11.2026 • 19:30]`
  * - Mitte:
- *   - Bei gespielten/laufenden Spielen: Großes Endergebnis (`112 : 115`) + echte Viertelwerte (`Q1 Q2 Q3 Q4`)
+ *   - Bei gespielten/laufenden Spielen: Großes Ergebnis (`84 : 82`) + echte Viertelwerte (`Q1 Q2 Q3 Q4`) mit Hervorhebung des aktiven Live-Viertels
  *   - Bei geplanten Spielen (`UPCOMING`): Tip-Off Uhrzeit, Arena & aktuelle Saisonbilanzen (`S-N`) statt künstlicher `0 0 0 0` Werte!
  */
 @OptIn(ExperimentalFoundationApi::class)
@@ -491,6 +770,7 @@ private fun MatchSummaryCard(
     val borderColor = when {
         isSelected -> Color(0xFFFF6600)
         isHovered -> Color(0xFFFF9E40)
+        game.status == GameStatus.LIVE -> Color(0x88FF4500)
         else -> Color(0xFF26262E)
     }
 
@@ -505,7 +785,7 @@ private fun MatchSummaryCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .border(
-                    width = if (isSelected || isHovered) 1.5.dp else 1.dp,
+                    width = if (isSelected || isHovered || game.status == GameStatus.LIVE) 1.5.dp else 1.dp,
                     color = borderColor,
                     shape = RoundedCornerShape(18.dp)
                 )
@@ -527,7 +807,7 @@ private fun MatchSummaryCard(
                 )
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
-                // Top Row: Status + Round + Date Pill + Three Dots Menu Button
+                // Top Row: Status + Round + Date/Clock Pill + Crunch Time Badge + Three Dots Menu Button
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -535,44 +815,65 @@ private fun MatchSummaryCard(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .background(Color(0xFF121216), RoundedCornerShape(8.dp))
-                            .border(1.dp, Color(0x99FF5E00), RoundedCornerShape(8.dp))
-                            .padding(2.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        val statusBadgeText = when (game.status) {
-                            GameStatus.LIVE -> strings.statusLive
-                            GameStatus.FINAL -> strings.statusFinal
-                            GameStatus.UPCOMING -> strings.statusUpcoming
-                        }
-                        val badgeColor = when (game.status) {
-                            GameStatus.LIVE -> Color(0xFFFF4500)
-                            GameStatus.FINAL -> Color(0xFF00875A)
-                            GameStatus.UPCOMING -> Color(0xFF3A3A42)
-                        }
-                        Surface(
-                            color = badgeColor,
-                            shape = RoundedCornerShape(6.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .background(Color(0xFF121216), RoundedCornerShape(8.dp))
+                                .border(1.dp, Color(0x99FF5E00), RoundedCornerShape(8.dp))
+                                .padding(2.dp)
                         ) {
+                            val statusBadgeText = when (game.status) {
+                                GameStatus.LIVE -> "● ${strings.statusLive}"
+                                GameStatus.FINAL -> strings.statusFinal
+                                GameStatus.UPCOMING -> strings.statusUpcoming
+                            }
+                            val badgeColor = when (game.status) {
+                                GameStatus.LIVE -> Color(0xFFFF4500)
+                                GameStatus.FINAL -> Color(0xFF00875A)
+                                GameStatus.UPCOMING -> Color(0xFF3A3A42)
+                            }
+                            Surface(
+                                color = badgeColor,
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    text = statusBadgeText,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 10.sp,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                )
+                            }
+                            val metaDetail = when (game.status) {
+                                GameStatus.LIVE -> "R${game.round} • Q${game.currentQuarter} ${game.remainingClock}"
+                                else -> "R${game.round} • $formattedDate"
+                            }
                             Text(
-                                text = statusBadgeText,
-                                color = Color.White,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 10.sp,
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                text = metaDetail,
+                                color = Color(0xFFE5E5EA),
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                             )
                         }
-                        val metaDetail = when (game.status) {
-                            GameStatus.LIVE -> "R${game.round} • Q${game.currentQuarter} ${game.remainingClock}"
-                            else -> "R${game.round} • $formattedDate"
+
+                        if (game.isCloseGameFourthQuarter) {
+                            Surface(
+                                color = Color(0x33FFB300),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.border(1.dp, Color(0x88FFB300), RoundedCornerShape(6.dp))
+                            ) {
+                                Text(
+                                    text = strings.crunchTimeBadge,
+                                    color = Color(0xFFFFB300),
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 9.sp,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
                         }
-                        Text(
-                            text = metaDetail,
-                            color = Color(0xFFE5E5EA),
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                        )
                     }
 
                     IconButton(
@@ -669,10 +970,12 @@ private fun MatchSummaryCard(
                             if (hasQuarters) {
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Row(modifier = Modifier.fillMaxWidth()) {
-                                    listOf("Q1", "Q2", "Q3", "Q4").forEach { col ->
+                                    listOf("Q1", "Q2", "Q3", "Q4").forEachIndexed { idx, col ->
+                                        val isActiveQ = game.status == GameStatus.LIVE && (idx + 1) == game.currentQuarter
                                         Text(
                                             text = col,
-                                            color = Color(0xFF8E8E93),
+                                            color = if (isActiveQ) Color(0xFFFF6600) else Color(0xFF8E8E93),
+                                            fontWeight = if (isActiveQ) FontWeight.ExtraBold else FontWeight.Normal,
                                             fontSize = 10.sp,
                                             textAlign = TextAlign.Center,
                                             modifier = Modifier.weight(1f)
@@ -680,10 +983,12 @@ private fun MatchSummaryCard(
                                     }
                                 }
                                 Row(modifier = Modifier.fillMaxWidth()) {
-                                    listOf(q.q1Home, q.q2Home, q.q3Home, q.q4Home).forEach { v ->
+                                    listOf(q.q1Home, q.q2Home, q.q3Home, q.q4Home).forEachIndexed { idx, v ->
+                                        val isActiveQ = game.status == GameStatus.LIVE && (idx + 1) == game.currentQuarter
+                                        val isFutureLiveQ = game.status == GameStatus.LIVE && (idx + 1) > game.currentQuarter && v == 0
                                         Text(
-                                            text = v.toString(),
-                                            color = Color.White,
+                                            text = if (isFutureLiveQ) "–" else v.toString(),
+                                            color = if (isActiveQ) Color(0xFFFF6600) else Color.White,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 11.sp,
                                             textAlign = TextAlign.Center,
@@ -692,11 +997,13 @@ private fun MatchSummaryCard(
                                     }
                                 }
                                 Row(modifier = Modifier.fillMaxWidth()) {
-                                    listOf(q.q1Away, q.q2Away, q.q3Away, q.q4Away).forEach { v ->
+                                    listOf(q.q1Away, q.q2Away, q.q3Away, q.q4Away).forEachIndexed { idx, v ->
+                                        val isActiveQ = game.status == GameStatus.LIVE && (idx + 1) == game.currentQuarter
+                                        val isFutureLiveQ = game.status == GameStatus.LIVE && (idx + 1) > game.currentQuarter && v == 0
                                         Text(
-                                            text = v.toString(),
-                                            color = Color(0xFF9CA3AF),
-                                            fontWeight = FontWeight.Medium,
+                                            text = if (isFutureLiveQ) "–" else v.toString(),
+                                            color = if (isActiveQ) Color(0xFFFF6600) else Color(0xFF9CA3AF),
+                                            fontWeight = if (isActiveQ) FontWeight.Bold else FontWeight.Medium,
                                             fontSize = 11.sp,
                                             textAlign = TextAlign.Center,
                                             modifier = Modifier.weight(1f)
@@ -1004,20 +1311,29 @@ private fun DualToneScoreboardBanner(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Surface(
-                color = Color(0x77000000),
+                color = if (game.status == GameStatus.LIVE) Color(0xAA2A0E06) else Color(0x77000000),
                 shape = RoundedCornerShape(6.dp),
-                modifier = Modifier.clickable { onTriggerCloseGameAlert() }
+                modifier = Modifier
+                    .border(
+                        width = 1.dp,
+                        color = if (game.status == GameStatus.LIVE) Color(0x99FF5E00) else Color.Transparent,
+                        shape = RoundedCornerShape(6.dp)
+                    )
+                    .clickable { onTriggerCloseGameAlert() }
             ) {
                 val topPillText = when (game.status) {
-                    GameStatus.LIVE -> "${strings.statusLive} • R${game.round} • Q${game.currentQuarter} ${game.remainingClock}"
+                    GameStatus.LIVE -> {
+                        val base = "● ${strings.statusLive} • R${game.round} • Q${game.currentQuarter} ${game.remainingClock}"
+                        if (game.isCloseGameFourthQuarter) "$base • ${strings.crunchTimeBadge}" else base
+                    }
                     GameStatus.FINAL -> "${strings.statusFinal} • ${strings.roundPrefix.uppercase()} ${game.round} • ${formatTipOffDateTime(game.tipOffEpochMillis)}"
                     GameStatus.UPCOMING -> "${strings.statusUpcoming} • ${strings.roundPrefix.uppercase()} ${game.round} • ${formatTipOffDateTime(game.tipOffEpochMillis)}"
                 }
                 Text(
                     text = topPillText,
-                    color = Color(0xFFE5E5EA),
+                    color = if (game.status == GameStatus.LIVE) Color(0xFFFFB07C) else Color(0xFFE5E5EA),
                     fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                 )
             }

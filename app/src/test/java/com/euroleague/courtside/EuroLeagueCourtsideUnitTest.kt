@@ -197,5 +197,48 @@ class EuroLeagueCourtsideUnitTest {
             freshRepo.activeDestinationFlow.value
         )
     }
+
+    @Test
+    fun `EuroLeague screen always provides live games in active round and advances live scores clock and quarters`() {
+        val freshRepo = EuroLeagueMockRepository()
+        val teams = freshRepo.teams
+        val nonLiveGames = freshRepo.games.value.map { game ->
+            game.copy(id = "E2026_${game.gameCode}", round = 10, status = GameStatus.FINAL)
+        }
+
+        freshRepo.applyLiveDataset(
+            liveTeams = teams,
+            livePlayers = freshRepo.players,
+            liveGames = nonLiveGames,
+            activeRound = 10,
+            seasonCode = "E2026",
+            syncLabel = "E2026 • Round 10"
+        )
+
+        val liveGamesBefore = freshRepo.games.value.filter { it.status == GameStatus.LIVE }
+        assertTrue(liveGamesBefore.isNotEmpty())
+        val firstLiveBefore = liveGamesBefore.first()
+        val totalBefore = firstLiveBefore.homeScore + firstLiveBefore.awayScore
+
+        freshRepo.simulateLiveRefresh()
+
+        val firstLiveAfter = freshRepo.games.value.first { it.id == firstLiveBefore.id }
+        val totalAfter = firstLiveAfter.homeScore + firstLiveAfter.awayScore
+        assertTrue(totalAfter > totalBefore)
+        assertEquals(
+            firstLiveAfter.homeScore,
+            firstLiveAfter.quarters.q1Home + firstLiveAfter.quarters.q2Home +
+                firstLiveAfter.quarters.q3Home + firstLiveAfter.quarters.q4Home +
+                (firstLiveAfter.quarters.otHome ?: 0)
+        )
+
+        AppLanguage.entries.forEach { lang ->
+            val strings = CourtsideTranslations.forLanguage(lang)
+            assertTrue(strings.liveScoresHeader.isNotBlank())
+            assertTrue(strings.filterLiveOnly.isNotBlank())
+            assertTrue(strings.liveTickButton.isNotBlank())
+            assertTrue(strings.crunchTimeBadge.isNotBlank())
+        }
+    }
 }
 
