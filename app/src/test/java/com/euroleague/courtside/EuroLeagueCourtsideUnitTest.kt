@@ -296,7 +296,7 @@ class EuroLeagueCourtsideUnitTest {
         }
         val myTeamActiveGame = olyGames.firstOrNull { it.round == freshRepo.activeRoundFlow.value }
             ?: olyGames.firstOrNull { it.status == GameStatus.UPCOMING || it.status == GameStatus.LIVE }
-        assertNotNull(myTeamActiveGame)
+        assertTrue(myTeamActiveGame != null)
         assertEquals(11, myTeamActiveGame?.round)
     }
 }
