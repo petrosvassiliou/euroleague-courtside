@@ -240,5 +240,64 @@ class EuroLeagueCourtsideUnitTest {
             assertTrue(strings.crunchTimeBadge.isNotBlank())
         }
     }
+
+    @Test
+    fun `My Team resolves Round 11 instead of Round 38 even when API returns games in descending round order`() {
+        val freshRepo = EuroLeagueMockRepository()
+        assertEquals(11, freshRepo.activeRoundFlow.value)
+
+        val oly = freshRepo.findTeam("OLY") ?: freshRepo.teams.first()
+        val valencia = freshRepo.findTeam("PAM") ?: freshRepo.teams.last()
+        val dubai = freshRepo.findTeam("DUB") ?: freshRepo.teams[1]
+        val template = freshRepo.games.value.first()
+
+        // Simulate API response arriving in descending round order (Round 38 first, Round 11 middle, Round 1 last)
+        val descendingGames = listOf(
+            template.copy(
+                id = "E2026_380",
+                gameCode = 380,
+                round = 38,
+                homeTeam = oly,
+                awayTeam = valencia,
+                status = GameStatus.UPCOMING
+            ),
+            template.copy(
+                id = "E2026_107",
+                gameCode = 107,
+                round = 11,
+                homeTeam = oly,
+                awayTeam = dubai,
+                status = GameStatus.UPCOMING
+            ),
+            template.copy(
+                id = "E2026_1",
+                gameCode = 1,
+                round = 1,
+                homeTeam = valencia,
+                awayTeam = oly,
+                status = GameStatus.FINAL
+            )
+        )
+
+        freshRepo.applyLiveDataset(
+            liveTeams = freshRepo.teams,
+            livePlayers = freshRepo.players,
+            liveGames = descendingGames,
+            activeRound = 11,
+            seasonCode = "E2026",
+            syncLabel = "E2026 • Round 11"
+        )
+
+        val storedRounds = freshRepo.games.value.map { it.round }
+        assertEquals(listOf(1, 11, 38), storedRounds)
+
+        val olyGames = freshRepo.games.value.filter {
+            it.homeTeam.id == oly.id || it.awayTeam.id == oly.id
+        }
+        val myTeamActiveGame = olyGames.firstOrNull { it.round == freshRepo.activeRoundFlow.value }
+            ?: olyGames.firstOrNull { it.status == GameStatus.UPCOMING || it.status == GameStatus.LIVE }
+        assertTrue(myTeamActiveGame != null)
+        assertEquals(11, myTeamActiveGame?.round)
+    }
 }
 

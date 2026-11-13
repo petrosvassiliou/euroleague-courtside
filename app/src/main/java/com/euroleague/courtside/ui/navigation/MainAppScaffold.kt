@@ -354,6 +354,7 @@ fun MainAppScaffold(
                                 it.teamId == primaryTeam.id || it.teamId == primaryTeam.code
                             },
                             games = games,
+                            activeRound = activeRound,
                             syncStatus = syncStatus,
                             isTableTopPosture = isTableTopPosture,
                             onSelectPrimaryTeam = { teamId ->
@@ -968,6 +969,7 @@ private fun MyTeamDashboardScreen(
     favoriteTeamIds: Set<String>,
     roster: List<PlayerProfile>,
     games: List<EuroLeagueGame>,
+    activeRound: Int = 11,
     syncStatus: String = "LIVE API • E2026",
     isTableTopPosture: Boolean,
     onSelectPrimaryTeam: (String) -> Unit,
@@ -979,11 +981,18 @@ private fun MyTeamDashboardScreen(
         games.filter {
             it.homeTeam.id == primaryTeam.id || it.awayTeam.id == primaryTeam.id ||
                 it.homeTeam.code == primaryTeam.code || it.awayTeam.code == primaryTeam.code
-        }
+        }.sortedWith(
+            compareBy<EuroLeagueGame> { it.round }
+                .thenBy { it.tipOffEpochMillis }
+                .thenBy { it.gameCode }
+        )
     }
-    val nextGame = remember(teamGames, games) {
-        teamGames.firstOrNull { it.status == GameStatus.UPCOMING || it.status == GameStatus.LIVE }
+    val nextGame = remember(teamGames, games, activeRound) {
+        teamGames.firstOrNull { it.round == activeRound }
+            ?: teamGames.firstOrNull { it.round >= activeRound && (it.status == GameStatus.UPCOMING || it.status == GameStatus.LIVE) }
+            ?: teamGames.firstOrNull { it.status == GameStatus.UPCOMING || it.status == GameStatus.LIVE }
             ?: teamGames.lastOrNull()
+            ?: games.minByOrNull { it.round }
             ?: games.first()
     }
 
@@ -1065,8 +1074,25 @@ private fun MyTeamDashboardScreen(
                 }
             }
 
-            // Countdown Broadcast Card ("3 Tage 15 Stunden" statt reiner Stundenanzeige + beide Mannschaftsnamen komplett)
+            // Matchday / Countdown Broadcast Card für den aktuellen Spieltag (z. B. Round 11)
             val countdownLabel = strings.formatTipOffCountdown(remainingMillis)
+            val isLiveGame = nextGame.status == GameStatus.LIVE
+            val isPlayedFinal = nextGame.status == GameStatus.FINAL && (nextGame.homeScore > 0 || nextGame.awayScore > 0)
+            val pillBadgeText = when {
+                isLiveGame -> "● ${strings.statusLive}"
+                isPlayedFinal -> strings.statusFinal
+                else -> strings.nextTipOffBadge
+            }
+            val pillDetailText = when {
+                isLiveGame -> "Q${nextGame.currentQuarter.coerceAtMost(4)} • ${nextGame.remainingClock}"
+                isPlayedFinal -> "${nextGame.homeScore} : ${nextGame.awayScore}"
+                else -> countdownLabel
+            }
+            val pillBadgeColor = if (isLiveGame) {
+                CourtsideDesignTokens.NeonMissedRed
+            } else {
+                CourtsideDesignTokens.EuroLeagueOrange
+            }
 
             CourtsideGlassCard(isSelected = true, modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(14.dp)) {
@@ -1076,9 +1102,9 @@ private fun MyTeamDashboardScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         CourtsideLivePill(
-                            badgeText = strings.nextTipOffBadge,
-                            detailText = countdownLabel,
-                            badgeColor = CourtsideDesignTokens.EuroLeagueOrange
+                            badgeText = pillBadgeText,
+                            detailText = pillDetailText,
+                            badgeColor = pillBadgeColor
                         )
                         Text(
                             text = "${strings.roundPrefix} ${nextGame.round}",
@@ -1114,8 +1140,8 @@ private fun MyTeamDashboardScreen(
                             }
                         }
                         Text(
-                            text = "VS",
-                            color = CourtsideDesignTokens.EuroLeagueOrange,
+                            text = if (isLiveGame || isPlayedFinal) "${nextGame.homeScore} : ${nextGame.awayScore}" else "VS",
+                            color = pillBadgeColor,
                             fontWeight = FontWeight.ExtraBold,
                             modifier = Modifier.padding(horizontal = 8.dp)
                         )

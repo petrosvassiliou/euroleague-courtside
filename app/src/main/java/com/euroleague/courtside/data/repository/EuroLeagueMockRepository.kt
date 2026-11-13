@@ -197,7 +197,7 @@ class EuroLeagueMockRepository @Inject constructor() {
     private val _games = MutableStateFlow(buildInitialGames(_teams.value))
     val games: StateFlow<List<EuroLeagueGame>> = _games.asStateFlow()
 
-    private val _activeRound = MutableStateFlow(8)
+    private val _activeRound = MutableStateFlow(11)
     val activeRoundFlow: StateFlow<Int> = _activeRound.asStateFlow()
 
     private val _seasonCode = MutableStateFlow("E2026")
@@ -260,29 +260,35 @@ class EuroLeagueMockRepository @Inject constructor() {
     }
 
     /**
-     * Stellt sicher, dass im aktuellen Spieltag (`targetRound`) stets Live-Spiele für die
-     * Live-Scores-Ansicht unter "EuroLeague" bereitstehen:
+     * Stellt sicher, dass alle Spiele chronologisch nach Spieltag (`round` 1..38) sortiert sind
+     * und im aktuellen Spieltag (`targetRound`) stets Live-Spiele für die Live-Scores-Ansicht
+     * bereitstehen:
      * - Wenn die API bereits laufende Live-Spiele (`GameStatus.LIVE`) liefert, werden diese 1:1 übernommen.
      * - Wenn gerade kein echtes Spiel zeitgleich läuft, werden bis zu 3 Top-Partien des aktuellen
      *   Spieltags (inkl. Lieblingsteam) im Live-Ticker-Modus (`Q4`, `Q3`, `Q2`) bereitgestellt bzw.
-     *   bereits laufende Live-Stände beibehalten.
+     *   bereits laufende Live-Stände dieses Spieltags beibehalten.
      */
     internal fun ensureLiveScoresInGames(
         incomingGames: List<EuroLeagueGame>,
         targetRound: Int
     ): List<EuroLeagueGame> {
         if (incomingGames.isEmpty()) return incomingGames
-        if (incomingGames.any { it.status == GameStatus.LIVE }) {
-            return incomingGames
+        val sortedIncoming = incomingGames.sortedWith(
+            compareBy<EuroLeagueGame> { it.round }
+                .thenBy { it.tipOffEpochMillis }
+                .thenBy { it.gameCode }
+        )
+        if (sortedIncoming.any { it.status == GameStatus.LIVE }) {
+            return sortedIncoming
         }
 
         val existingLiveById = _games.value
-            .filter { it.status == GameStatus.LIVE }
+            .filter { it.status == GameStatus.LIVE && it.round == targetRound }
             .associateBy { it.id }
 
-        val preservedCount = incomingGames.count { existingLiveById.containsKey(it.id) }
+        val preservedCount = sortedIncoming.count { existingLiveById.containsKey(it.id) }
         if (preservedCount > 0) {
-            return incomingGames.map { game ->
+            return sortedIncoming.map { game ->
                 val prevLive = existingLiveById[game.id]
                 if (prevLive != null) {
                     game.copy(
@@ -302,8 +308,8 @@ class EuroLeagueMockRepository @Inject constructor() {
             }
         }
 
-        val roundGames = incomingGames.filter { it.round == targetRound }
-        if (roundGames.isEmpty()) return incomingGames
+        val roundGames = sortedIncoming.filter { it.round == targetRound }
+        if (roundGames.isEmpty()) return sortedIncoming
 
         val primaryId = _selectedTeamId.value
         val favIds = _favoriteTeamIds.value
@@ -324,7 +330,7 @@ class EuroLeagueMockRepository @Inject constructor() {
             .mapIndexed { index, g -> g.id to index }
             .toMap()
 
-        return incomingGames.map { game ->
+        return sortedIncoming.map { game ->
             val slot = liveSlotByGameId[game.id] ?: return@map game
             val q = game.quarters
             val q1H = q.q1Home.takeIf { it > 0 } ?: 22
@@ -931,54 +937,54 @@ class EuroLeagueMockRepository @Inject constructor() {
 
             return listOf(
                 EuroLeagueGame(
-                    id = "g_live_1", round = 8, homeTeam = bay, awayTeam = pao,
+                    id = "g_live_1", round = 11, homeTeam = bay, awayTeam = pao,
                     tipOffEpochMillis = now.minus(105, ChronoUnit.MINUTES).toEpochMilli(),
                     status = GameStatus.LIVE, currentQuarter = 4, remainingClock = "01:42",
                     homeScore = 84, awayScore = 82,
                     quarters = QuarterScores(22, 20, 21, 24, 19, 18, 22, 20),
                     headToHeadHomeWins = 6, headToHeadAwayWins = 9,
                     boxscoreHome = bayBox, boxscoreAway = paoBox, shots = sampleShots,
-                    gameCode = 65, seasonCode = "E2026"
+                    gameCode = 105, seasonCode = "E2026"
                 ),
                 EuroLeagueGame(
-                    id = "g_live_2", round = 8, homeTeam = rmb, awayTeam = oly,
+                    id = "g_live_2", round = 11, homeTeam = rmb, awayTeam = oly,
                     tipOffEpochMillis = now.minus(95, ChronoUnit.MINUTES).toEpochMilli(),
                     status = GameStatus.LIVE, currentQuarter = 4, remainingClock = "02:18",
                     homeScore = 79, awayScore = 77,
                     quarters = QuarterScores(20, 19, 22, 21, 18, 20, 19, 17),
                     headToHeadHomeWins = 21, headToHeadAwayWins = 17,
                     boxscoreHome = paoBox, boxscoreAway = bayBox, shots = sampleShots,
-                    gameCode = 68, seasonCode = "E2026"
+                    gameCode = 107, seasonCode = "E2026"
                 ),
                 EuroLeagueGame(
-                    id = "g_final_1", round = 8, homeTeam = fbb, awayTeam = bar,
+                    id = "g_final_1", round = 11, homeTeam = fbb, awayTeam = bar,
                     tipOffEpochMillis = now.minus(5, ChronoUnit.HOURS).toEpochMilli(),
                     status = GameStatus.FINAL, currentQuarter = 5, remainingClock = "00:00",
                     homeScore = 96, awayScore = 92,
                     quarters = QuarterScores(24, 21, 19, 22, 20, 18, 21, 23, 12, 8),
                     headToHeadHomeWins = 7, headToHeadAwayWins = 5,
                     boxscoreHome = bayBox, boxscoreAway = paoBox, shots = sampleShots,
-                    gameCode = 70, seasonCode = "E2026"
+                    gameCode = 110, seasonCode = "E2026"
                 ),
                 EuroLeagueGame(
-                    id = "g_upcoming_1", round = 9, homeTeam = bay, awayTeam = bar,
+                    id = "g_upcoming_1", round = 12, homeTeam = bay, awayTeam = bar,
                     tipOffEpochMillis = now.plus(26, ChronoUnit.HOURS).toEpochMilli(),
                     status = GameStatus.UPCOMING, currentQuarter = 1, remainingClock = "10:00",
                     homeScore = 0, awayScore = 0,
                     quarters = QuarterScores(0, 0, 0, 0, 0, 0, 0, 0),
                     headToHeadHomeWins = 5, headToHeadAwayWins = 11,
                     boxscoreHome = bayBox, boxscoreAway = paoBox, shots = sampleShots,
-                    gameCode = 75, seasonCode = "E2026"
+                    gameCode = 112, seasonCode = "E2026"
                 ),
                 EuroLeagueGame(
-                    id = "g_upcoming_2", round = 9, homeTeam = pao, awayTeam = zal,
+                    id = "g_upcoming_2", round = 12, homeTeam = pao, awayTeam = zal,
                     tipOffEpochMillis = now.plus(50, ChronoUnit.HOURS).toEpochMilli(),
                     status = GameStatus.UPCOMING, currentQuarter = 1, remainingClock = "10:00",
                     homeScore = 0, awayScore = 0,
                     quarters = QuarterScores(0, 0, 0, 0, 0, 0, 0, 0),
                     headToHeadHomeWins = 18, headToHeadAwayWins = 8,
                     boxscoreHome = paoBox, boxscoreAway = bayBox, shots = sampleShots,
-                    gameCode = 78, seasonCode = "E2026"
+                    gameCode = 119, seasonCode = "E2026"
                 )
             )
         }
