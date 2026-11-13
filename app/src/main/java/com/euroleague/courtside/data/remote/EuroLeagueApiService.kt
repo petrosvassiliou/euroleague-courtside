@@ -292,6 +292,30 @@ data class EuroLeagueShotRowDto(
     @SerialName("MINUTE") val minute: Int = 1
 )
 
+@Serializable
+data class EuroLeagueLiveHeaderDto(
+    @SerialName("Live") val live: Boolean = false,
+    @SerialName("TeamA") val teamA: String = "",
+    @SerialName("TeamB") val teamB: String = "",
+    @SerialName("CodeTeamA") val codeTeamA: String = "",
+    @SerialName("CodeTeamB") val codeTeamB: String = "",
+    @SerialName("ScoreA") val scoreA: String = "0",
+    @SerialName("ScoreB") val scoreB: String = "0",
+    @SerialName("Quarter") val quarter: String = "1",
+    @SerialName("RemainingPartialTime") val remainingPartialTime: String = "",
+    @SerialName("GameTime") val gameTime: String = "",
+    @SerialName("ScoreQuarter1A") val scoreQuarter1A: Int = 0,
+    @SerialName("ScoreQuarter2A") val scoreQuarter2A: Int = 0,
+    @SerialName("ScoreQuarter3A") val scoreQuarter3A: Int = 0,
+    @SerialName("ScoreQuarter4A") val scoreQuarter4A: Int = 0,
+    @SerialName("ScoreExtra1A") val scoreExtra1A: Int = 0,
+    @SerialName("ScoreQuarter1B") val scoreQuarter1B: Int = 0,
+    @SerialName("ScoreQuarter2B") val scoreQuarter2B: Int = 0,
+    @SerialName("ScoreQuarter3B") val scoreQuarter3B: Int = 0,
+    @SerialName("ScoreQuarter4B") val scoreQuarter4B: Int = 0,
+    @SerialName("ScoreExtra1B") val scoreExtra1B: Int = 0
+)
+
 // --- BUNDLED SNAPSHOT DTOs (assets/euroleague_live_snapshot.json) ---
 
 @Serializable
@@ -483,6 +507,11 @@ interface EuroLeagueApiService {
     suspend fun fetchLiveGameShotPoints(
         @Url fullUrl: String
     ): EuroLeagueLivePointsDto
+
+    @GET
+    suspend fun fetchLiveGameHeader(
+        @Url fullUrl: String
+    ): EuroLeagueLiveHeaderDto
 }
 
 /**
@@ -954,17 +983,22 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
 
     /**
      * Schneller, Rate-Limit-schonender Live-Ticker (1 Request für aktuelle Spielstände/Viertel +
-     * Live-Boxscore-Update für laufende Partien), damit die App im Dauerbetrieb niemals HTTP 429 auslöst.
+     * `live.euroleague.net/api/Header` & Live-Boxscore-Update für laufende Partien), damit die App
+     * im Dauerbetrieb niemals HTTP 429 auslöst und gleichzeitig Live-Scores in Echtzeit aktualisiert.
      */
     suspend fun refreshLiveMatchdayTick(): Result<Unit> =
         withContext(ioDispatcher) {
             runCatching {
                 val seasonCode = fallbackMockRepository.seasonCodeFlow.value
                 val allGamesDto = apiService.fetchSeasonGames(seasonCode = seasonCode, round = null, limit = 400).data
-                if (allGamesDto.isEmpty()) return@runCatching
+                if (allGamesDto.isEmpty()) {
+                    fallbackMockRepository.simulateLiveRefresh()
+                    return@runCatching
+                }
 
                 val teamById = fallbackMockRepository.teams.associateBy { it.id }
                 val cachedById = fallbackMockRepository.games.value.associateBy { it.id }
+                var hasRemoteLiveGame = false
 
                 val updatedGames = allGamesDto.mapNotNull { g ->
                     val homeTeam = teamById[g.local.club.code] ?: return@mapNotNull null
@@ -973,6 +1007,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                     val cached = cachedById[gameId]
                     val statusRaw = (g.gameStatus ?: "").lowercase()
                     val isLive = "live" in statusRaw || "playing" in statusRaw || "progress" in statusRaw
+                    if (isLive) hasRemoteLiveGame = true
                     val justFinished = g.played && cached?.status != GameStatus.FINAL
 
                     val (boxH, boxA) = if (isLive || justFinished) {
@@ -986,7 +1021,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         cached?.shots ?: emptyList()
                     }
 
-                    mapRemoteGameToDomain(
+                    val mapped = mapRemoteGameToDomain(
                         g = g,
                         seasonCode = seasonCode,
                         homeTeam = homeTeam,
@@ -995,6 +1030,13 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         boxAway = boxA.ifEmpty { cached?.boxscoreAway ?: emptyList() },
                         shots = shots.ifEmpty { cached?.shots ?: emptyList() }
                     )
+
+                    if (isLive) {
+                        val header = fetchGameLiveHeader(seasonCode, g.gameCode)
+                        if (header != null) applyLiveHeaderToGame(mapped, header) else mapped
+                    } else {
+                        mapped
+                    }
                 }
 
                 if (updatedGames.isNotEmpty()) {
@@ -1006,7 +1048,12 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         seasonCode = seasonCode,
                         syncLabel = "$seasonCode • Round ${fallbackMockRepository.activeRoundFlow.value}"
                     )
+                    if (!hasRemoteLiveGame) {
+                        fallbackMockRepository.simulateLiveRefresh()
+                    }
                 }
+            }.onFailure {
+                fallbackMockRepository.simulateLiveRefresh()
             }
         }
 
@@ -1034,7 +1081,8 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
         }
 
     /**
-     * Lädt Live-Boxscore und echte Shot-Chart-Koordinaten für ein ausgewähltes Spiel nach.
+     * Lädt Live-Boxscore, echte Shot-Chart-Koordinaten und (falls live) den aktuellen
+     * `live.euroleague.net/api/Header` Spielstand für ein ausgewähltes Spiel nach.
      */
     suspend fun refreshSelectedGameLiveStats(game: EuroLeagueGame): Result<EuroLeagueGame> =
         withContext(ioDispatcher) {
@@ -1042,6 +1090,9 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                 if (game.status == GameStatus.UPCOMING) {
                     return@runCatching game
                 }
+                val liveHeader = if (game.status == GameStatus.LIVE) {
+                    fetchGameLiveHeader(game.seasonCode, game.gameCode)
+                } else null
                 val (boxHome, boxAway) = fetchGameBoxscores(
                     seasonCode = game.seasonCode,
                     gameCode = game.gameCode,
@@ -1075,15 +1126,67 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         )
                     }
                 }
-                val updated = game.copy(
+                val baseUpdated = game.copy(
                     boxscoreHome = resolvedHome,
                     boxscoreAway = resolvedAway,
                     shots = resolvedShots
                 )
+                val updated = if (liveHeader != null && liveHeader.live) {
+                    applyLiveHeaderToGame(baseUpdated, liveHeader)
+                } else {
+                    baseUpdated
+                }
                 fallbackMockRepository.updateSingleGameDetails(updated)
                 updated
             }
         }
+
+    private suspend fun fetchGameLiveHeader(
+        seasonCode: String,
+        gameCode: Int
+    ): EuroLeagueLiveHeaderDto? = runCatching {
+        val url = "https://live.euroleague.net/api/Header?gamecode=$gameCode&seasoncode=$seasonCode"
+        apiService.fetchLiveGameHeader(url)
+    }.getOrNull()
+
+    internal fun applyLiveHeaderToGame(
+        game: EuroLeagueGame,
+        header: EuroLeagueLiveHeaderDto
+    ): EuroLeagueGame {
+        val parsedScoreA = header.scoreA.trim().toIntOrNull()
+        val parsedScoreB = header.scoreB.trim().toIntOrNull()
+        val qRaw = header.quarter.trim().uppercase()
+        val parsedQuarter = when {
+            "OT" in qRaw || "E" in qRaw -> 5
+            else -> qRaw.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 5) ?: game.currentQuarter
+        }
+        val clockClean = header.remainingPartialTime.trim().ifEmpty { game.remainingClock }
+        val hasHeaderPartials = (header.scoreQuarter1A + header.scoreQuarter1B + header.scoreQuarter2A + header.scoreQuarter2B) > 0
+        val updatedQuarters = if (hasHeaderPartials) {
+            QuarterScores(
+                q1Home = header.scoreQuarter1A,
+                q1Away = header.scoreQuarter1B,
+                q2Home = header.scoreQuarter2A,
+                q2Away = header.scoreQuarter2B,
+                q3Home = header.scoreQuarter3A,
+                q3Away = header.scoreQuarter3B,
+                q4Home = header.scoreQuarter4A,
+                q4Away = header.scoreQuarter4B,
+                otHome = header.scoreExtra1A.takeIf { it > 0 },
+                otAway = header.scoreExtra1B.takeIf { it > 0 }
+            )
+        } else {
+            game.quarters
+        }
+        return game.copy(
+            status = if (header.live) GameStatus.LIVE else game.status,
+            currentQuarter = parsedQuarter,
+            remainingClock = clockClean,
+            homeScore = parsedScoreA ?: game.homeScore,
+            awayScore = parsedScoreB ?: game.awayScore,
+            quarters = updatedQuarters
+        )
+    }
 
     // --- HELPER METHODS ---
 
