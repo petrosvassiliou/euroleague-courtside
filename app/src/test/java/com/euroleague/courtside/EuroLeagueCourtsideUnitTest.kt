@@ -219,7 +219,7 @@ class EuroLeagueCourtsideUnitTest {
             status = GameStatus.FINAL,
             currentQuarter = 4,
             remainingClock = "00:00",
-            quarters = com.euroleague.courtside.data.repository.QuarterScore(
+            quarters = com.euroleague.courtside.data.repository.QuarterScores(
                 q1Home = 25, q1Away = 18,
                 q2Home = 32, q2Away = 25,
                 q3Home = 31, q3Away = 13,
@@ -237,7 +237,7 @@ class EuroLeagueCourtsideUnitTest {
             status = GameStatus.LIVE,
             currentQuarter = 4,
             remainingClock = "00:15",
-            quarters = com.euroleague.courtside.data.repository.QuarterScore(
+            quarters = com.euroleague.courtside.data.repository.QuarterScores(
                 q1Home = 17, q1Away = 17,
                 q2Home = 16, q2Away = 15,
                 q3Home = 24, q3Away = 11,
