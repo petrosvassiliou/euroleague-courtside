@@ -98,6 +98,9 @@ import androidx.window.layout.FoldingFeature
 import androidx.window.layout.WindowInfoTracker
 import androidx.compose.runtime.CompositionLocalProvider
 import com.euroleague.courtside.data.local.CourtsidePreferencesDataStore
+import com.euroleague.courtside.update.AppUpdateInfo
+import com.euroleague.courtside.update.CourtsideAppUpdateManager
+import com.euroleague.courtside.update.UpdateStatus
 import com.euroleague.courtside.data.remote.EuroLeagueOfflineFirstRepository
 import com.euroleague.courtside.data.repository.EuroLeagueGame
 import com.euroleague.courtside.data.repository.EuroLeagueMockRepository
@@ -245,6 +248,69 @@ fun MainAppScaffold(
 
     var isLiveSyncing by remember { mutableStateOf(false) }
     var syncFeedbackBanner by remember { mutableStateOf<LiveSyncFeedbackState?>(null) }
+
+    val updateInfo by CourtsideAppUpdateManager.updateState.collectAsState()
+    val dismissedUpdateVersion by CourtsideAppUpdateManager.dismissedVersionTag.collectAsState()
+    var autoUpdateCheckEnabled by rememberSaveable {
+        mutableStateOf(preferencesDataStore?.getSavedAutoUpdateEnabledImmediate() ?: true)
+    }
+
+    val onToggleAutoUpdateCheck: (Boolean) -> Unit = { enabled ->
+        autoUpdateCheckEnabled = enabled
+        preferencesDataStore?.saveAutoUpdateEnabledImmediate(enabled)
+        scope.launch {
+            preferencesDataStore?.setAutoUpdateCheckEnabled(enabled)
+            if (enabled) {
+                CourtsideAppUpdateManager.checkForUpdates(isManual = false)
+            }
+        }
+    }
+
+    val triggerManualUpdateCheck: () -> Unit = {
+        scope.launch {
+            syncFeedbackBanner = LiveSyncFeedbackState(
+                isRunning = true,
+                isError = false,
+                title = strings.checkingUpdatesLabel,
+                detail = "${strings.playProtectBadge} • v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
+            )
+            val info = CourtsideAppUpdateManager.checkForUpdates(isManual = true)
+            syncFeedbackBanner = when (info.status) {
+                UpdateStatus.UPDATE_AVAILABLE -> LiveSyncFeedbackState(
+                    isRunning = false,
+                    isError = false,
+                    title = "${strings.updateAvailablePrefix} v${info.latestVersionName}",
+                    detail = "${info.releaseTitle} • ${strings.playProtectBadge}"
+                )
+                UpdateStatus.UP_TO_DATE -> LiveSyncFeedbackState(
+                    isRunning = false,
+                    isError = false,
+                    title = "${strings.upToDateLabel} (v${BuildConfig.VERSION_NAME})",
+                    detail = "${strings.playProtectBadge} • Build ${BuildConfig.VERSION_CODE} (${info.lastCheckedTime})"
+                )
+                else -> LiveSyncFeedbackState(
+                    isRunning = false,
+                    isError = true,
+                    title = "⚠️ ${info.errorMessage ?: "GitHub Releases unreachable"}",
+                    detail = "v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
+                )
+            }
+            delay(4_500L)
+            if (!isLiveSyncing) {
+                syncFeedbackBanner = null
+            }
+        }
+    }
+
+    // Automatischer Google Play Protect-konformer Update-Check beim App-Start & alle 6 Stunden
+    LaunchedEffect(autoUpdateCheckEnabled) {
+        if (autoUpdateCheckEnabled) {
+            while (true) {
+                CourtsideAppUpdateManager.checkForUpdates(isManual = false)
+                delay(6 * 60 * 60 * 1_000L)
+            }
+        }
+    }
 
     val triggerLiveSync: () -> Unit = {
         if (!isLiveSyncing) {
@@ -462,8 +528,112 @@ fun MainAppScaffold(
                             games = games,
                             activeLanguage = activeLanguage,
                             onSelectLanguage = onChangeLanguage,
-                            notificationManager = notificationManager
+                            notificationManager = notificationManager,
+                            updateInfo = updateInfo,
+                            autoUpdateCheckEnabled = autoUpdateCheckEnabled,
+                            onToggleAutoUpdateCheck = onToggleAutoUpdateCheck,
+                            onCheckForUpdatesManual = triggerManualUpdateCheck,
+                            onInstallUpdate = {
+                                CourtsideAppUpdateManager.launchPlayProtectCompliantUpdate(context, updateInfo)
+                            },
+                            onOpenReleaseNotes = {
+                                CourtsideAppUpdateManager.openReleaseNotesInBrowser(context, updateInfo)
+                            }
                         )
+                    }
+
+                    // Google Play Protect-konformer Auto-Update-Banner bei verfügbarer neuer Version
+                    val showUpdateBanner = updateInfo.status == UpdateStatus.UPDATE_AVAILABLE &&
+                        dismissedUpdateVersion != CourtsideAppUpdateManager.normalizeVersionName(updateInfo.latestVersionName)
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = showUpdateBanner,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 14.dp, end = 16.dp, start = 16.dp)
+                    ) {
+                        Surface(
+                            color = Color(0xF215151C),
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .widthIn(max = 460.dp)
+                                .border(1.5.dp, CourtsideDesignTokens.NeonMadeGreen, RoundedCornerShape(14.dp))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${strings.updateAvailablePrefix} v${updateInfo.latestVersionName}",
+                                        color = CourtsideDesignTokens.NeonMadeGreen,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 13.sp
+                                    )
+                                    Surface(
+                                        color = Color(0x2600E676),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text(
+                                            text = strings.playProtectBadge,
+                                            color = CourtsideDesignTokens.NeonMadeGreen,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 10.sp,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = "v${BuildConfig.VERSION_NAME} → v${updateInfo.latestVersionName} • ${updateInfo.releaseTitle}",
+                                    color = Color(0xFFE5E7EB),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            CourtsideAppUpdateManager.launchPlayProtectCompliantUpdate(context, updateInfo)
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = CourtsideDesignTokens.NeonMadeGreen),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.weight(1f).pointerHoverIcon(PointerIcon.Hand)
+                                    ) {
+                                        Text(
+                                            text = strings.downloadInstallUpdateButton,
+                                            color = Color.Black,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+                                    Surface(
+                                        color = Color(0xFF22222A),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier
+                                            .border(1.dp, Color(0xFF3A3A44), RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                CourtsideAppUpdateManager.dismissUpdateBanner(updateInfo.latestVersionName)
+                                            }
+                                            .pointerHoverIcon(PointerIcon.Hand)
+                                    ) {
+                                        Text(
+                                            text = strings.laterButton,
+                                            color = Color(0xFFD1D5DB),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     // Sichtbarer Live-Sync-Status-Hinweis unten links im Arbeitsbereich (neben dem Live-Sync-Button)
@@ -520,18 +690,35 @@ fun MainAppScaffold(
                         }
                     }
 
-                    // Permanente Versionsnummer unten rechts
+                    // Permanente Versionsnummer unten rechts (Klick prüft manuell auf Updates)
+                    val hasNewUpdate = updateInfo.status == UpdateStatus.UPDATE_AVAILABLE
                     Surface(
-                        color = Color(0xCC121216),
+                        color = if (hasNewUpdate) Color(0xD9102A1E) else Color(0xCC121216),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .padding(end = 12.dp, bottom = 8.dp)
-                            .border(1.dp, Color(0x38FF6600), RoundedCornerShape(8.dp))
+                            .border(
+                                1.dp,
+                                if (hasNewUpdate) CourtsideDesignTokens.NeonMadeGreen else Color(0x38FF6600),
+                                RoundedCornerShape(8.dp)
+                            )
+                            .clickable {
+                                if (hasNewUpdate) {
+                                    CourtsideAppUpdateManager.launchPlayProtectCompliantUpdate(context, updateInfo)
+                                } else {
+                                    triggerManualUpdateCheck()
+                                }
+                            }
+                            .pointerHoverIcon(PointerIcon.Hand)
                     ) {
                         Text(
-                            text = "v${BuildConfig.VERSION_NAME}",
-                            color = Color(0xFFD1D5DB),
+                            text = if (hasNewUpdate) {
+                                "🚀 v${BuildConfig.VERSION_NAME} → v${updateInfo.latestVersionName}"
+                            } else {
+                                "v${BuildConfig.VERSION_NAME}"
+                            },
+                            color = if (hasNewUpdate) CourtsideDesignTokens.NeonMadeGreen else Color(0xFFD1D5DB),
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.sp,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -2163,7 +2350,13 @@ private fun SettingsAndNotificationTestScreen(
     games: List<EuroLeagueGame>,
     activeLanguage: AppLanguage,
     onSelectLanguage: (AppLanguage) -> Unit,
-    notificationManager: EuroLeagueNotificationManager
+    notificationManager: EuroLeagueNotificationManager,
+    updateInfo: AppUpdateInfo = AppUpdateInfo(),
+    autoUpdateCheckEnabled: Boolean = true,
+    onToggleAutoUpdateCheck: (Boolean) -> Unit = {},
+    onCheckForUpdatesManual: () -> Unit = {},
+    onInstallUpdate: () -> Unit = {},
+    onOpenReleaseNotes: () -> Unit = {}
 ) {
     val strings = LocalCourtsideStrings.current
     var tipOffEnabled by rememberSaveable { mutableStateOf(true) }
@@ -2305,6 +2498,203 @@ private fun SettingsAndNotificationTestScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // Google Play Protect-Compliant App Updates & Manual Update Checker Card
+            val hasUpdateAvailable = updateInfo.status == UpdateStatus.UPDATE_AVAILABLE
+            val isCheckingUpdates = updateInfo.status == UpdateStatus.CHECKING
+            CourtsideGlassCard(
+                isSelected = true,
+                glowColor = if (hasUpdateAvailable) CourtsideDesignTokens.NeonMadeGreen else CourtsideDesignTokens.EuroLeagueOrange,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = strings.updateSectionTitle,
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 15.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Surface(
+                            color = Color(0x2600E676),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.border(1.dp, Color(0x6600E676), RoundedCornerShape(8.dp))
+                        ) {
+                            Text(
+                                text = strings.playProtectBadge,
+                                color = CourtsideDesignTokens.NeonMadeGreen,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    // Auto-Update Check Switch
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF15151B))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text(
+                                text = strings.autoUpdateToggleTitle,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                text = strings.autoUpdateToggleSubtitle,
+                                color = CourtsideDesignTokens.MutedText,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = autoUpdateCheckEnabled,
+                            onCheckedChange = onToggleAutoUpdateCheck,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.Black,
+                                checkedTrackColor = CourtsideDesignTokens.NeonMadeGreen
+                            ),
+                            modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
+                        )
+                    }
+
+                    // Live Update Status Box
+                    val statusHeadline = when (updateInfo.status) {
+                        UpdateStatus.CHECKING -> strings.checkingUpdatesLabel
+                        UpdateStatus.UPDATE_AVAILABLE -> "${strings.updateAvailablePrefix} v${updateInfo.latestVersionName}" +
+                            (updateInfo.latestVersionCode?.let { " (Build $it)" } ?: "")
+                        UpdateStatus.ERROR -> "⚠️ ${updateInfo.errorMessage ?: "GitHub Releases unreachable"}"
+                        else -> "${strings.upToDateLabel} (v${BuildConfig.VERSION_NAME} • Build ${BuildConfig.VERSION_CODE})"
+                    }
+                    val statusColor = when (updateInfo.status) {
+                        UpdateStatus.CHECKING -> CourtsideDesignTokens.EuroLeagueOrange
+                        UpdateStatus.UPDATE_AVAILABLE -> CourtsideDesignTokens.NeonMadeGreen
+                        UpdateStatus.ERROR -> CourtsideDesignTokens.NeonMissedRed
+                        else -> CourtsideDesignTokens.NeonMadeGreen
+                    }
+
+                    Surface(
+                        color = Color(0xFF141419),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, statusColor.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (isCheckingUpdates) {
+                                    CircularProgressIndicator(
+                                        color = CourtsideDesignTokens.EuroLeagueOrange,
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                                Text(
+                                    text = statusHeadline,
+                                    color = statusColor,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            val subText = buildString {
+                                if (updateInfo.releaseTitle.isNotBlank()) {
+                                    append(updateInfo.releaseTitle)
+                                } else {
+                                    append("v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})")
+                                }
+                                if (updateInfo.lastCheckedTime.isNotBlank()) {
+                                    append(" • ${updateInfo.lastCheckedTime}")
+                                }
+                                if (!updateInfo.sha256Digest.isNullOrBlank()) {
+                                    append(" • SHA-256: ${updateInfo.sha256Digest.take(12)}…")
+                                }
+                            }
+                            Text(
+                                text = subText,
+                                color = Color(0xFFD1D5DB),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    // Manual Check for Updates + Release Notes / Install Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = onCheckForUpdatesManual,
+                            enabled = !isCheckingUpdates,
+                            colors = ButtonDefaults.buttonColors(containerColor = CourtsideDesignTokens.EuroLeagueOrange),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .weight(1.2f)
+                                .pointerHoverIcon(PointerIcon.Hand)
+                        ) {
+                            Text(
+                                text = strings.checkForUpdatesButton,
+                                color = Color.Black,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 12.sp
+                            )
+                        }
+
+                        Button(
+                            onClick = onOpenReleaseNotes,
+                            colors = ButtonDefaults.buttonColors(containerColor = CourtsideDesignTokens.PillSurface),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .weight(0.8f)
+                                .pointerHoverIcon(PointerIcon.Hand)
+                        ) {
+                            Text(
+                                text = strings.viewReleaseNotesButton,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+
+                    if (hasUpdateAvailable) {
+                        Button(
+                            onClick = onInstallUpdate,
+                            colors = ButtonDefaults.buttonColors(containerColor = CourtsideDesignTokens.NeonMadeGreen),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .pointerHoverIcon(PointerIcon.Hand)
+                        ) {
+                            Text(
+                                text = "${strings.downloadInstallUpdateButton} (v${updateInfo.latestVersionName})",
+                                color = Color.Black,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            }
+
             val previewPayload = remember(sampleLiveGame, activeLanguage) {
                 notificationManager.buildTestPushContent(sampleLiveGame, activeLanguage)
             }

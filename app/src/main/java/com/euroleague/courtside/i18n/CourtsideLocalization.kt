@@ -114,7 +114,19 @@ data class CourtsideStrings(
     val closeGameChannelSubtitle: String,
     val livePushPreviewBadge: String,
     val sendTestPushButton: String,
-    val testPushSentPrefix: String
+    val testPushSentPrefix: String,
+    // App Updates & Google Play Protect
+    val updateSectionTitle: String = "App Updates & Play Protect",
+    val playProtectBadge: String = "🛡️ Google Play Protect Compliant",
+    val autoUpdateToggleTitle: String = "Auto-Check for Updates on Startup",
+    val autoUpdateToggleSubtitle: String = "Play Protect-compliant HTTPS check without invasive install permissions",
+    val checkForUpdatesButton: String = "🔄 Check for Updates",
+    val checkingUpdatesLabel: String = "Checking GitHub Releases for updates…",
+    val upToDateLabel: String = "✓ You are on the latest version",
+    val updateAvailablePrefix: String = "🚀 Update Available:",
+    val downloadInstallUpdateButton: String = "⬇ Download & Install Update",
+    val viewReleaseNotesButton: String = "Release Notes",
+    val laterButton: String = "Later"
 )
 
 object CourtsideTranslations {
@@ -183,7 +195,18 @@ object CourtsideTranslations {
         closeGameChannelSubtitle = "Instant crunch-time alert when point difference is <= 5",
         livePushPreviewBadge = "LIVE PUSH PREVIEW",
         sendTestPushButton = "Send Test Push Notification",
-        testPushSentPrefix = "System notification sent:"
+        testPushSentPrefix = "System notification sent:",
+        updateSectionTitle = "App Updates & Play Protect",
+        playProtectBadge = "🛡️ Google Play Protect Compliant",
+        autoUpdateToggleTitle = "Auto-Check for Updates on Startup",
+        autoUpdateToggleSubtitle = "Play Protect-compliant HTTPS release check with explicit user consent",
+        checkForUpdatesButton = "🔄 Check for Updates",
+        checkingUpdatesLabel = "Checking GitHub Releases for updates…",
+        upToDateLabel = "✓ You are on the latest version",
+        updateAvailablePrefix = "🚀 Update Available:",
+        downloadInstallUpdateButton = "⬇ Download & Install Update",
+        viewReleaseNotesButton = "Release Notes",
+        laterButton = "Later"
     )
 
     val DE = CourtsideStrings(
@@ -250,7 +273,18 @@ object CourtsideTranslations {
         closeGameChannelSubtitle = "Sofort-Alarm bei <= 5 Punkten Differenz in der Schlussphase",
         livePushPreviewBadge = "LIVE PUSH VORSCHAU",
         sendTestPushButton = "Test-Push-Benachrichtigung senden",
-        testPushSentPrefix = "System-Benachrichtigung gesendet:"
+        testPushSentPrefix = "System-Benachrichtigung gesendet:",
+        updateSectionTitle = "App-Updates & Play Protect",
+        playProtectBadge = "🛡️ Google Play Protect Konform",
+        autoUpdateToggleTitle = "Automatisch beim Start nach Updates suchen",
+        autoUpdateToggleSubtitle = "Play-Protect-konforme HTTPS-Prüfung ohne invasive Installationsrechte",
+        checkForUpdatesButton = "🔄 Nach Updates suchen",
+        checkingUpdatesLabel = "Prüfe GitHub Releases auf neue Version…",
+        upToDateLabel = "✓ App ist auf dem neuesten Stand",
+        updateAvailablePrefix = "🚀 Neues Update verfügbar:",
+        downloadInstallUpdateButton = "⬇ Update herunterladen & installieren",
+        viewReleaseNotesButton = "Release Notes",
+        laterButton = "Später"
     )
 
     val FR = CourtsideStrings(
@@ -317,7 +351,18 @@ object CourtsideTranslations {
         closeGameChannelSubtitle = "Notification immédiate si l'écart est <= 5 points dans le money-time",
         livePushPreviewBadge = "APERÇU NOTIFICATION",
         sendTestPushButton = "Envoyer une notification test",
-        testPushSentPrefix = "Notification système envoyée :"
+        testPushSentPrefix = "Notification système envoyée :",
+        updateSectionTitle = "Mises à jour & Play Protect",
+        playProtectBadge = "🛡️ Conforme Google Play Protect",
+        autoUpdateToggleTitle = "Vérification auto des mises à jour au démarrage",
+        autoUpdateToggleSubtitle = "Vérification HTTPS conforme Play Protect avec consentement explicite",
+        checkForUpdatesButton = "🔄 Vérifier les mises à jour",
+        checkingUpdatesLabel = "Recherche de mises à jour sur GitHub Releases…",
+        upToDateLabel = "✓ Vous utilisez la dernière version",
+        updateAvailablePrefix = "🚀 Mise à jour disponible :",
+        downloadInstallUpdateButton = "⬇ Télécharger et installer",
+        viewReleaseNotesButton = "Notes de version",
+        laterButton = "Plus tard"
     )
 
     val IT = CourtsideStrings(
@@ -384,7 +429,18 @@ object CourtsideTranslations {
         closeGameChannelSubtitle = "Notifica immediata con scarto <= 5 punti negli ultimi 3 minuti",
         livePushPreviewBadge = "ANTEPRIMA NOTIFICA",
         sendTestPushButton = "Invia notifica push di prova",
-        testPushSentPrefix = "Notifica di sistema inviata:"
+        testPushSentPrefix = "Notifica di sistema inviata:",
+        updateSectionTitle = "Aggiornamenti App & Play Protect",
+        playProtectBadge = "🛡️ Conforme a Google Play Protect",
+        autoUpdateToggleTitle = "Controllo automatico aggiornamenti all'avvio",
+        autoUpdateToggleSubtitle = "Controllo HTTPS conforme a Play Protect senza permessi invasivi",
+        checkForUpdatesButton = "🔄 Controlla aggiornamenti",
+        checkingUpdatesLabel = "Controllo aggiornamenti su GitHub Releases…",
+        upToDateLabel = "✓ L'app è aggiornata all'ultima versione",
+        updateAvailablePrefix = "🚀 Nuovo aggiornamento disponibile:",
+        downloadInstallUpdateButton = "⬇ Scarica e installa aggiornamento",
+        viewReleaseNotesButton = "Note di rilascio",
+        laterButton = "Più tardi"
     )
 
     val ES = CourtsideStrings(
@@ -451,7 +507,18 @@ object CourtsideTranslations {
         closeGameChannelSubtitle = "Aviso inmediato cuando la diferencia es <= 5 puntos en el último cuarto",
         livePushPreviewBadge = "VISTA PREVIA PUSH",
         sendTestPushButton = "Enviar notificación push de prueba",
-        testPushSentPrefix = "Notificación del sistema enviada:"
+        testPushSentPrefix = "Notificación del sistema enviada:",
+        updateSectionTitle = "Actualizaciones y Play Protect",
+        playProtectBadge = "🛡️ Compatible con Google Play Protect",
+        autoUpdateToggleTitle = "Buscar actualizaciones automáticamente al iniciar",
+        autoUpdateToggleSubtitle = "Verificación HTTPS compatible con Play Protect sin permisos invasivos",
+        checkForUpdatesButton = "🔄 Buscar actualizaciones",
+        checkingUpdatesLabel = "Buscando actualizaciones en GitHub Releases…",
+        upToDateLabel = "✓ Tienes la última versión instalada",
+        updateAvailablePrefix = "🚀 Nueva actualización disponible:",
+        downloadInstallUpdateButton = "⬇ Descargar e instalar actualización",
+        viewReleaseNotesButton = "Notas de la versión",
+        laterButton = "Más tarde"
     )
 
     val EL = CourtsideStrings(
@@ -518,7 +585,18 @@ object CourtsideTranslations {
         closeGameChannelSubtitle = "Άμεση ειδοποίηση όταν η διαφορά είναι <= 5 πόντοι στο φινάλε",
         livePushPreviewBadge = "ΠΡΟΕΠΙΣΚΟΠΗΣΗ ΕΙΔΟΠΟΙΗΣΗΣ",
         sendTestPushButton = "Αποστολή Δοκιμαστικής Ειδοποίησης Push",
-        testPushSentPrefix = "Εστάλη ειδοποίηση συστήματος:"
+        testPushSentPrefix = "Εστάλη ειδοποίηση συστήματος:",
+        updateSectionTitle = "Ενημερώσεις Εφαρμογής & Play Protect",
+        playProtectBadge = "🛡️ Συμβατό με Google Play Protect",
+        autoUpdateToggleTitle = "Αυτόματος έλεγχος ενημερώσεων κατά την εκκίνηση",
+        autoUpdateToggleSubtitle = "Έλεγχος HTTPS συμβατός με το Play Protect χωρίς επεμβατικές άδειες",
+        checkForUpdatesButton = "🔄 Έλεγχος για ενημερώσεις",
+        checkingUpdatesLabel = "Έλεγχος στο GitHub Releases για νέα έκδοση…",
+        upToDateLabel = "✓ Έχετε την πιο πρόσφατη έκδοση",
+        updateAvailablePrefix = "🚀 Νέα ενημέρωση διαθέσιμη:",
+        downloadInstallUpdateButton = "⬇ Λήψη & Εγκατάσταση ενημέρωσης",
+        viewReleaseNotesButton = "Σημειώσεις έκδοσης",
+        laterButton = "Αργότερα"
     )
 
     fun forLanguage(language: AppLanguage): CourtsideStrings = when (language) {
