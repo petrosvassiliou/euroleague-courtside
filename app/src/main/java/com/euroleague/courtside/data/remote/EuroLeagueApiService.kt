@@ -992,7 +992,6 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                 val seasonCode = fallbackMockRepository.seasonCodeFlow.value
                 val allGamesDto = apiService.fetchSeasonGames(seasonCode = seasonCode, round = null, limit = 400).data
                 if (allGamesDto.isEmpty()) {
-                    fallbackMockRepository.simulateLiveRefresh()
                     return@runCatching
                 }
 
@@ -1005,7 +1004,6 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
 
                 val teamById = fallbackMockRepository.teams.associateBy { it.id }
                 val cachedById = fallbackMockRepository.games.value.associateBy { it.id }
-                var hasRemoteLiveGame = false
 
                 val updatedGames = sortedAllGamesDto.mapNotNull { g ->
                     val homeTeam = teamById[g.local.club.code] ?: return@mapNotNull null
@@ -1017,9 +1015,11 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                     val candidateHeader = if (isStatusLive || (!g.played && g.round == activeRound)) {
                         fetchGameLiveHeader(seasonCode, g.gameCode)
                     } else null
-                    val isLive = isStatusLive || (candidateHeader?.live == true)
-                    if (isLive) hasRemoteLiveGame = true
-                    val justFinished = g.played && cached?.status != GameStatus.FINAL
+                    val headerHasScore = (candidateHeader?.scoreA?.trim()?.toIntOrNull() ?: 0) > 0 ||
+                        (candidateHeader?.scoreB?.trim()?.toIntOrNull() ?: 0) > 0
+                    val isLive = isStatusLive || (candidateHeader?.live == true && headerHasScore)
+                    val justFinished = (g.played || (candidateHeader != null && !candidateHeader.live && headerHasScore)) &&
+                        cached?.status != GameStatus.FINAL
 
                     val (boxH, boxA) = if (isLive || justFinished) {
                         fetchGameBoxscores(seasonCode, g.gameCode, homeTeam.id, awayTeam.id)
@@ -1042,7 +1042,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         shots = shots.ifEmpty { cached?.shots ?: emptyList() }
                     )
 
-                    if (candidateHeader != null && (isLive || candidateHeader.live)) {
+                    if (candidateHeader != null && (isLive || candidateHeader.live || headerHasScore)) {
                         applyLiveHeaderToGame(mapped, candidateHeader)
                     } else {
                         mapped
@@ -1058,12 +1058,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         seasonCode = seasonCode,
                         syncLabel = "$seasonCode • Round $activeRound"
                     )
-                    if (!hasRemoteLiveGame) {
-                        fallbackMockRepository.simulateLiveRefresh()
-                    }
                 }
-            }.onFailure {
-                fallbackMockRepository.simulateLiveRefresh()
             }
         }
 
@@ -1141,7 +1136,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                     boxscoreAway = resolvedAway,
                     shots = resolvedShots
                 )
-                val updated = if (liveHeader != null && liveHeader.live) {
+                val updated = if (liveHeader != null) {
                     applyLiveHeaderToGame(baseUpdated, liveHeader)
                 } else {
                     baseUpdated
@@ -1165,12 +1160,24 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
     ): EuroLeagueGame {
         val parsedScoreA = header.scoreA.trim().toIntOrNull()
         val parsedScoreB = header.scoreB.trim().toIntOrNull()
+        val hasScore = (parsedScoreA ?: 0) > 0 || (parsedScoreB ?: 0) > 0
         val qRaw = header.quarter.trim().uppercase()
         val parsedQuarter = when {
             "OT" in qRaw || "E" in qRaw -> 5
             else -> qRaw.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 5) ?: game.currentQuarter
         }
         val clockClean = header.remainingPartialTime.trim().ifEmpty { game.remainingClock }
+        val gameMinutes = header.gameTime.substringBefore(":").trim().toIntOrNull() ?: 0
+        val isClockZero = clockClean == "00:00" || clockClean == "0:00" || clockClean.isEmpty()
+        val isEndedInHeader = hasScore && (
+            !header.live ||
+                (gameMinutes >= 40 && isClockZero && qRaw.isEmpty() && parsedScoreA != parsedScoreB)
+            )
+        val resolvedStatus = when {
+            game.status == GameStatus.FINAL || isEndedInHeader -> GameStatus.FINAL
+            header.live && hasScore -> GameStatus.LIVE
+            else -> game.status
+        }
         val hasHeaderPartials = (header.scoreQuarter1A + header.scoreQuarter1B + header.scoreQuarter2A + header.scoreQuarter2B) > 0
         val updatedQuarters = if (hasHeaderPartials) {
             val isCumulativeA = header.scoreQuarter2A >= header.scoreQuarter1A && header.scoreQuarter1A > 0
@@ -1183,6 +1190,22 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
             val q2A = if (isCumulativeB) (header.scoreQuarter2B - header.scoreQuarter1B).coerceAtLeast(0) else header.scoreQuarter2B
             val q3A = if (isCumulativeB && header.scoreQuarter3B >= header.scoreQuarter2B) (header.scoreQuarter3B - header.scoreQuarter2B).coerceAtLeast(0) else header.scoreQuarter3B.coerceAtLeast(0)
             val q4A = if (isCumulativeB && header.scoreQuarter4B >= header.scoreQuarter3B) (header.scoreQuarter4B - header.scoreQuarter3B).coerceAtLeast(0) else header.scoreQuarter4B.coerceAtLeast(0)
+            val regH = q1H + q2H + q3H + q4H
+            val regA = q1A + q2A + q3A + q4A
+            val totalH = parsedScoreA ?: game.homeScore
+            val totalA = parsedScoreB ?: game.awayScore
+            val otH = when {
+                isCumulativeA && header.scoreExtra1A > header.scoreQuarter4A -> header.scoreExtra1A - header.scoreQuarter4A
+                header.scoreExtra1A > 0 && !isCumulativeA -> header.scoreExtra1A
+                totalH > regH && regH > 0 -> totalH - regH
+                else -> null
+            }
+            val otA = when {
+                isCumulativeB && header.scoreExtra1B > header.scoreQuarter4B -> header.scoreExtra1B - header.scoreQuarter4B
+                header.scoreExtra1B > 0 && !isCumulativeB -> header.scoreExtra1B
+                totalA > regA && regA > 0 -> totalA - regA
+                else -> null
+            }
             QuarterScores(
                 q1Home = q1H,
                 q1Away = q1A,
@@ -1192,16 +1215,16 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                 q3Away = q3A,
                 q4Home = q4H,
                 q4Away = q4A,
-                otHome = header.scoreExtra1A.takeIf { it > 0 },
-                otAway = header.scoreExtra1B.takeIf { it > 0 }
+                otHome = otH,
+                otAway = otA
             )
         } else {
             game.quarters
         }
         return game.copy(
-            status = if (header.live) GameStatus.LIVE else game.status,
-            currentQuarter = parsedQuarter,
-            remainingClock = clockClean,
+            status = resolvedStatus,
+            currentQuarter = if (resolvedStatus == GameStatus.FINAL && updatedQuarters.otHome != null) 5 else parsedQuarter,
+            remainingClock = if (resolvedStatus == GameStatus.FINAL) "00:00" else clockClean,
             homeScore = parsedScoreA ?: game.homeScore,
             awayScore = parsedScoreB ?: game.awayScore,
             quarters = updatedQuarters
