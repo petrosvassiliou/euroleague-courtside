@@ -140,6 +140,21 @@ fun MatchCenterScreen(
             )
     }
 
+    val roundFinalGames = remember(games, selectedRound) {
+        games.filter { it.round == selectedRound && it.status == GameStatus.FINAL }
+    }
+
+    val tickerGames = remember(liveGames, roundFinalGames) {
+        val liveIds = liveGames.map { it.id }.toSet()
+        liveGames + roundFinalGames.filter { it.id !in liveIds }
+    }
+
+    androidx.compose.runtime.LaunchedEffect(liveGames.size) {
+        if (liveGames.isEmpty() && filterOnlyLive) {
+            filterOnlyLive = false
+        }
+    }
+
     val availableRounds = remember(games) {
         val roundsFromGames = games.map { it.round }.distinct().sorted()
         if (roundsFromGames.size >= 10) roundsFromGames else (1..38).toList()
@@ -472,19 +487,20 @@ fun MatchCenterScreen(
                         }
                     }
 
-                    // Live Scores Ticker Strip direkt auf dem EuroLeague-Screen
-                    if (liveGames.isNotEmpty()) {
+                    // Live & Final Scores Ticker Strip direkt auf dem EuroLeague-Screen
+                    if (tickerGames.isNotEmpty()) {
                         LiveScoresTickerStrip(
-                            liveGames = liveGames,
+                            tickerGames = tickerGames,
+                            activeLiveCount = liveGames.size,
                             selectedGameId = selectedGame?.id,
-                            onSelectLiveGame = { liveGame ->
-                                activeGameId = liveGame.id
-                                if (!filterOnlyLive && selectedRound != liveGame.round) {
-                                    onSelectRound(liveGame.round)
+                            onSelectLiveGame = { tickerGame ->
+                                activeGameId = tickerGame.id
+                                if (!filterOnlyLive && selectedRound != tickerGame.round) {
+                                    onSelectRound(tickerGame.round)
                                 }
-                                onRefreshSelectedGameStats(liveGame)
+                                onRefreshSelectedGameStats(tickerGame)
                                 scope.launch {
-                                    navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, liveGame.id)
+                                    navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, tickerGame.id)
                                 }
                             },
                             onManualLiveTick = onLiveScoreTick,
@@ -559,24 +575,31 @@ fun MatchCenterScreen(
 }
 
 /**
- * Kompakter Live-Scores-Ticker am oberen Rand des "EuroLeague"-Screens:
- * Zeigt alle laufenden Partien in Echtzeit (Spielstand, Viertel, Restzeit, Crunch-Time-Status)
- * sowie einen direkten "⚡ Live-Ticker"-Button zur sofortigen Spielstands-Aktualisierung.
+ * Kompakter Live- & Endergebnis-Ticker am oberen Rand des "EuroLeague"-Screens:
+ * Zeigt laufende Partien in Echtzeit (Spielstand, Viertel, Restzeit, Crunch-Time-Status)
+ * sowie beendete Spiele des Spieltags mit offiziellem Endergebnis (`FINAL`).
  */
 @Composable
 private fun LiveScoresTickerStrip(
-    liveGames: List<EuroLeagueGame>,
+    tickerGames: List<EuroLeagueGame>,
+    activeLiveCount: Int,
     selectedGameId: String?,
     onSelectLiveGame: (EuroLeagueGame) -> Unit,
     onManualLiveTick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val strings = LocalCourtsideStrings.current
+    val hasActiveLive = activeLiveCount > 0
+    val finalCount = tickerGames.count { it.status == GameStatus.FINAL }
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
             .background(Color(0xFF141419))
-            .border(1.dp, Color(0x55FF4500), RoundedCornerShape(14.dp))
+            .border(
+                1.dp,
+                if (hasActiveLive) Color(0x55FF4500) else Color(0x4400E676),
+                RoundedCornerShape(14.dp)
+            )
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -593,7 +616,7 @@ private fun LiveScoresTickerStrip(
                     modifier = Modifier
                         .size(8.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFFFF4500))
+                        .background(if (hasActiveLive) Color(0xFFFF4500) else Color(0xFF00E676))
                 )
                 Text(
                     text = strings.liveScoresHeader,
@@ -601,17 +624,33 @@ private fun LiveScoresTickerStrip(
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 11.sp
                 )
-                Surface(
-                    color = Color(0x33FF4500),
-                    shape = RoundedCornerShape(6.dp)
-                ) {
-                    Text(
-                        text = "${liveGames.size} ${strings.statusLive}",
-                        color = Color(0xFFFF6600),
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 10.sp,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
+                if (hasActiveLive) {
+                    Surface(
+                        color = Color(0x33FF4500),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = "$activeLiveCount ${strings.statusLive}",
+                            color = Color(0xFFFF6600),
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 10.sp,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                if (finalCount > 0) {
+                    Surface(
+                        color = Color(0x2600E676),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Text(
+                            text = "$finalCount ${strings.statusFinal}",
+                            color = Color(0xFF00E676),
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 10.sp,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
 
@@ -637,8 +676,9 @@ private fun LiveScoresTickerStrip(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            items(liveGames, key = { "ticker_${it.id}" }) { game ->
+            items(tickerGames, key = { "ticker_${it.id}" }) { game ->
                 val isSelected = game.id == selectedGameId
+                val isLive = game.status == GameStatus.LIVE
                 Surface(
                     color = if (isSelected) Color(0xFF221A18) else Color(0xFF1B1B22),
                     shape = RoundedCornerShape(10.dp),
@@ -646,7 +686,11 @@ private fun LiveScoresTickerStrip(
                         .width(156.dp)
                         .border(
                             width = if (isSelected) 1.5.dp else 1.dp,
-                            color = if (isSelected) Color(0xFFFF6600) else Color(0xFF2E2E38),
+                            color = when {
+                                isSelected -> Color(0xFFFF6600)
+                                isLive -> Color(0x66FF4500)
+                                else -> Color(0xFF2E2E38)
+                            },
                             shape = RoundedCornerShape(10.dp)
                         )
                         .clickable { onSelectLiveGame(game) }
@@ -661,9 +705,23 @@ private fun LiveScoresTickerStrip(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            val statusLabel = when (game.status) {
+                                GameStatus.LIVE -> "● Q${game.currentQuarter} ${game.remainingClock}"
+                                GameStatus.FINAL -> if (game.quarters.otHome != null) {
+                                    "${strings.statusFinal} (OT)"
+                                } else {
+                                    strings.statusFinal
+                                }
+                                GameStatus.UPCOMING -> strings.statusUpcoming
+                            }
+                            val statusColor = when (game.status) {
+                                GameStatus.LIVE -> Color(0xFFFF5E00)
+                                GameStatus.FINAL -> Color(0xFF00E676)
+                                GameStatus.UPCOMING -> Color(0xFF9CA3AF)
+                            }
                             Text(
-                                text = "● Q${game.currentQuarter} ${game.remainingClock}",
-                                color = Color(0xFFFF5E00),
+                                text = statusLabel,
+                                color = statusColor,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 10.sp
                             )
@@ -817,16 +875,25 @@ private fun MatchSummaryCard(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        val pillBorderColor = when (game.status) {
+                            GameStatus.LIVE -> Color(0x99FF5E00)
+                            GameStatus.FINAL -> Color(0x8800E676)
+                            GameStatus.UPCOMING -> Color(0xFF3A3A42)
+                        }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .background(Color(0xFF121216), RoundedCornerShape(8.dp))
-                                .border(1.dp, Color(0x99FF5E00), RoundedCornerShape(8.dp))
+                                .border(1.dp, pillBorderColor, RoundedCornerShape(8.dp))
                                 .padding(2.dp)
                         ) {
                             val statusBadgeText = when (game.status) {
                                 GameStatus.LIVE -> "● ${strings.statusLive}"
-                                GameStatus.FINAL -> strings.statusFinal
+                                GameStatus.FINAL -> if (game.quarters.otHome != null) {
+                                    "${strings.statusFinal} (OT)"
+                                } else {
+                                    strings.statusFinal
+                                }
                                 GameStatus.UPCOMING -> strings.statusUpcoming
                             }
                             val badgeColor = when (game.status) {
@@ -941,7 +1008,7 @@ private fun MatchSummaryCard(
                                 textAlign = TextAlign.Center
                             )
                         } else {
-                            // Played or Live game: Show Score prominently + Q1 Q2 Q3 Q4 breakdown
+                            // Played or Live game: Show Score prominently + Q1 Q2 Q3 Q4 (+ OT) breakdown
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -966,11 +1033,15 @@ private fun MatchSummaryCard(
                                 )
                             }
 
-                            val hasQuarters = (q.q1Home + q.q2Home + q.q3Home + q.q4Home + q.q1Away + q.q2Away + q.q3Away + q.q4Away) > 0
+                            val hasOvertime = q.otHome != null && q.otAway != null
+                            val quarterHeaders = if (hasOvertime) listOf("Q1", "Q2", "Q3", "Q4", "OT") else listOf("Q1", "Q2", "Q3", "Q4")
+                            val homePartials = if (hasOvertime) listOf(q.q1Home, q.q2Home, q.q3Home, q.q4Home, q.otHome ?: 0) else listOf(q.q1Home, q.q2Home, q.q3Home, q.q4Home)
+                            val awayPartials = if (hasOvertime) listOf(q.q1Away, q.q2Away, q.q3Away, q.q4Away, q.otAway ?: 0) else listOf(q.q1Away, q.q2Away, q.q3Away, q.q4Away)
+                            val hasQuarters = (homePartials.sum() + awayPartials.sum()) > 0
                             if (hasQuarters) {
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Row(modifier = Modifier.fillMaxWidth()) {
-                                    listOf("Q1", "Q2", "Q3", "Q4").forEachIndexed { idx, col ->
+                                    quarterHeaders.forEachIndexed { idx, col ->
                                         val isActiveQ = game.status == GameStatus.LIVE && (idx + 1) == game.currentQuarter
                                         Text(
                                             text = col,
@@ -983,7 +1054,7 @@ private fun MatchSummaryCard(
                                     }
                                 }
                                 Row(modifier = Modifier.fillMaxWidth()) {
-                                    listOf(q.q1Home, q.q2Home, q.q3Home, q.q4Home).forEachIndexed { idx, v ->
+                                    homePartials.forEachIndexed { idx, v ->
                                         val isActiveQ = game.status == GameStatus.LIVE && (idx + 1) == game.currentQuarter
                                         val isFutureLiveQ = game.status == GameStatus.LIVE && (idx + 1) > game.currentQuarter && v == 0
                                         Text(
@@ -997,7 +1068,7 @@ private fun MatchSummaryCard(
                                     }
                                 }
                                 Row(modifier = Modifier.fillMaxWidth()) {
-                                    listOf(q.q1Away, q.q2Away, q.q3Away, q.q4Away).forEachIndexed { idx, v ->
+                                    awayPartials.forEachIndexed { idx, v ->
                                         val isActiveQ = game.status == GameStatus.LIVE && (idx + 1) == game.currentQuarter
                                         val isFutureLiveQ = game.status == GameStatus.LIVE && (idx + 1) > game.currentQuarter && v == 0
                                         Text(

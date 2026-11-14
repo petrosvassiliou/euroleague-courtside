@@ -812,7 +812,7 @@ def main():
                 "venueName": venue_name,
                 "tipOffEpochMillis": tip_off_ms,
                 "status": status,
-                "currentQuarter": 4 if status == "FINAL" else 1,
+                "currentQuarter": 5 if (status == "FINAL" and l_score > (q1_h + q2_h + q3_h + q4_h) and (q1_h + q2_h + q3_h + q4_h) > 0) else (4 if status == "FINAL" else 1),
                 "remainingClock": "00:00" if status == "FINAL" else "10:00",
                 "homeScore": l_score,
                 "awayScore": r_score,
@@ -824,7 +824,9 @@ def main():
                     "q3Home": q3_h,
                     "q3Away": q3_a,
                     "q4Home": q4_h,
-                    "q4Away": q4_a
+                    "q4Away": q4_a,
+                    "otHome": (l_score - (q1_h + q2_h + q3_h + q4_h)) if (status == "FINAL" and l_score > (q1_h + q2_h + q3_h + q4_h) and (q1_h + q2_h + q3_h + q4_h) > 0) else None,
+                    "otAway": (r_score - (q1_a + q2_a + q3_a + q4_a)) if (status == "FINAL" and r_score > (q1_a + q2_a + q3_a + q4_a) and (q1_a + q2_a + q3_a + q4_a) > 0) else None
                 },
                 "q1Home": q1_h,
                 "q1Away": q1_a,

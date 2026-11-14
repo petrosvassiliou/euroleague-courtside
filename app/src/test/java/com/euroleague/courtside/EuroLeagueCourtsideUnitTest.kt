@@ -199,38 +199,90 @@ class EuroLeagueCourtsideUnitTest {
     }
 
     @Test
-    fun `EuroLeague screen always provides live games in active round and advances live scores clock and quarters`() {
+    fun `applyLiveDataset preserves real FINAL scores without fabricating fake LIVE games and transitions expired Q4 games to FINAL`() {
         val freshRepo = EuroLeagueMockRepository()
-        val teams = freshRepo.teams
-        val nonLiveGames = freshRepo.games.value.map { game ->
-            game.copy(id = "E2026_${game.gameCode}", round = 10, status = GameStatus.FINAL)
-        }
+        val oly = freshRepo.findTeam("OLY") ?: freshRepo.teams.first()
+        val dub = freshRepo.findTeam("DUB") ?: freshRepo.teams[1]
+        val pan = freshRepo.findTeam("PAN") ?: freshRepo.teams[2]
+        val bar = freshRepo.findTeam("BAR") ?: freshRepo.teams[3]
+        val template = freshRepo.games.value.first()
+
+        // 1. Real finished Round 11 game (OLY 101 : 72 DUB) and a live game at 00:15 in Q4 (PAN 74 : 76 BAR)
+        val finishedOlyDub = template.copy(
+            id = "E2026_107",
+            gameCode = 107,
+            round = 11,
+            homeTeam = oly,
+            awayTeam = dub,
+            homeScore = 101,
+            awayScore = 72,
+            status = GameStatus.FINAL,
+            currentQuarter = 4,
+            remainingClock = "00:00",
+            quarters = com.euroleague.courtside.data.repository.QuarterScore(
+                q1Home = 25, q1Away = 18,
+                q2Home = 32, q2Away = 25,
+                q3Home = 31, q3Away = 13,
+                q4Home = 13, q4Away = 16
+            )
+        )
+        val expiringLiveGame = template.copy(
+            id = "E2026_110",
+            gameCode = 110,
+            round = 11,
+            homeTeam = pan,
+            awayTeam = bar,
+            homeScore = 74,
+            awayScore = 76,
+            status = GameStatus.LIVE,
+            currentQuarter = 4,
+            remainingClock = "00:15",
+            quarters = com.euroleague.courtside.data.repository.QuarterScore(
+                q1Home = 17, q1Away = 17,
+                q2Home = 16, q2Away = 15,
+                q3Home = 24, q3Away = 11,
+                q4Home = 17, q4Away = 33
+            )
+        )
 
         freshRepo.applyLiveDataset(
-            liveTeams = teams,
+            liveTeams = freshRepo.teams,
             livePlayers = freshRepo.players,
-            liveGames = nonLiveGames,
-            activeRound = 10,
+            liveGames = listOf(finishedOlyDub, expiringLiveGame),
+            activeRound = 11,
             seasonCode = "E2026",
-            syncLabel = "E2026 • Round 10"
+            syncLabel = "E2026 • Round 11"
         )
 
-        val liveGamesBefore = freshRepo.games.value.filter { it.status == GameStatus.LIVE }
-        assertTrue(liveGamesBefore.isNotEmpty())
-        val firstLiveBefore = liveGamesBefore.first()
-        val totalBefore = firstLiveBefore.homeScore + firstLiveBefore.awayScore
+        // Finished game must stay FINAL with exact score 101 : 72 (never converted to fake LIVE!)
+        val olyAfterApply = freshRepo.games.value.first { it.id == "E2026_107" }
+        assertEquals(GameStatus.FINAL, olyAfterApply.status)
+        assertEquals(101, olyAfterApply.homeScore)
+        assertEquals(72, olyAfterApply.awayScore)
 
+        // When the 00:15 Q4 live game expires (clock reaches 00:00), it transitions to FINAL and displays the final score
         freshRepo.simulateLiveRefresh()
-
-        val firstLiveAfter = freshRepo.games.value.first { it.id == firstLiveBefore.id }
-        val totalAfter = firstLiveAfter.homeScore + firstLiveAfter.awayScore
-        assertTrue(totalAfter > totalBefore)
+        val endedGame = freshRepo.games.value.first { it.id == "E2026_110" }
+        assertEquals(GameStatus.FINAL, endedGame.status)
+        assertEquals("00:00", endedGame.remainingClock)
         assertEquals(
-            firstLiveAfter.homeScore,
-            firstLiveAfter.quarters.q1Home + firstLiveAfter.quarters.q2Home +
-                firstLiveAfter.quarters.q3Home + firstLiveAfter.quarters.q4Home +
-                (firstLiveAfter.quarters.otHome ?: 0)
+            endedGame.homeScore,
+            endedGame.quarters.q1Home + endedGame.quarters.q2Home +
+                endedGame.quarters.q3Home + endedGame.quarters.q4Home +
+                (endedGame.quarters.otHome ?: 0)
         )
+
+        // When all games in the dataset are FINAL, zero games are marked LIVE
+        freshRepo.applyLiveDataset(
+            liveTeams = freshRepo.teams,
+            livePlayers = freshRepo.players,
+            liveGames = listOf(finishedOlyDub),
+            activeRound = 11,
+            seasonCode = "E2026",
+            syncLabel = "E2026 • Round 11"
+        )
+        assertTrue(freshRepo.games.value.none { it.status == GameStatus.LIVE })
+        assertEquals(GameStatus.FINAL, freshRepo.games.value.first().status)
 
         AppLanguage.entries.forEach { lang ->
             val strings = CourtsideTranslations.forLanguage(lang)
@@ -238,6 +290,7 @@ class EuroLeagueCourtsideUnitTest {
             assertTrue(strings.filterLiveOnly.isNotBlank())
             assertTrue(strings.liveTickButton.isNotBlank())
             assertTrue(strings.crunchTimeBadge.isNotBlank())
+            assertTrue(strings.statusFinal.isNotBlank())
         }
     }
 

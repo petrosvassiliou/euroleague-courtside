@@ -260,13 +260,10 @@ class EuroLeagueMockRepository @Inject constructor() {
     }
 
     /**
-     * Stellt sicher, dass alle Spiele chronologisch nach Spieltag (`round` 1..38) sortiert sind
-     * und im aktuellen Spieltag (`targetRound`) stets Live-Spiele für die Live-Scores-Ansicht
-     * bereitstehen:
-     * - Wenn die API bereits laufende Live-Spiele (`GameStatus.LIVE`) liefert, werden diese 1:1 übernommen.
-     * - Wenn gerade kein echtes Spiel zeitgleich läuft, werden bis zu 3 Top-Partien des aktuellen
-     *   Spieltags (inkl. Lieblingsteam) im Live-Ticker-Modus (`Q4`, `Q3`, `Q2`) bereitgestellt bzw.
-     *   bereits laufende Live-Stände dieses Spieltags beibehalten.
+     * Sortiert alle Spiele chronologisch nach Spieltag (`round` 1..38) und übernimmt
+     * den echten offiziellen Spielstatus (`UPCOMING`, `LIVE`, `FINAL`) sowie die echten
+     * Ergebnisse der EuroLeague-API unverfälscht. Wenn ein Live-Spiel im 4. Viertel
+     * (oder OT) bei `00:00` beendet ist, wird es als `FINAL` markiert.
      */
     internal fun ensureLiveScoresInGames(
         incomingGames: List<EuroLeagueGame>,
@@ -278,131 +275,21 @@ class EuroLeagueMockRepository @Inject constructor() {
                 .thenBy { it.tipOffEpochMillis }
                 .thenBy { it.gameCode }
         )
-        if (sortedIncoming.any { it.status == GameStatus.LIVE }) {
-            return sortedIncoming
-        }
-
-        val existingLiveById = _games.value
-            .filter { it.status == GameStatus.LIVE && it.round == targetRound }
-            .associateBy { it.id }
-
-        val preservedCount = sortedIncoming.count { existingLiveById.containsKey(it.id) }
-        if (preservedCount > 0) {
-            return sortedIncoming.map { game ->
-                val prevLive = existingLiveById[game.id]
-                if (prevLive != null) {
-                    game.copy(
-                        status = GameStatus.LIVE,
-                        currentQuarter = prevLive.currentQuarter,
-                        remainingClock = prevLive.remainingClock,
-                        homeScore = prevLive.homeScore,
-                        awayScore = prevLive.awayScore,
-                        quarters = prevLive.quarters,
-                        boxscoreHome = prevLive.boxscoreHome.ifEmpty { game.boxscoreHome },
-                        boxscoreAway = prevLive.boxscoreAway.ifEmpty { game.boxscoreAway },
-                        shots = prevLive.shots.ifEmpty { game.shots }
-                    )
-                } else {
-                    game
-                }
-            }
-        }
-
-        val roundGames = sortedIncoming.filter { it.round == targetRound }
-        if (roundGames.isEmpty()) return sortedIncoming
-
-        val primaryId = _selectedTeamId.value
-        val favIds = _favoriteTeamIds.value
-        val prioritizedRoundGames = roundGames.sortedWith(
-            compareByDescending<EuroLeagueGame> {
-                it.homeTeam.id.equals(primaryId, ignoreCase = true) ||
-                        it.awayTeam.id.equals(primaryId, ignoreCase = true) ||
-                        it.homeTeam.code.equals(primaryId, ignoreCase = true) ||
-                        it.awayTeam.code.equals(primaryId, ignoreCase = true)
-            }.thenByDescending {
-                favIds.contains(it.homeTeam.id) || favIds.contains(it.awayTeam.id) ||
-                        favIds.contains(it.homeTeam.code) || favIds.contains(it.awayTeam.code)
-            }
-        )
-
-        val liveSlotByGameId = prioritizedRoundGames
-            .take(3)
-            .mapIndexed { index, g -> g.id to index }
-            .toMap()
-
         return sortedIncoming.map { game ->
-            val slot = liveSlotByGameId[game.id] ?: return@map game
-            val q = game.quarters
-            val q1H = q.q1Home.takeIf { it > 0 } ?: 22
-            val q1A = q.q1Away.takeIf { it > 0 } ?: 20
-            val q2H = q.q2Home.takeIf { it > 0 } ?: 21
-            val q2A = q.q2Away.takeIf { it > 0 } ?: 22
-            val q3H = q.q3Home.takeIf { it > 0 } ?: 20
-            val q3A = q.q3Away.takeIf { it > 0 } ?: 19
-
-            when (slot) {
-                0 -> {
-                    // Crunch-Time Top-Spiel im 4. Viertel (knapper Spielstand <= 3 Punkte Differenz)
-                    val baseH = q1H + q2H + q3H
-                    val baseA = q1A + q2A + q3A
-                    val targetHome = baseH + 21
-                    val targetAway = targetHome - 2
-                    val q4H = 21
-                    val q4A = (targetAway - baseA).coerceAtLeast(14)
-                    val finalAway = baseA + q4A
-                    game.copy(
-                        status = GameStatus.LIVE,
-                        currentQuarter = 4,
-                        remainingClock = "01:42",
-                        homeScore = targetHome,
-                        awayScore = finalAway,
-                        quarters = QuarterScores(
-                            q1Home = q1H, q1Away = q1A,
-                            q2Home = q2H, q2Away = q2A,
-                            q3Home = q3H, q3Away = q3A,
-                            q4Home = q4H, q4Away = q4A,
-                            otHome = null, otAway = null
-                        )
-                    )
-                }
-                1 -> {
-                    // Laufendes Spiel im 3. Viertel
-                    val liveQ3H = 14
-                    val liveQ3A = 13
-                    game.copy(
-                        status = GameStatus.LIVE,
-                        currentQuarter = 3,
-                        remainingClock = "04:18",
-                        homeScore = q1H + q2H + liveQ3H,
-                        awayScore = q1A + q2A + liveQ3A,
-                        quarters = QuarterScores(
-                            q1Home = q1H, q1Away = q1A,
-                            q2Home = q2H, q2Away = q2A,
-                            q3Home = liveQ3H, q3Away = liveQ3A,
-                            q4Home = 0, q4Away = 0,
-                            otHome = null, otAway = null
-                        )
-                    )
-                }
-                else -> {
-                    // Laufendes Spiel im 2. Viertel
-                    val liveQ2H = 12
-                    val liveQ2A = 14
-                    game.copy(
-                        status = GameStatus.LIVE,
-                        currentQuarter = 2,
-                        remainingClock = "05:35",
-                        homeScore = q1H + liveQ2H,
-                        awayScore = q1A + liveQ2A,
-                        quarters = QuarterScores(
-                            q1Home = q1H, q1Away = q1A,
-                            q2Home = liveQ2H, q2Away = liveQ2A,
-                            q3Home = 0, q3Away = 0,
-                            q4Home = 0, q4Away = 0,
-                            otHome = null, otAway = null
-                        )
-                    )
-                }
+            val clockTrimmed = game.remainingClock.trim()
+            val isEndedClock = clockTrimmed == "00:00" || clockTrimmed == "0:00"
+            if (game.status == GameStatus.LIVE &&
+                game.currentQuarter >= 4 &&
+                isEndedClock &&
+                game.homeScore != game.awayScore &&
+                (game.homeScore > 0 || game.awayScore > 0)
+            ) {
+                game.copy(
+                    status = GameStatus.FINAL,
+                    remainingClock = "00:00"
+                )
+            } else {
+                game
             }
         }
     }
@@ -587,10 +474,19 @@ class EuroLeagueMockRepository @Inject constructor() {
                     val curSecs = clockParts.getOrNull(1)?.trim()?.toIntOrNull() ?: 0
                     val nextTotalSecs = (curMins * 60 + curSecs) - (18..26).random()
 
+                    val isQuarter4Ended = nextTotalSecs <= 0 && activeQ >= 4
+                    val finalHomeScore = if (isQuarter4Ended && updatedHome == updatedAway) updatedHome + 2 else updatedHome
+                    val finalQuarters = if (isQuarter4Ended && updatedHome == updatedAway) {
+                        updatedQuarters.copy(q4Home = updatedQuarters.q4Home + 2)
+                    } else {
+                        updatedQuarters
+                    }
+
+                    val nextStatus = if (isQuarter4Ended) GameStatus.FINAL else GameStatus.LIVE
                     val (nextQuarter, nextClock) = when {
                         nextTotalSecs > 0 -> activeQ to "%02d:%02d".format(nextTotalSecs / 60, nextTotalSecs % 60)
                         activeQ < 4 -> (activeQ + 1) to "09:42"
-                        else -> 4 to "02:38"
+                        else -> 4 to "00:00"
                     }
 
                     val updatedBoxHome = applyLivePointsToBoxscore(game.boxscoreHome, addHome)
@@ -608,11 +504,12 @@ class EuroLeagueMockRepository @Inject constructor() {
                     )
 
                     game.copy(
+                        status = nextStatus,
                         currentQuarter = nextQuarter,
                         remainingClock = nextClock,
-                        homeScore = updatedHome,
+                        homeScore = finalHomeScore,
                         awayScore = updatedAway,
-                        quarters = updatedQuarters,
+                        quarters = finalQuarters,
                         boxscoreHome = updatedBoxHome,
                         boxscoreAway = updatedBoxAway,
                         shots = updatedShots
