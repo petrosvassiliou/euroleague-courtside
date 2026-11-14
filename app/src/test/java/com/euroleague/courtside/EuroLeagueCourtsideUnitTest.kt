@@ -352,5 +352,68 @@ class EuroLeagueCourtsideUnitTest {
         assertTrue(myTeamActiveGame != null)
         assertEquals(11, myTeamActiveGame?.round)
     }
+
+    @Test
+    fun `Google Play Protect compliant AppUpdateManager compares versions and evaluates GitHub release payloads`() {
+        val manager = com.euroleague.courtside.update.CourtsideAppUpdateManager
+        assertTrue(manager.compareSemanticVersions("v1.5.0", "1.4.2") > 0)
+        assertEquals(0, manager.compareSemanticVersions("v1.5.0", "1.5.0"))
+        assertTrue(manager.compareSemanticVersions("1.4.1", "v1.5.0") < 0)
+        assertEquals(12, manager.extractBuildNumber("EuroLeague Courtside v1.5.0 (Build 12 — Official Signed Release APK)"))
+
+        val sampleReleaseJson = """
+            {
+              "tag_name": "v1.6.0",
+              "name": "EuroLeague Courtside v1.6.0 (Build 13 — Official Signed Release APK)",
+              "html_url": "https://github.com/petrosvassiliou/euroleague-courtside/releases/tag/v1.6.0",
+              "body": "Official Play Protect compliant update",
+              "draft": false,
+              "prerelease": false,
+              "assets": [
+                {
+                  "name": "EuroLeague-Courtside-v1.6.0-debug.apk",
+                  "browser_download_url": "https://github.com/petrosvassiliou/euroleague-courtside/releases/download/v1.6.0/EuroLeague-Courtside-v1.6.0-debug.apk",
+                  "size": 23425630
+                },
+                {
+                  "name": "EuroLeague-Courtside-v1.6.0.apk",
+                  "browser_download_url": "https://github.com/petrosvassiliou/euroleague-courtside/releases/download/v1.6.0/EuroLeague-Courtside-v1.6.0.apk",
+                  "size": 5488857,
+                  "digest": "sha256:bce303826eeffaf855d57c63205577115b6cc3e129638acc0a4af916ef46c151"
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val updateAvailableInfo = manager.evaluateReleasePayload(
+            rawJson = sampleReleaseJson,
+            currentVersionName = "1.5.0",
+            currentVersionCode = 12,
+            checkedAtTime = "19:30:00",
+            isManual = true
+        )
+        assertEquals(com.euroleague.courtside.update.UpdateStatus.UPDATE_AVAILABLE, updateAvailableInfo.status)
+        assertEquals("1.6.0", updateAvailableInfo.latestVersionName)
+        assertEquals(13, updateAvailableInfo.latestVersionCode)
+        assertTrue(updateAvailableInfo.apkDownloadUrl.endsWith("EuroLeague-Courtside-v1.6.0.apk"))
+        assertEquals("bce303826eeffaf855d57c63205577115b6cc3e129638acc0a4af916ef46c151", updateAvailableInfo.sha256Digest)
+
+        val upToDateInfo = manager.evaluateReleasePayload(
+            rawJson = sampleReleaseJson,
+            currentVersionName = "1.6.0",
+            currentVersionCode = 13,
+            checkedAtTime = "19:30:00",
+            isManual = true
+        )
+        assertEquals(com.euroleague.courtside.update.UpdateStatus.UP_TO_DATE, upToDateInfo.status)
+
+        AppLanguage.entries.forEach { lang ->
+            val strings = CourtsideTranslations.forLanguage(lang)
+            assertTrue(strings.updateSectionTitle.isNotBlank())
+            assertTrue(strings.playProtectBadge.isNotBlank())
+            assertTrue(strings.checkForUpdatesButton.isNotBlank())
+            assertTrue(strings.downloadInstallUpdateButton.isNotBlank())
+        }
+    }
 }
 

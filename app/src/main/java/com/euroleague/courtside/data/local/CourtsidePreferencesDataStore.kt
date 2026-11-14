@@ -25,6 +25,7 @@ data class UserPreferencesState(
     val tipOffAlarmEnabled: Boolean = true,
     val halftimeFinalScoreEnabled: Boolean = true,
     val closeGameAlertEnabled: Boolean = true,
+    val autoUpdateCheckEnabled: Boolean = true,
     val language: AppLanguage = AppLanguage.DE
 )
 
@@ -43,6 +44,7 @@ class CourtsidePreferencesDataStore @Inject constructor(
         private const val KEY_QUICK_TEAM_ID = "primary_team_id"
         private const val KEY_QUICK_FAV_IDS = "favorite_team_ids"
         private const val KEY_QUICK_LANG = "app_language_code"
+        private const val KEY_QUICK_AUTO_UPDATE = "auto_update_check_enabled"
     }
 
     private val quickBootPrefs by lazy {
@@ -55,6 +57,7 @@ class CourtsidePreferencesDataStore @Inject constructor(
         val TIP_OFF_ALARM = booleanPreferencesKey("tip_off_alarm_enabled")
         val HALFTIME_FINAL_SCORE = booleanPreferencesKey("halftime_final_score_enabled")
         val CLOSE_GAME_ALERT = booleanPreferencesKey("close_game_alert_enabled")
+        val AUTO_UPDATE_CHECK = booleanPreferencesKey("auto_update_check_enabled")
         val APP_LANGUAGE = stringPreferencesKey("app_language_code")
     }
 
@@ -68,6 +71,15 @@ class CourtsidePreferencesDataStore @Inject constructor(
         quickBootPrefs.getString(KEY_QUICK_LANG, null)
             ?.takeIf { it.isNotBlank() }
             ?.let { AppLanguage.fromCode(it) }
+
+    fun getSavedAutoUpdateEnabledImmediate(): Boolean =
+        quickBootPrefs.getBoolean(KEY_QUICK_AUTO_UPDATE, true)
+
+    fun saveAutoUpdateEnabledImmediate(enabled: Boolean) {
+        quickBootPrefs.edit()
+            .putBoolean(KEY_QUICK_AUTO_UPDATE, enabled)
+            .commit()
+    }
 
     /**
      * Speichert das gewählte "My Team" sofort synchron auf dem Gerät, damit die Auswahl selbst dann
@@ -98,6 +110,8 @@ class CourtsidePreferencesDataStore @Inject constructor(
             ?: setOf(resolvedTeamId)) + resolvedTeamId
         val resolvedLangCode = prefs[Keys.APP_LANGUAGE]
             ?: quickBootPrefs.getString(KEY_QUICK_LANG, null)
+        val resolvedAutoUpdate = prefs[Keys.AUTO_UPDATE_CHECK]
+            ?: getSavedAutoUpdateEnabledImmediate()
 
         // Synchronisiere DataStore-Werte in den Quick-Boot-Speicher für den nächsten Kaltstart
         if (prefs[Keys.PRIMARY_TEAM_ID] != null && getSavedPrimaryTeamImmediate() == null) {
@@ -113,6 +127,7 @@ class CourtsidePreferencesDataStore @Inject constructor(
             tipOffAlarmEnabled = prefs[Keys.TIP_OFF_ALARM] ?: true,
             halftimeFinalScoreEnabled = prefs[Keys.HALFTIME_FINAL_SCORE] ?: true,
             closeGameAlertEnabled = prefs[Keys.CLOSE_GAME_ALERT] ?: true,
+            autoUpdateCheckEnabled = resolvedAutoUpdate,
             language = AppLanguage.fromCode(resolvedLangCode)
         )
     }
@@ -121,6 +136,13 @@ class CourtsidePreferencesDataStore @Inject constructor(
         saveLanguageImmediate(language)
         context.dataStore.edit { prefs ->
             prefs[Keys.APP_LANGUAGE] = language.code
+        }
+    }
+
+    suspend fun setAutoUpdateCheckEnabled(enabled: Boolean) {
+        saveAutoUpdateEnabledImmediate(enabled)
+        context.dataStore.edit { prefs ->
+            prefs[Keys.AUTO_UPDATE_CHECK] = enabled
         }
     }
 
