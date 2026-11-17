@@ -93,6 +93,7 @@ class MainActivity : ComponentActivity() {
             // + schonender 45s-Live-Ticker (verhindert HTTP 429) & vollständiger Kader/Statistik-Sync alle 15 Min.
             LaunchedEffect(Unit) {
                 offlineFirstRepository.loadBundledLiveSnapshotFromAssets(applicationContext)
+                offlineFirstRepository.refreshLiveMatchdayTick()
                 offlineFirstRepository.syncSeasonDataFromRemoteOrSeedCache()
                 var tickCount = 0
                 while (true) {

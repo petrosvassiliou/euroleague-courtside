@@ -319,12 +319,12 @@ fun MainAppScaffold(
                 syncFeedbackBanner = buildSyncingFeedbackState(activeLanguage)
                 val res = offlineFirstRepository?.syncSeasonDataFromRemoteOrSeedCache()
                 offlineFirstRepository?.verifyAndSyncClubRoster(primaryTeam.id)
-                offlineFirstRepository?.refreshLiveMatchdayTick()
+                val tickRes = offlineFirstRepository?.refreshLiveMatchdayTick()
                 val timeStr = runCatching {
                     LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))
                 }.getOrDefault("")
                 isLiveSyncing = false
-                syncFeedbackBanner = if (res != null && res.isSuccess) {
+                syncFeedbackBanner = if ((res != null && res.isSuccess) || (tickRes != null && tickRes.isSuccess)) {
                     buildSyncSuccessFeedbackState(
                         language = activeLanguage,
                         timeStr = timeStr,

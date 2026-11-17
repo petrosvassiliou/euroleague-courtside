@@ -124,8 +124,9 @@ fun MatchCenterScreen(
     var showRoundDropdown by remember { mutableStateOf(false) }
     var filterOnlyLive by rememberSaveable { mutableStateOf(false) }
 
-    // Automatischer Echtzeit-Live-Score-Ticker (alle 15 Sekunden), solange der EuroLeague-Screen geöffnet ist
+    // Automatischer Echtzeit-Live-Score-Ticker (sofort beim Öffnen + alle 15 Sekunden), solange der EuroLeague-Screen geöffnet ist
     androidx.compose.runtime.LaunchedEffect(Unit) {
+        onLiveScoreTick()
         while (true) {
             kotlinx.coroutines.delay(15_000L)
             onLiveScoreTick()

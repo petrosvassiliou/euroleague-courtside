@@ -16,8 +16,8 @@ android {
         minSdk = 26
         targetSdk = 35
         // Semantic Versioning (MAJOR.MINOR.PATCH) + monoton steigender versionCode bei jeder Änderung
-        versionCode = 12
-        versionName = "1.5.0"
+        versionCode = 13
+        versionName = "1.5.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
