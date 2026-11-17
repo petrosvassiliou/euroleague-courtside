@@ -295,6 +295,7 @@ data class EuroLeagueShotRowDto(
 @Serializable
 data class EuroLeagueLiveHeaderDto(
     @SerialName("Live") val live: Boolean = false,
+    @SerialName("Round") val round: String = "",
     @SerialName("TeamA") val teamA: String = "",
     @SerialName("TeamB") val teamB: String = "",
     @SerialName("CodeTeamA") val codeTeamA: String = "",
@@ -309,11 +310,13 @@ data class EuroLeagueLiveHeaderDto(
     @SerialName("ScoreQuarter3A") val scoreQuarter3A: Int = 0,
     @SerialName("ScoreQuarter4A") val scoreQuarter4A: Int = 0,
     @SerialName("ScoreExtra1A") val scoreExtra1A: Int = 0,
+    @SerialName("ScoreExtraTimeA") val scoreExtraTimeA: Int = 0,
     @SerialName("ScoreQuarter1B") val scoreQuarter1B: Int = 0,
     @SerialName("ScoreQuarter2B") val scoreQuarter2B: Int = 0,
     @SerialName("ScoreQuarter3B") val scoreQuarter3B: Int = 0,
     @SerialName("ScoreQuarter4B") val scoreQuarter4B: Int = 0,
-    @SerialName("ScoreExtra1B") val scoreExtra1B: Int = 0
+    @SerialName("ScoreExtra1B") val scoreExtra1B: Int = 0,
+    @SerialName("ScoreExtraTimeB") val scoreExtraTimeB: Int = 0
 )
 
 // --- BUNDLED SNAPSHOT DTOs (assets/euroleague_live_snapshot.json) ---
@@ -901,6 +904,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
 
                 val latestCachedById = fallbackMockRepository.games.value.associateBy { it.id }
                 val latestCachedByCode = fallbackMockRepository.games.value.associateBy { it.gameCode }
+                val nowMillis = System.currentTimeMillis()
 
                 val liveGames = coroutineScope {
                     sortedAllGamesDto.mapNotNull { g ->
@@ -911,15 +915,25 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                             ?: existingGamesById[gameId]
                             ?: latestCachedByCode[g.gameCode]
                         async {
-                            val isActiveRound = g.round == activeRound
-                            val (fetchedBoxHome, fetchedBoxAway) = if (isActiveRound && g.played) {
+                            val candidateHeader = if (shouldQueryLiveHeader(g, activeRound, nowMillis)) {
+                                apiSemaphore.withPermit {
+                                    fetchGameLiveHeader(seasonCode, g.gameCode)
+                                }
+                            } else null
+                            val headerHasScore = (candidateHeader?.scoreA?.trim()?.toIntOrNull() ?: 0) > 0 ||
+                                (candidateHeader?.scoreB?.trim()?.toIntOrNull() ?: 0) > 0
+                            val isHeaderLiveOrPlayed = candidateHeader != null && (candidateHeader.live || headerHasScore)
+                            val isEffectivelyPlayedOrLive = g.played || isHeaderLiveOrPlayed
+                            val isActiveOrCurrentRound = g.round == activeRound || g.round == activeRound + 1 || isHeaderLiveOrPlayed
+
+                            val (fetchedBoxHome, fetchedBoxAway) = if (isActiveOrCurrentRound && isEffectivelyPlayedOrLive) {
                                 apiSemaphore.withPermit {
                                     fetchGameBoxscores(seasonCode, g.gameCode, homeTeam.id, awayTeam.id)
                                 }
                             } else {
                                 emptyList<PlayerBoxscoreStat>() to emptyList()
                             }
-                            val fetchedShots = if (isActiveRound && g.played) {
+                            val fetchedShots = if (isActiveOrCurrentRound && isEffectivelyPlayedOrLive) {
                                 apiSemaphore.withPermit {
                                     fetchGameShotChart(seasonCode, g.gameCode, homeTeam.id, awayTeam.id)
                                 }
@@ -928,19 +942,19 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                             }
 
                             val finalBoxHome = when {
-                                !g.played -> emptyList()
+                                !isEffectivelyPlayedOrLive -> emptyList()
                                 fetchedBoxHome.isNotEmpty() -> fetchedBoxHome
                                 cachedGame != null && cachedGame.boxscoreHome.isNotEmpty() -> cachedGame.boxscoreHome
                                 else -> buildFallbackBoxscoreFromRoster(homeTeam.id, allVerifiedPlayers)
                             }
                             val finalBoxAway = when {
-                                !g.played -> emptyList()
+                                !isEffectivelyPlayedOrLive -> emptyList()
                                 fetchedBoxAway.isNotEmpty() -> fetchedBoxAway
                                 cachedGame != null && cachedGame.boxscoreAway.isNotEmpty() -> cachedGame.boxscoreAway
                                 else -> buildFallbackBoxscoreFromRoster(awayTeam.id, allVerifiedPlayers)
                             }
                             val finalShots = when {
-                                !g.played -> emptyList()
+                                !isEffectivelyPlayedOrLive -> emptyList()
                                 fetchedShots.isNotEmpty() -> fetchedShots
                                 cachedGame != null && cachedGame.shots.isNotEmpty() -> cachedGame.shots
                                 else -> buildFallbackShotChartFromBoxscores(
@@ -952,7 +966,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                                 )
                             }
 
-                            mapRemoteGameToDomain(
+                            val mapped = mapRemoteGameToDomain(
                                 g = g,
                                 seasonCode = seasonCode,
                                 homeTeam = homeTeam,
@@ -961,17 +975,31 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                                 boxAway = finalBoxAway,
                                 shots = finalShots
                             )
+
+                            when {
+                                isHeaderLiveOrPlayed && candidateHeader != null ->
+                                    applyLiveHeaderToGame(mapped, candidateHeader)
+                                !g.played && cachedGame != null && cachedGame.status != GameStatus.UPCOMING ->
+                                    cachedGame
+                                else -> mapped
+                            }
                         }
                     }.awaitAll()
                 }
+
+                val resolvedActiveRound = liveGames
+                    .filter { it.status == GameStatus.LIVE || it.status == GameStatus.FINAL }
+                    .maxOfOrNull { it.round }
+                    ?.let { maxOf(activeRound, it) }
+                    ?: activeRound
 
                 fallbackMockRepository.applyLiveDataset(
                     liveTeams = liveTeams,
                     livePlayers = allVerifiedPlayers,
                     liveGames = liveGames,
-                    activeRound = activeRound,
+                    activeRound = resolvedActiveRound,
                     seasonCode = seasonCode,
-                    syncLabel = "$seasonCode • Round $activeRound"
+                    syncLabel = "$seasonCode • Round $resolvedActiveRound"
                 )
 
                 persistToRoomCache(liveTeams, liveGames)
@@ -985,78 +1013,159 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
      * Schneller, Rate-Limit-schonender Live-Ticker (1 Request für aktuelle Spielstände/Viertel +
      * `live.euroleague.net/api/Header` & Live-Boxscore-Update für laufende Partien), damit die App
      * im Dauerbetrieb niemals HTTP 429 auslöst und gleichzeitig Live-Scores in Echtzeit aktualisiert.
+     * Falls `api-live.euroleague.net` gedrosselt ist, werden laufende Partien direkt über
+     * `live.euroleague.net/api/Header` aktualisiert.
      */
     suspend fun refreshLiveMatchdayTick(): Result<Unit> =
         withContext(ioDispatcher) {
             runCatching {
                 val seasonCode = fallbackMockRepository.seasonCodeFlow.value
-                val allGamesDto = apiService.fetchSeasonGames(seasonCode = seasonCode, round = null, limit = 400).data
-                if (allGamesDto.isEmpty()) {
-                    return@runCatching
-                }
+                val nowMillis = System.currentTimeMillis()
+                val allGamesDto = runCatching {
+                    apiService.fetchSeasonGames(seasonCode = seasonCode, round = null, limit = 400).data
+                }.getOrDefault(emptyList())
 
-                val sortedAllGamesDto = allGamesDto.sortedWith(
-                    compareBy<EuroLeagueRemoteGameDto> { it.round }
-                        .thenBy { it.utcDate ?: "" }
-                        .thenBy { it.gameCode }
-                )
-                val activeRound = resolveCurrentActiveRound(emptyList(), sortedAllGamesDto)
-
-                val teamById = fallbackMockRepository.teams.associateBy { it.id }
-                val cachedById = fallbackMockRepository.games.value.associateBy { it.id }
-
-                val updatedGames = sortedAllGamesDto.mapNotNull { g ->
-                    val homeTeam = teamById[g.local.club.code] ?: return@mapNotNull null
-                    val awayTeam = teamById[g.road.club.code] ?: return@mapNotNull null
-                    val gameId = "${seasonCode}_${g.gameCode}"
-                    val cached = cachedById[gameId]
-                    val statusRaw = (g.gameStatus ?: "").lowercase()
-                    val isStatusLive = "live" in statusRaw || "playing" in statusRaw || "progress" in statusRaw
-                    val candidateHeader = if (isStatusLive || (!g.played && g.round == activeRound)) {
-                        fetchGameLiveHeader(seasonCode, g.gameCode)
-                    } else null
-                    val headerHasScore = (candidateHeader?.scoreA?.trim()?.toIntOrNull() ?: 0) > 0 ||
-                        (candidateHeader?.scoreB?.trim()?.toIntOrNull() ?: 0) > 0
-                    val isLive = isStatusLive || (candidateHeader?.live == true && headerHasScore)
-                    val justFinished = (g.played || (candidateHeader != null && !candidateHeader.live && headerHasScore)) &&
-                        cached?.status != GameStatus.FINAL
-
-                    val (boxH, boxA) = if (isLive || justFinished) {
-                        fetchGameBoxscores(seasonCode, g.gameCode, homeTeam.id, awayTeam.id)
-                    } else {
-                        (cached?.boxscoreHome ?: emptyList()) to (cached?.boxscoreAway ?: emptyList())
-                    }
-                    val shots = if (isLive || justFinished) {
-                        fetchGameShotChart(seasonCode, g.gameCode, homeTeam.id, awayTeam.id)
-                    } else {
-                        cached?.shots ?: emptyList()
-                    }
-
-                    val mapped = mapRemoteGameToDomain(
-                        g = g,
-                        seasonCode = seasonCode,
-                        homeTeam = homeTeam,
-                        awayTeam = awayTeam,
-                        boxHome = boxH.ifEmpty { cached?.boxscoreHome ?: emptyList() },
-                        boxAway = boxA.ifEmpty { cached?.boxscoreAway ?: emptyList() },
-                        shots = shots.ifEmpty { cached?.shots ?: emptyList() }
+                if (allGamesDto.isNotEmpty()) {
+                    val sortedAllGamesDto = allGamesDto.sortedWith(
+                        compareBy<EuroLeagueRemoteGameDto> { it.round }
+                            .thenBy { it.utcDate ?: "" }
+                            .thenBy { it.gameCode }
                     )
+                    val activeRound = resolveCurrentActiveRound(emptyList(), sortedAllGamesDto, nowMillis)
 
-                    if (candidateHeader != null && (isLive || candidateHeader.live || headerHasScore)) {
-                        applyLiveHeaderToGame(mapped, candidateHeader)
-                    } else {
-                        mapped
+                    val teamById = fallbackMockRepository.teams.associateBy { it.id }
+                    val cachedById = fallbackMockRepository.games.value.associateBy { it.id }
+
+                    val updatedGames = coroutineScope {
+                        sortedAllGamesDto.mapNotNull { g ->
+                            val homeTeam = teamById[g.local.club.code] ?: return@mapNotNull null
+                            val awayTeam = teamById[g.road.club.code] ?: return@mapNotNull null
+                            val gameId = "${seasonCode}_${g.gameCode}"
+                            val cached = cachedById[gameId]
+                            async {
+                                val statusRaw = (g.gameStatus ?: "").lowercase()
+                                val isStatusLive = "live" in statusRaw || "playing" in statusRaw || "progress" in statusRaw
+                                val candidateHeader = if (shouldQueryLiveHeader(g, activeRound, nowMillis)) {
+                                    apiSemaphore.withPermit {
+                                        fetchGameLiveHeader(seasonCode, g.gameCode)
+                                    }
+                                } else null
+                                val headerHasScore = (candidateHeader?.scoreA?.trim()?.toIntOrNull() ?: 0) > 0 ||
+                                    (candidateHeader?.scoreB?.trim()?.toIntOrNull() ?: 0) > 0
+                                val isLive = isStatusLive || (candidateHeader?.live == true && headerHasScore)
+                                val justFinished = (g.played || (candidateHeader != null && !candidateHeader.live && headerHasScore)) &&
+                                    cached?.status != GameStatus.FINAL
+
+                                val (boxH, boxA) = if (isLive || justFinished) {
+                                    apiSemaphore.withPermit {
+                                        fetchGameBoxscores(seasonCode, g.gameCode, homeTeam.id, awayTeam.id)
+                                    }
+                                } else {
+                                    (cached?.boxscoreHome ?: emptyList()) to (cached?.boxscoreAway ?: emptyList())
+                                }
+                                val shots = if (isLive || justFinished) {
+                                    apiSemaphore.withPermit {
+                                        fetchGameShotChart(seasonCode, g.gameCode, homeTeam.id, awayTeam.id)
+                                    }
+                                } else {
+                                    cached?.shots ?: emptyList()
+                                }
+
+                                val mapped = mapRemoteGameToDomain(
+                                    g = g,
+                                    seasonCode = seasonCode,
+                                    homeTeam = homeTeam,
+                                    awayTeam = awayTeam,
+                                    boxHome = boxH.ifEmpty { cached?.boxscoreHome ?: emptyList() },
+                                    boxAway = boxA.ifEmpty { cached?.boxscoreAway ?: emptyList() },
+                                    shots = shots.ifEmpty { cached?.shots ?: emptyList() }
+                                )
+
+                                when {
+                                    candidateHeader != null && (isLive || candidateHeader.live || headerHasScore) ->
+                                        applyLiveHeaderToGame(mapped, candidateHeader)
+                                    !g.played && cached != null && cached.status != GameStatus.UPCOMING ->
+                                        cached
+                                    else -> mapped
+                                }
+                            }
+                        }.awaitAll()
                     }
-                }
 
-                if (updatedGames.isNotEmpty()) {
+                    if (updatedGames.isNotEmpty()) {
+                        val resolvedActiveRound = updatedGames
+                            .filter { it.status == GameStatus.LIVE || it.status == GameStatus.FINAL }
+                            .maxOfOrNull { it.round }
+                            ?.let { maxOf(activeRound, it) }
+                            ?: activeRound
+                        fallbackMockRepository.applyLiveDataset(
+                            liveTeams = fallbackMockRepository.teams,
+                            livePlayers = fallbackMockRepository.players,
+                            liveGames = updatedGames,
+                            activeRound = resolvedActiveRound,
+                            seasonCode = seasonCode,
+                            syncLabel = "$seasonCode • Round $resolvedActiveRound"
+                        )
+                    }
+                } else {
+                    val existingGames = fallbackMockRepository.games.value
+                    if (existingGames.isEmpty()) return@runCatching
+                    val activeRound = fallbackMockRepository.activeRoundFlow.value
+                    val updatedGames = coroutineScope {
+                        existingGames.map { game ->
+                            async {
+                                val isCandidate = game.status == GameStatus.LIVE ||
+                                    (game.status != GameStatus.FINAL &&
+                                        (game.round == activeRound || game.round == activeRound + 1 ||
+                                            game.tipOffEpochMillis in (nowMillis - 18 * 3_600_000L)..(nowMillis + 2 * 3_600_000L)))
+                                if (!isCandidate || game.gameCode <= 0) {
+                                    return@async game
+                                }
+                                val candidateHeader = apiSemaphore.withPermit {
+                                    fetchGameLiveHeader(game.seasonCode, game.gameCode)
+                                } ?: return@async game
+                                val headerHasScore = (candidateHeader.scoreA.trim().toIntOrNull() ?: 0) > 0 ||
+                                    (candidateHeader.scoreB.trim().toIntOrNull() ?: 0) > 0
+                                if (!candidateHeader.live && !headerHasScore) {
+                                    return@async game
+                                }
+                                val headerApplied = applyLiveHeaderToGame(game, candidateHeader)
+                                val needStats = headerApplied.status == GameStatus.LIVE ||
+                                    (headerApplied.status == GameStatus.FINAL && game.status != GameStatus.FINAL)
+                                val (boxH, boxA) = if (needStats) {
+                                    apiSemaphore.withPermit {
+                                        fetchGameBoxscores(game.seasonCode, game.gameCode, game.homeTeam.id, game.awayTeam.id)
+                                    }
+                                } else {
+                                    game.boxscoreHome to game.boxscoreAway
+                                }
+                                val shots = if (needStats) {
+                                    apiSemaphore.withPermit {
+                                        fetchGameShotChart(game.seasonCode, game.gameCode, game.homeTeam.id, game.awayTeam.id)
+                                    }
+                                } else {
+                                    game.shots
+                                }
+                                headerApplied.copy(
+                                    boxscoreHome = boxH.ifEmpty { game.boxscoreHome },
+                                    boxscoreAway = boxA.ifEmpty { game.boxscoreAway },
+                                    shots = shots.ifEmpty { game.shots }
+                                )
+                            }
+                        }.awaitAll()
+                    }
+                    val resolvedActiveRound = updatedGames
+                        .filter { it.status == GameStatus.LIVE || it.status == GameStatus.FINAL }
+                        .maxOfOrNull { it.round }
+                        ?.let { maxOf(activeRound, it) }
+                        ?: activeRound
                     fallbackMockRepository.applyLiveDataset(
                         liveTeams = fallbackMockRepository.teams,
                         livePlayers = fallbackMockRepository.players,
                         liveGames = updatedGames,
-                        activeRound = activeRound,
+                        activeRound = resolvedActiveRound,
                         seasonCode = seasonCode,
-                        syncLabel = "$seasonCode • Round $activeRound"
+                        syncLabel = "$seasonCode • Round $resolvedActiveRound"
                     )
                 }
             }
@@ -1086,18 +1195,23 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
         }
 
     /**
-     * Lädt Live-Boxscore, echte Shot-Chart-Koordinaten und (falls live) den aktuellen
+     * Lädt Live-Boxscore, echte Shot-Chart-Koordinaten und (falls live oder heute gestartet) den aktuellen
      * `live.euroleague.net/api/Header` Spielstand für ein ausgewähltes Spiel nach.
      */
     suspend fun refreshSelectedGameLiveStats(game: EuroLeagueGame): Result<EuroLeagueGame> =
         withContext(ioDispatcher) {
             runCatching {
-                if (game.status == GameStatus.UPCOMING) {
-                    return@runCatching game
-                }
-                val liveHeader = if (game.status == GameStatus.LIVE) {
+                val nowMillis = System.currentTimeMillis()
+                val shouldCheckHeader = game.status == GameStatus.LIVE ||
+                    (game.status == GameStatus.UPCOMING && game.tipOffEpochMillis <= nowMillis + 2 * 3_600_000L)
+                val liveHeader = if (shouldCheckHeader && game.gameCode > 0) {
                     fetchGameLiveHeader(game.seasonCode, game.gameCode)
                 } else null
+                val headerHasScore = (liveHeader?.scoreA?.trim()?.toIntOrNull() ?: 0) > 0 ||
+                    (liveHeader?.scoreB?.trim()?.toIntOrNull() ?: 0) > 0
+                if (game.status == GameStatus.UPCOMING && liveHeader?.live != true && !headerHasScore) {
+                    return@runCatching game
+                }
                 val (boxHome, boxAway) = fetchGameBoxscores(
                     seasonCode = game.seasonCode,
                     gameCode = game.gameCode,
@@ -1136,7 +1250,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                     boxscoreAway = resolvedAway,
                     shots = resolvedShots
                 )
-                val updated = if (liveHeader != null) {
+                val updated = if (liveHeader != null && (liveHeader.live || headerHasScore)) {
                     applyLiveHeaderToGame(baseUpdated, liveHeader)
                 } else {
                     baseUpdated
@@ -1154,82 +1268,33 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
         apiService.fetchLiveGameHeader(url)
     }.getOrNull()
 
+    internal fun shouldQueryLiveHeader(
+        g: EuroLeagueRemoteGameDto,
+        activeRound: Int,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Boolean {
+        val statusRaw = (g.gameStatus ?: "").lowercase()
+        if ("live" in statusRaw || "playing" in statusRaw || "progress" in statusRaw) {
+            return true
+        }
+        val tipOffMillis = runCatching {
+            Instant.parse(g.utcDate ?: "").toEpochMilli()
+        }.getOrNull()
+        val isMatchdayWindow = tipOffMillis != null &&
+            tipOffMillis in (nowMillis - 18 * 3_600_000L)..(nowMillis + 2 * 3_600_000L)
+        if (!g.played && isMatchdayWindow) {
+            return true
+        }
+        if (!g.played && (g.round == activeRound || g.round == activeRound + 1)) {
+            return tipOffMillis == null || tipOffMillis <= nowMillis + 6 * 3_600_000L
+        }
+        return false
+    }
+
     internal fun applyLiveHeaderToGame(
         game: EuroLeagueGame,
         header: EuroLeagueLiveHeaderDto
-    ): EuroLeagueGame {
-        val parsedScoreA = header.scoreA.trim().toIntOrNull()
-        val parsedScoreB = header.scoreB.trim().toIntOrNull()
-        val hasScore = (parsedScoreA ?: 0) > 0 || (parsedScoreB ?: 0) > 0
-        val qRaw = header.quarter.trim().uppercase()
-        val parsedQuarter = when {
-            "OT" in qRaw || "E" in qRaw -> 5
-            else -> qRaw.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 5) ?: game.currentQuarter
-        }
-        val clockClean = header.remainingPartialTime.trim().ifEmpty { game.remainingClock }
-        val gameMinutes = header.gameTime.substringBefore(":").trim().toIntOrNull() ?: 0
-        val isClockZero = clockClean == "00:00" || clockClean == "0:00" || clockClean.isEmpty()
-        val isEndedInHeader = hasScore && (
-            !header.live ||
-                (gameMinutes >= 40 && isClockZero && qRaw.isEmpty() && parsedScoreA != parsedScoreB)
-            )
-        val resolvedStatus = when {
-            game.status == GameStatus.FINAL || isEndedInHeader -> GameStatus.FINAL
-            header.live && hasScore -> GameStatus.LIVE
-            else -> game.status
-        }
-        val hasHeaderPartials = (header.scoreQuarter1A + header.scoreQuarter1B + header.scoreQuarter2A + header.scoreQuarter2B) > 0
-        val updatedQuarters = if (hasHeaderPartials) {
-            val isCumulativeA = header.scoreQuarter2A >= header.scoreQuarter1A && header.scoreQuarter1A > 0
-            val isCumulativeB = header.scoreQuarter2B >= header.scoreQuarter1B && header.scoreQuarter1B > 0
-            val q1H = header.scoreQuarter1A
-            val q2H = if (isCumulativeA) (header.scoreQuarter2A - header.scoreQuarter1A).coerceAtLeast(0) else header.scoreQuarter2A
-            val q3H = if (isCumulativeA && header.scoreQuarter3A >= header.scoreQuarter2A) (header.scoreQuarter3A - header.scoreQuarter2A).coerceAtLeast(0) else header.scoreQuarter3A.coerceAtLeast(0)
-            val q4H = if (isCumulativeA && header.scoreQuarter4A >= header.scoreQuarter3A) (header.scoreQuarter4A - header.scoreQuarter3A).coerceAtLeast(0) else header.scoreQuarter4A.coerceAtLeast(0)
-            val q1A = header.scoreQuarter1B
-            val q2A = if (isCumulativeB) (header.scoreQuarter2B - header.scoreQuarter1B).coerceAtLeast(0) else header.scoreQuarter2B
-            val q3A = if (isCumulativeB && header.scoreQuarter3B >= header.scoreQuarter2B) (header.scoreQuarter3B - header.scoreQuarter2B).coerceAtLeast(0) else header.scoreQuarter3B.coerceAtLeast(0)
-            val q4A = if (isCumulativeB && header.scoreQuarter4B >= header.scoreQuarter3B) (header.scoreQuarter4B - header.scoreQuarter3B).coerceAtLeast(0) else header.scoreQuarter4B.coerceAtLeast(0)
-            val regH = q1H + q2H + q3H + q4H
-            val regA = q1A + q2A + q3A + q4A
-            val totalH = parsedScoreA ?: game.homeScore
-            val totalA = parsedScoreB ?: game.awayScore
-            val otH = when {
-                isCumulativeA && header.scoreExtra1A > header.scoreQuarter4A -> header.scoreExtra1A - header.scoreQuarter4A
-                header.scoreExtra1A > 0 && !isCumulativeA -> header.scoreExtra1A
-                totalH > regH && regH > 0 -> totalH - regH
-                else -> null
-            }
-            val otA = when {
-                isCumulativeB && header.scoreExtra1B > header.scoreQuarter4B -> header.scoreExtra1B - header.scoreQuarter4B
-                header.scoreExtra1B > 0 && !isCumulativeB -> header.scoreExtra1B
-                totalA > regA && regA > 0 -> totalA - regA
-                else -> null
-            }
-            QuarterScores(
-                q1Home = q1H,
-                q1Away = q1A,
-                q2Home = q2H,
-                q2Away = q2A,
-                q3Home = q3H,
-                q3Away = q3A,
-                q4Home = q4H,
-                q4Away = q4A,
-                otHome = otH,
-                otAway = otA
-            )
-        } else {
-            game.quarters
-        }
-        return game.copy(
-            status = resolvedStatus,
-            currentQuarter = if (resolvedStatus == GameStatus.FINAL && updatedQuarters.otHome != null) 5 else parsedQuarter,
-            remainingClock = if (resolvedStatus == GameStatus.FINAL) "00:00" else clockClean,
-            homeScore = parsedScoreA ?: game.homeScore,
-            awayScore = parsedScoreB ?: game.awayScore,
-            quarters = updatedQuarters
-        )
-    }
+    ): EuroLeagueGame = applyLiveHeaderToGameStatic(game, header)
 
     // --- HELPER METHODS ---
 
@@ -1244,19 +1309,45 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
         error("Keine aktiven EuroLeague-Clubs über api-live.euroleague.net erreichbar")
     }
 
-    private fun resolveCurrentActiveRound(
+    internal fun resolveCurrentActiveRound(
         rounds: List<EuroLeagueRoundDto>,
-        allGamesDto: List<EuroLeagueRemoteGameDto>
+        allGamesDto: List<EuroLeagueRemoteGameDto>,
+        nowMillis: Long = System.currentTimeMillis()
     ): Int {
-        val playedRounds = allGamesDto
-            .filter { it.played || (it.local.score ?: 0) > 0 || (it.road.score ?: 0) > 0 }
+        val playedOrLiveGames = allGamesDto.filter { g ->
+            val st = (g.gameStatus ?: "").lowercase()
+            g.played || (g.local.score ?: 0) > 0 || (g.road.score ?: 0) > 0 ||
+                "live" in st || "playing" in st || "progress" in st
+        }
+        val playedRounds = playedOrLiveGames
             .map { it.round }
             .filter { it in 1..38 }
         if (playedRounds.isNotEmpty()) {
-            return playedRounds.maxOrNull() ?: 11
+            val maxPlayedRound = playedRounds.maxOrNull() ?: 11
+            val gamesInMaxRound = allGamesDto.filter { it.round == maxPlayedRound }
+            val allInMaxPlayed = gamesInMaxRound.isNotEmpty() && gamesInMaxRound.all { g ->
+                g.played || (g.local.score ?: 0) > 0 || (g.road.score ?: 0) > 0
+            }
+            if (allInMaxPlayed && maxPlayedRound < 38) {
+                val nextRound = maxPlayedRound + 1
+                val nextRoundTipOffs = allGamesDto
+                    .filter { it.round == nextRound }
+                    .mapNotNull { g ->
+                        runCatching { Instant.parse(g.utcDate ?: "").toEpochMilli() }.getOrNull()
+                    }
+                val minNextTipOff = nextRoundTipOffs.minOrNull()
+                val maxNextTipOff = nextRoundTipOffs.maxOrNull()
+                if (minNextTipOff != null && maxNextTipOff != null &&
+                    nowMillis >= minNextTipOff - 36 * 3_600_000L &&
+                    nowMillis <= maxNextTipOff + 72 * 3_600_000L
+                ) {
+                    return nextRound
+                }
+            }
+            return maxPlayedRound
         }
         if (rounds.isEmpty()) return fallbackMockRepository.activeRoundFlow.value.coerceIn(1, 38)
-        val nowIso = Instant.now().toString()
+        val nowIso = Instant.ofEpochMilli(nowMillis).toString()
         val sortedRounds = rounds.filter { it.round in 1..38 }.sortedBy { it.round }
         for (r in sortedRounds) {
             val maxDate = r.maxGameStartDate ?: ""
@@ -1552,7 +1643,11 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
             awayTeam = awayTeam,
             tipOffEpochMillis = tipOffMillis,
             status = status,
-            currentQuarter = if (status == GameStatus.UPCOMING) 1 else 4,
+            currentQuarter = when {
+                status == GameStatus.UPCOMING -> 1
+                g.played && hScore > sumRegH && sumRegH > 0 -> 5
+                else -> 4
+            },
             remainingClock = when (status) {
                 GameStatus.FINAL -> "00:00"
                 GameStatus.LIVE -> "02:15"
@@ -1771,5 +1866,94 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
         }
         dao.upsertTeams(teamEntities)
         dao.upsertGames(gameEntities)
+    }
+
+    companion object {
+        internal fun applyLiveHeaderToGameStatic(
+            game: EuroLeagueGame,
+            header: EuroLeagueLiveHeaderDto
+        ): EuroLeagueGame {
+            val parsedScoreA = header.scoreA.trim().toIntOrNull()
+            val parsedScoreB = header.scoreB.trim().toIntOrNull()
+            val hasScore = (parsedScoreA ?: 0) > 0 || (parsedScoreB ?: 0) > 0
+            val gameMinutes = header.gameTime.substringBefore(":").trim().toIntOrNull() ?: 0
+            val qRaw = header.quarter.trim().uppercase()
+            val inferredQuarterFromTime = if (gameMinutes >= 1) {
+                ((gameMinutes - 1) / 10 + 1).coerceIn(1, 5)
+            } else {
+                game.currentQuarter
+            }
+            val parsedQuarter = when {
+                "OT" in qRaw || "E" in qRaw -> 5
+                else -> qRaw.filter { it.isDigit() }.toIntOrNull()?.coerceIn(1, 5) ?: inferredQuarterFromTime
+            }
+            val clockClean = header.remainingPartialTime.trim().ifEmpty {
+                if (header.live) "00:00" else game.remainingClock
+            }
+            val isClockZero = clockClean == "00:00" || clockClean == "0:00" || clockClean.isEmpty()
+            val isEndedInHeader = hasScore && (
+                !header.live ||
+                    (gameMinutes >= 40 && isClockZero && qRaw.isEmpty() && parsedScoreA != parsedScoreB)
+                )
+            val resolvedStatus = when {
+                isEndedInHeader -> GameStatus.FINAL
+                header.live && hasScore -> GameStatus.LIVE
+                game.status == GameStatus.FINAL -> GameStatus.FINAL
+                else -> game.status
+            }
+            val extraRawA = maxOf(header.scoreExtraTimeA, header.scoreExtra1A)
+            val extraRawB = maxOf(header.scoreExtraTimeB, header.scoreExtra1B)
+            val hasHeaderPartials = (header.scoreQuarter1A + header.scoreQuarter1B + header.scoreQuarter2A + header.scoreQuarter2B) > 0
+            val updatedQuarters = if (hasHeaderPartials) {
+                val isCumulativeA = header.scoreQuarter2A == 0 || (header.scoreQuarter2A >= header.scoreQuarter1A && header.scoreQuarter1A > 0)
+                val isCumulativeB = header.scoreQuarter2B == 0 || (header.scoreQuarter2B >= header.scoreQuarter1B && header.scoreQuarter1B > 0)
+                val q1H = header.scoreQuarter1A.coerceAtLeast(0)
+                val q2H = if (header.scoreQuarter2A <= 0) 0 else if (isCumulativeA) (header.scoreQuarter2A - header.scoreQuarter1A).coerceAtLeast(0) else header.scoreQuarter2A
+                val q3H = if (header.scoreQuarter3A <= 0) 0 else if (isCumulativeA && header.scoreQuarter3A >= header.scoreQuarter2A) (header.scoreQuarter3A - header.scoreQuarter2A).coerceAtLeast(0) else header.scoreQuarter3A.coerceAtLeast(0)
+                val q4H = if (header.scoreQuarter4A <= 0) 0 else if (isCumulativeA && header.scoreQuarter4A >= header.scoreQuarter3A) (header.scoreQuarter4A - header.scoreQuarter3A).coerceAtLeast(0) else header.scoreQuarter4A.coerceAtLeast(0)
+                val q1A = header.scoreQuarter1B.coerceAtLeast(0)
+                val q2A = if (header.scoreQuarter2B <= 0) 0 else if (isCumulativeB) (header.scoreQuarter2B - header.scoreQuarter1B).coerceAtLeast(0) else header.scoreQuarter2B
+                val q3A = if (header.scoreQuarter3B <= 0) 0 else if (isCumulativeB && header.scoreQuarter3B >= header.scoreQuarter2B) (header.scoreQuarter3B - header.scoreQuarter2B).coerceAtLeast(0) else header.scoreQuarter3B.coerceAtLeast(0)
+                val q4A = if (header.scoreQuarter4B <= 0) 0 else if (isCumulativeB && header.scoreQuarter4B >= header.scoreQuarter3B) (header.scoreQuarter4B - header.scoreQuarter3B).coerceAtLeast(0) else header.scoreQuarter4B.coerceAtLeast(0)
+                val regH = q1H + q2H + q3H + q4H
+                val regA = q1A + q2A + q3A + q4A
+                val totalH = parsedScoreA ?: game.homeScore
+                val totalA = parsedScoreB ?: game.awayScore
+                val otH = when {
+                    isCumulativeA && extraRawA > header.scoreQuarter4A && header.scoreQuarter4A > 0 -> extraRawA - header.scoreQuarter4A
+                    extraRawA > 0 && !isCumulativeA -> extraRawA
+                    (resolvedStatus == GameStatus.FINAL || parsedQuarter >= 5) && totalH > regH && regH > 0 -> totalH - regH
+                    else -> null
+                }
+                val otA = when {
+                    isCumulativeB && extraRawB > header.scoreQuarter4B && header.scoreQuarter4B > 0 -> extraRawB - header.scoreQuarter4B
+                    extraRawB > 0 && !isCumulativeB -> extraRawB
+                    (resolvedStatus == GameStatus.FINAL || parsedQuarter >= 5) && totalA > regA && regA > 0 -> totalA - regA
+                    else -> null
+                }
+                QuarterScores(
+                    q1Home = q1H,
+                    q1Away = q1A,
+                    q2Home = q2H,
+                    q2Away = q2A,
+                    q3Home = q3H,
+                    q3Away = q3A,
+                    q4Home = q4H,
+                    q4Away = q4A,
+                    otHome = otH,
+                    otAway = otA
+                )
+            } else {
+                game.quarters
+            }
+            return game.copy(
+                status = resolvedStatus,
+                currentQuarter = if (resolvedStatus == GameStatus.FINAL && updatedQuarters.otHome != null) 5 else parsedQuarter,
+                remainingClock = if (resolvedStatus == GameStatus.FINAL) "00:00" else clockClean,
+                homeScore = parsedScoreA ?: game.homeScore,
+                awayScore = parsedScoreB ?: game.awayScore,
+                quarters = updatedQuarters
+            )
+        }
     }
 }

@@ -677,13 +677,76 @@ def main():
             utc_date = str(g.get("utcDate") or g.get("date") or "")
             tip_off_ms = parse_iso_epoch_millis(utc_date)
             venue_name = str((g.get("venue") or {}).get("name") or "")
+            now_ms = int(time.time() * 1000)
+
+            current_quarter = 1
+            remaining_clock = "10:00"
 
             if "live" in game_status_str or "playing" in game_status_str:
                 status = "LIVE"
+                current_quarter = 4
+                remaining_clock = "02:15"
             elif played or (l_score > 0 or r_score > 0):
                 status = "FINAL"
+                current_quarter = 5 if (l_score > (q1_h + q2_h + q3_h + q4_h) and (q1_h + q2_h + q3_h + q4_h) > 0) else 4
+                remaining_clock = "00:00"
             else:
                 status = "UPCOMING"
+
+            if status == "UPCOMING" and game_code > 0 and (
+                rnd in (active_round, active_round + 1) or (now_ms - 18 * 3600 * 1000 <= tip_off_ms <= now_ms + 2 * 3600 * 1000)
+            ) and tip_off_ms <= now_ms + 2 * 3600 * 1000:
+                hdr = fetch_json(f"{LIVE_BASE}/Header?gamecode={game_code}&seasoncode={season_code}")
+                if isinstance(hdr, dict):
+                    try:
+                        sa = int(str(hdr.get("ScoreA") or "0").strip() or "0")
+                        sb = int(str(hdr.get("ScoreB") or "0").strip() or "0")
+                    except Exception:
+                        sa, sb = 0, 0
+                    is_hdr_live = bool(hdr.get("Live"))
+                    if is_hdr_live or sa > 0 or sb > 0:
+                        l_score = sa
+                        r_score = sb
+                        sq1a = int(hdr.get("ScoreQuarter1A") or 0)
+                        sq2a = int(hdr.get("ScoreQuarter2A") or 0)
+                        sq3a = int(hdr.get("ScoreQuarter3A") or 0)
+                        sq4a = int(hdr.get("ScoreQuarter4A") or 0)
+                        sq1b = int(hdr.get("ScoreQuarter1B") or 0)
+                        sq2b = int(hdr.get("ScoreQuarter2B") or 0)
+                        sq3b = int(hdr.get("ScoreQuarter3B") or 0)
+                        sq4b = int(hdr.get("ScoreQuarter4B") or 0)
+                        if (sq1a + sq1b + sq2a + sq2b) > 0:
+                            q1_h = max(0, sq1a)
+                            q2_h = max(0, sq2a - sq1a) if sq2a > 0 else 0
+                            q3_h = max(0, sq3a - sq2a) if sq3a > 0 else 0
+                            q4_h = max(0, sq4a - sq3a) if sq4a > 0 else 0
+                            q1_a = max(0, sq1b)
+                            q2_a = max(0, sq2b - sq1b) if sq2b > 0 else 0
+                            q3_a = max(0, sq3b - sq2b) if sq3b > 0 else 0
+                            q4_a = max(0, sq4b - sq3b) if sq4b > 0 else 0
+                        q_raw = str(hdr.get("Quarter") or "").strip().upper()
+                        gt_raw = str(hdr.get("GameTime") or "").split(":")[0].strip()
+                        gt_min = int(gt_raw) if gt_raw.isdigit() else 0
+                        inferred_q = min(5, max(1, (gt_min - 1) // 10 + 1)) if gt_min >= 1 else 1
+                        q_digits = re.sub(r"\D", "", q_raw)
+                        if "OT" in q_raw or "E" in q_raw:
+                            current_quarter = 5
+                        elif q_digits:
+                            current_quarter = min(5, max(1, int(q_digits)))
+                        else:
+                            current_quarter = inferred_q
+                        rem_clock = str(hdr.get("RemainingPartialTime") or "").strip() or "00:00"
+                        if not is_hdr_live or (gt_min >= 40 and rem_clock in ("00:00", "0:00") and not q_raw and l_score != r_score):
+                            status = "FINAL"
+                            played = True
+                            remaining_clock = "00:00"
+                            if l_score > (q1_h + q2_h + q3_h + q4_h) and (q1_h + q2_h + q3_h + q4_h) > 0:
+                                current_quarter = 5
+                        else:
+                            status = "LIVE"
+                            remaining_clock = rem_clock
+                        if rnd > active_round:
+                            active_round = rnd
 
             game_id = f"{season_code}_{game_code}"
             cached_g = existing_games_by_id.get(game_id) or {}
@@ -697,7 +760,7 @@ def main():
             shots_list = []
             is_official = False
 
-            if (played or status == "LIVE") and game_code > 0:
+            if (played or status in ("LIVE", "FINAL")) and game_code > 0:
                 if status == "FINAL" and was_official and len(cached_box_home) > 0 and len(cached_box_away) > 0 and len(cached_shots) > 0:
                     box_home = cached_box_home
                     box_away = cached_box_away
@@ -812,8 +875,8 @@ def main():
                 "venueName": venue_name,
                 "tipOffEpochMillis": tip_off_ms,
                 "status": status,
-                "currentQuarter": 5 if (status == "FINAL" and l_score > (q1_h + q2_h + q3_h + q4_h) and (q1_h + q2_h + q3_h + q4_h) > 0) else (4 if status == "FINAL" else 1),
-                "remainingClock": "00:00" if status == "FINAL" else "10:00",
+                "currentQuarter": current_quarter,
+                "remainingClock": remaining_clock,
                 "homeScore": l_score,
                 "awayScore": r_score,
                 "quarters": {
@@ -825,8 +888,8 @@ def main():
                     "q3Away": q3_a,
                     "q4Home": q4_h,
                     "q4Away": q4_a,
-                    "otHome": (l_score - (q1_h + q2_h + q3_h + q4_h)) if (status == "FINAL" and l_score > (q1_h + q2_h + q3_h + q4_h) and (q1_h + q2_h + q3_h + q4_h) > 0) else None,
-                    "otAway": (r_score - (q1_a + q2_a + q3_a + q4_a)) if (status == "FINAL" and r_score > (q1_a + q2_a + q3_a + q4_a) and (q1_a + q2_a + q3_a + q4_a) > 0) else None
+                    "otHome": (l_score - (q1_h + q2_h + q3_h + q4_h)) if ((status == "FINAL" or current_quarter >= 5) and l_score > (q1_h + q2_h + q3_h + q4_h) and (q1_h + q2_h + q3_h + q4_h) > 0) else None,
+                    "otAway": (r_score - (q1_a + q2_a + q3_a + q4_a)) if ((status == "FINAL" or current_quarter >= 5) and r_score > (q1_a + q2_a + q3_a + q4_a) and (q1_a + q2_a + q3_a + q4_a) > 0) else None
                 },
                 "q1Home": q1_h,
                 "q1Away": q1_a,

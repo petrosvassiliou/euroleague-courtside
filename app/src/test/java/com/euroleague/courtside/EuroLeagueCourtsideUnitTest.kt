@@ -415,5 +415,123 @@ class EuroLeagueCourtsideUnitTest {
             assertTrue(strings.downloadInstallUpdateButton.isNotBlank())
         }
     }
+
+    @Test
+    fun `live Header enrichment transitions lagging UPCOMING v2 games to LIVE and parses ScoreExtraTime overtime FINAL games`() {
+        val freshRepo = EuroLeagueMockRepository()
+        val bas = freshRepo.findTeam("BAS") ?: freshRepo.teams.first()
+        val hta = freshRepo.findTeam("HTA") ?: freshRepo.teams[1]
+        val zal = freshRepo.findTeam("ZAL") ?: freshRepo.teams[2]
+        val mun = freshRepo.findTeam("MUN") ?: freshRepo.teams[3]
+        val template = freshRepo.games.value.first()
+
+        // 1. Game reported as UPCOMING (0:0) by lagging v2 endpoint during live matchday
+        val upcomingInV2 = template.copy(
+            id = "E2026_114",
+            gameCode = 114,
+            round = 12,
+            homeTeam = bas,
+            awayTeam = hta,
+            status = GameStatus.UPCOMING,
+            currentQuarter = 1,
+            remainingClock = "10:00",
+            homeScore = 0,
+            awayScore = 0,
+            quarters = com.euroleague.courtside.data.repository.QuarterScores(0, 0, 0, 0, 0, 0, 0, 0)
+        )
+        val liveQ4Header = com.euroleague.courtside.data.remote.EuroLeagueLiveHeaderDto(
+            live = true,
+            round = "12",
+            scoreA = "73",
+            scoreB = "72",
+            quarter = "4",
+            remainingPartialTime = "06:42",
+            gameTime = "33:00",
+            scoreQuarter1A = 33,
+            scoreQuarter2A = 48,
+            scoreQuarter3A = 71,
+            scoreQuarter4A = 73,
+            scoreQuarter1B = 26,
+            scoreQuarter2B = 44,
+            scoreQuarter3B = 64,
+            scoreQuarter4B = 72
+        )
+
+        val enrichedLive = com.euroleague.courtside.data.remote.EuroLeagueOfflineFirstRepository.applyLiveHeaderToGameStatic(
+            upcomingInV2,
+            liveQ4Header
+        )
+        assertEquals(GameStatus.LIVE, enrichedLive.status)
+        assertEquals(4, enrichedLive.currentQuarter)
+        assertEquals("06:42", enrichedLive.remainingClock)
+        assertEquals(73, enrichedLive.homeScore)
+        assertEquals(72, enrichedLive.awayScore)
+        assertEquals(33, enrichedLive.quarters.q1Home)
+        assertEquals(15, enrichedLive.quarters.q2Home)
+        assertEquals(23, enrichedLive.quarters.q3Home)
+        assertEquals(2, enrichedLive.quarters.q4Home)
+
+        // 2. Halftime game where Quarter is empty "" and GameTime is "20:00"
+        val halftimeHeader = com.euroleague.courtside.data.remote.EuroLeagueLiveHeaderDto(
+            live = true,
+            round = "12",
+            scoreA = "40",
+            scoreB = "43",
+            quarter = "",
+            remainingPartialTime = "00:00",
+            gameTime = "20:00",
+            scoreQuarter1A = 19,
+            scoreQuarter2A = 40,
+            scoreQuarter3A = 40,
+            scoreQuarter4A = 0,
+            scoreQuarter1B = 20,
+            scoreQuarter2B = 43,
+            scoreQuarter3B = 43,
+            scoreQuarter4B = 0
+        )
+        val enrichedHalftime = com.euroleague.courtside.data.remote.EuroLeagueOfflineFirstRepository.applyLiveHeaderToGameStatic(
+            upcomingInV2,
+            halftimeHeader
+        )
+        assertEquals(GameStatus.LIVE, enrichedHalftime.status)
+        assertEquals(2, enrichedHalftime.currentQuarter)
+        assertEquals(40, enrichedHalftime.homeScore)
+        assertEquals(43, enrichedHalftime.awayScore)
+        assertEquals(0, enrichedHalftime.quarters.q3Home)
+        assertEquals(0, enrichedHalftime.quarters.q4Home)
+
+        // 3. Overtime finished game (ZAL 117 : 114 MUN) using ScoreExtraTimeA / ScoreExtraTimeB
+        val otUpcomingInV2 = upcomingInV2.copy(id = "E2026_112", gameCode = 112, homeTeam = zal, awayTeam = mun)
+        val otFinalHeader = com.euroleague.courtside.data.remote.EuroLeagueLiveHeaderDto(
+            live = false,
+            round = "12",
+            scoreA = "117",
+            scoreB = "114",
+            quarter = "",
+            remainingPartialTime = "00:00",
+            gameTime = "45:00",
+            scoreQuarter1A = 19,
+            scoreQuarter2A = 50,
+            scoreQuarter3A = 78,
+            scoreQuarter4A = 101,
+            scoreExtraTimeA = 117,
+            scoreQuarter1B = 25,
+            scoreQuarter2B = 57,
+            scoreQuarter3B = 79,
+            scoreQuarter4B = 101,
+            scoreExtraTimeB = 114
+        )
+        val enrichedOtFinal = com.euroleague.courtside.data.remote.EuroLeagueOfflineFirstRepository.applyLiveHeaderToGameStatic(
+            otUpcomingInV2,
+            otFinalHeader
+        )
+        assertEquals(GameStatus.FINAL, enrichedOtFinal.status)
+        assertEquals(5, enrichedOtFinal.currentQuarter)
+        assertEquals("00:00", enrichedOtFinal.remainingClock)
+        assertEquals(117, enrichedOtFinal.homeScore)
+        assertEquals(114, enrichedOtFinal.awayScore)
+        assertEquals(16, enrichedOtFinal.quarters.otHome)
+        assertEquals(13, enrichedOtFinal.quarters.otAway)
+    }
 }
 
