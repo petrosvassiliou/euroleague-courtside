@@ -1077,8 +1077,8 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                     ?: activeRound
 
                 val syncedTeams = EuroLeagueMockRepository.recomputeOfficialStandingsFromGames(
-                    seedTeams = liveTeams,
-                    allGames = liveGames
+                    teams = liveTeams,
+                    games = liveGames
                 )
 
                 fallbackMockRepository.applyLiveDataset(

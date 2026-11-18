@@ -1218,14 +1218,14 @@ class EuroLeagueMockRepository @Inject constructor() {
                 localLogoResName = "club_logo_hta"
             ),
             EuroLeagueTeam(
-                id = "BES", code = "BJK", name = "Besiktas Gain Istanbul",
-                city = "Istanbul", country = "Turkiye", arena = "BJK Akatlar Arena",
-                primaryColorHex = 0xFF141418, secondaryColorHex = 0xFFFFFFFF, accentColorHex = 0xFFE30613,
-                wins = 5, losses = 4, pointsFor = 790, pointsAgainst = 802,
-                streak = listOf("L", "W", "L", "W", "W"),
-                offensiveRating = 113.4f, defensiveRating = 116.0f, pace = 77.5f,
-                threePointPct = 38.3f, twoPointPct = 53.7f, reboundRate = 47.2f,
-                localLogoResName = "club_logo_bes"
+                id = "MCO", code = "ASM", name = "AS Monaco",
+                city = "Monaco", country = "Monaco", arena = "Salle Gaston Medecin",
+                primaryColorHex = 0xFFE4002B, secondaryColorHex = 0xFFD4AF37, accentColorHex = 0xFFFFFFFF,
+                wins = 6, losses = 6, pointsFor = 1054, pointsAgainst = 1005,
+                streak = listOf("W", "W", "L", "L", "L"),
+                offensiveRating = 114.6f, defensiveRating = 109.7f, pace = 76.2f,
+                threePointPct = 36.1f, twoPointPct = 56.1f, reboundRate = 48.0f,
+                localLogoResName = "club_logo_mco"
             )
         )
 

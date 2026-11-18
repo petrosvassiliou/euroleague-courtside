@@ -663,8 +663,8 @@ class EuroLeagueCourtsideUnitTest {
         )
 
         val recomputed = EuroLeagueMockRepository.recomputeOfficialStandingsFromGames(
-            seedTeams = listOf(ulk, prs),
-            allGames = listOf(otGame, regGame)
+            teams = listOf(ulk, prs),
+            games = listOf(otGame, regGame)
         )
         val ulkUpdated = recomputed.first { it.id == "ULK" }
         val prsUpdated = recomputed.first { it.id == "PRS" }
@@ -702,7 +702,7 @@ class EuroLeagueCourtsideUnitTest {
         assertTrue("Bundled snapshot file must exist", snapshotFile.exists())
 
         val mockDao = object : com.euroleague.courtside.data.local.CourtsideDao {
-            override fun observeAllTeams() = kotlinx.coroutines.flow.flowOf(emptyList<com.euroleague.courtside.data.local.CachedTeamEntity>())
+            override fun observeStandings() = kotlinx.coroutines.flow.flowOf(emptyList<com.euroleague.courtside.data.local.CachedTeamEntity>())
             override fun observeGamesByRound(round: Int) = kotlinx.coroutines.flow.flowOf(emptyList<com.euroleague.courtside.data.local.CachedGameEntity>())
             override fun observeAllGames() = kotlinx.coroutines.flow.flowOf(emptyList<com.euroleague.courtside.data.local.CachedGameEntity>())
             override suspend fun upsertTeams(teams: List<com.euroleague.courtside.data.local.CachedTeamEntity>) {}
