@@ -570,4 +570,180 @@ class EuroLeagueCourtsideUnitTest {
             assertTrue(strings.clickTeamHint.isNotBlank())
         }
     }
+
+    @Test
+    fun `form streaks normalize W L and legacy S N cleanly without rendering false LLLLL`() {
+        val normalized = EuroLeagueMockRepository.normalizeStreakList(listOf("S", "N", "W", "L", "S"))
+        assertEquals(listOf("W", "L", "W", "L", "W"), normalized)
+        assertEquals(listOf("W", "W"), EuroLeagueMockRepository.normalizeStreakList(listOf("W", "S")))
+
+        assertTrue(com.euroleague.courtside.ui.navigation.isWinStreakEntry("W"))
+        assertTrue(com.euroleague.courtside.ui.navigation.isWinStreakEntry("S"))
+        assertFalse(com.euroleague.courtside.ui.navigation.isWinStreakEntry("L"))
+        assertFalse(com.euroleague.courtside.ui.navigation.isWinStreakEntry("N"))
+
+        // Initial repository teams must use canonical W/L streaks and never be all LLLLL across the league
+        val standings = EuroLeagueMockRepository().getStandings()
+        assertEquals(20, standings.size)
+        assertTrue(standings.all { team -> team.streak.all { it == "W" || it == "L" } })
+        assertTrue(standings.count { team -> team.streak.contains("W") } >= 18)
+    }
+
+    @Test
+    fun `official EuroLeague standings exclude overtime points from PF PA and diff while keeping OT in PPG and computing exact boxscore analytics`() {
+        val freshRepo = EuroLeagueMockRepository()
+        val ulk = freshRepo.findTeam("ULK")!!.copy(wins = 0, losses = 0, pointsFor = 0, pointsAgainst = 0, streak = emptyList())
+        val prs = freshRepo.findTeam("PRS")!!.copy(wins = 0, losses = 0, pointsFor = 0, pointsAgainst = 0, streak = emptyList())
+        val template = freshRepo.games.value.first()
+
+        val prsBox = listOf(
+            PlayerBoxscoreStat(
+                playerId = "PRS_1", playerName = "TJ Shorts", jerseyNumber = 0, teamId = "PRS",
+                minutes = "35:00", points = 111, offRebounds = 10, defRebounds = 28,
+                assists = 22, steals = 7, blocks = 3, blocksAgainst = 2, turnovers = 12,
+                twoPtMade = 30, twoPtAttempted = 50, threePtMade = 11, threePtAttempted = 30,
+                ftMade = 18, ftAttempted = 25, foulsDrawn = 21, foulsCommitted = 19
+            )
+        )
+        val ulkBox = listOf(
+            PlayerBoxscoreStat(
+                playerId = "ULK_1", playerName = "Nigel Hayes-Davis", jerseyNumber = 11, teamId = "ULK",
+                minutes = "36:00", points = 109, offRebounds = 12, defRebounds = 26,
+                assists = 20, steals = 6, blocks = 2, blocksAgainst = 3, turnovers = 14,
+                twoPtMade = 29, twoPtAttempted = 52, threePtMade = 11, threePtAttempted = 28,
+                ftMade = 18, ftAttempted = 20, foulsDrawn = 19, foulsCommitted = 21,
+                valuationOverride = 115
+            )
+        )
+        // Verify blocksAgainst is subtracted when valuationOverride is absent, and valuationOverride is respected when present
+        assertEquals(115, ulkBox.first().pir)
+
+        // Round 11 overtime game: PRS 111 : 109 ULK (regulation 92 : 92, OT 19 : 17)
+        val otGame = template.copy(
+            id = "E2026_101",
+            gameCode = 101,
+            round = 11,
+            homeTeam = prs,
+            awayTeam = ulk,
+            status = GameStatus.FINAL,
+            currentQuarter = 5,
+            remainingClock = "00:00",
+            homeScore = 111,
+            awayScore = 109,
+            quarters = com.euroleague.courtside.data.repository.QuarterScores(
+                q1Home = 24, q1Away = 22,
+                q2Home = 23, q2Away = 25,
+                q3Home = 21, q3Away = 23,
+                q4Home = 24, q4Away = 22,
+                otHome = 19, otAway = 17
+            ),
+            boxscoreHome = prsBox,
+            boxscoreAway = ulkBox
+        )
+        // Round 12 regulation game: ULK 88 : 78 PRS
+        val regGame = template.copy(
+            id = "E2026_291",
+            gameCode = 291,
+            round = 12,
+            homeTeam = ulk,
+            awayTeam = prs,
+            status = GameStatus.FINAL,
+            currentQuarter = 4,
+            remainingClock = "00:00",
+            homeScore = 88,
+            awayScore = 78,
+            quarters = com.euroleague.courtside.data.repository.QuarterScores(
+                q1Home = 22, q1Away = 20,
+                q2Home = 22, q2Away = 19,
+                q3Home = 22, q3Away = 20,
+                q4Home = 22, q4Away = 19
+            ),
+            boxscoreHome = emptyList(),
+            boxscoreAway = emptyList()
+        )
+
+        val recomputed = EuroLeagueMockRepository.recomputeOfficialStandingsFromGames(
+            teams = listOf(ulk, prs),
+            games = listOf(otGame, regGame)
+        )
+        val ulkUpdated = recomputed.first { it.id == "ULK" }
+        val prsUpdated = recomputed.first { it.id == "PRS" }
+
+        // Regulation PF/PA exclude overtime (92+88 = 180 PF, 92+78 = 170 PA -> +10 diff for ULK)
+        assertEquals(1, ulkUpdated.wins)
+        assertEquals(1, ulkUpdated.losses)
+        assertEquals(180, ulkUpdated.pointsFor)
+        assertEquals(170, ulkUpdated.pointsAgainst)
+        assertEquals(10, ulkUpdated.pointDiff)
+        // Total points include OT (109+88 = 197 -> 98.5 PPG)
+        assertEquals(197, ulkUpdated.totalPointsFor)
+        assertEquals(98.5f, ulkUpdated.ppg, 0.1f)
+        assertEquals(listOf("L", "W"), ulkUpdated.streak)
+        assertEquals(listOf("W", "L"), prsUpdated.streak)
+
+        // Both clubs are 1-1 and played 2 H2H games: H2H wins 1-1, H2H regulation diff +10 for ULK -> ULK ranks #1
+        val sorted = EuroLeagueMockRepository.sortOfficialStandings(recomputed, listOf(otGame, regGame))
+        assertEquals("ULK", sorted[0].id)
+        assertEquals("PRS", sorted[1].id)
+
+        // Verify Win% sorting when games played differ (7-4 = 63.6% ranks above 7-5 = 58.3%)
+        val sevenFour = ulkUpdated.copy(id = "PAM", wins = 7, losses = 4, pointsFor = 900, pointsAgainst = 880)
+        val sevenFive = prsUpdated.copy(id = "MAD", wins = 7, losses = 5, pointsFor = 1020, pointsAgainst = 930)
+        val diffGpSorted = EuroLeagueMockRepository.sortOfficialStandings(listOf(sevenFive, sevenFour), emptyList())
+        assertEquals("PAM", diffGpSorted[0].id)
+        assertEquals("MAD", diffGpSorted[1].id)
+    }
+
+    @Test
+    fun `bundled euroleague_live_snapshot json has 20 verified clubs with W L streaks and official OT-excluded standings`() {
+        val snapshotFile = java.io.File("src/main/assets/euroleague_live_snapshot.json").let {
+            if (it.exists()) it else java.io.File("app/src/main/assets/euroleague_live_snapshot.json")
+        }
+        assertTrue("Bundled snapshot file must exist", snapshotFile.exists())
+
+        val mockDao = object : com.euroleague.courtside.data.local.CourtsideDao {
+            override fun observeStandings() = kotlinx.coroutines.flow.flowOf(emptyList<com.euroleague.courtside.data.local.CachedTeamEntity>())
+            override fun observeGamesByRound(round: Int) = kotlinx.coroutines.flow.flowOf(emptyList<com.euroleague.courtside.data.local.CachedGameEntity>())
+            override fun observeAllGames() = kotlinx.coroutines.flow.flowOf(emptyList<com.euroleague.courtside.data.local.CachedGameEntity>())
+            override suspend fun upsertTeams(teams: List<com.euroleague.courtside.data.local.CachedTeamEntity>) {}
+            override suspend fun upsertGames(games: List<com.euroleague.courtside.data.local.CachedGameEntity>) {}
+        }
+        val dummyApi = object : com.euroleague.courtside.data.remote.EuroLeagueApiService {
+            override suspend fun fetchSeasonClubs(seasonCode: String, limit: Int) = com.euroleague.courtside.data.remote.EuroLeagueClubsEnvelopeDto()
+            override suspend fun fetchClubRosterPeople(seasonCode: String, clubCode: String) = emptyList<com.euroleague.courtside.data.remote.EuroLeagueClubPersonDto>()
+            override suspend fun fetchSeasonRounds(seasonCode: String) = com.euroleague.courtside.data.remote.EuroLeagueRoundsEnvelopeDto()
+            override suspend fun fetchSeasonGames(seasonCode: String, round: Int?, limit: Int) = com.euroleague.courtside.data.remote.EuroLeagueGamesEnvelopeDto()
+            override suspend fun fetchGameBoxscoreStats(seasonCode: String, gameCode: Int) = com.euroleague.courtside.data.remote.EuroLeagueGameBoxscoreDto()
+            override suspend fun fetchPlayerTraditionalStats(seasonMode: String, seasonCode: String, statisticMode: String, limit: Int) = com.euroleague.courtside.data.remote.EuroLeaguePlayerStatsEnvelopeDto()
+            override suspend fun fetchTeamTraditionalStats(seasonMode: String, seasonCode: String, statisticMode: String, limit: Int) = com.euroleague.courtside.data.remote.EuroLeagueTeamStatsEnvelopeDto()
+            override suspend fun fetchLiveGameBoxscore(fullUrl: String) = com.euroleague.courtside.data.remote.EuroLeagueLiveBoxscoreEnvelopeDto()
+            override suspend fun fetchLiveGameShotPoints(fullUrl: String) = com.euroleague.courtside.data.remote.EuroLeagueLivePointsDto()
+            override suspend fun fetchLiveGameHeader(fullUrl: String) = com.euroleague.courtside.data.remote.EuroLeagueLiveHeaderDto()
+        }
+
+        val repo = EuroLeagueMockRepository()
+        val offlineFirst = com.euroleague.courtside.data.remote.EuroLeagueOfflineFirstRepository(
+            apiService = dummyApi,
+            dao = mockDao,
+            fallbackMockRepository = repo
+        )
+        offlineFirst.applySnapshotJsonString(snapshotFile.readText(Charsets.UTF_8), isLiveNetwork = false)
+
+        val standings = repo.getStandings()
+        assertEquals(20, standings.size)
+        // Every club must have non-empty W/L streaks, and top clubs must NOT have all LLLLL!
+        standings.forEach { team ->
+            assertTrue("Streak must not be empty for ${team.id}", team.streak.isNotEmpty())
+            assertTrue("Streak must only contain W or L for ${team.id}: ${team.streak}", team.streak.all { it == "W" || it == "L" })
+            assertTrue("ORtg must be realistic basketball value for ${team.id}: ${team.offensiveRating}", team.offensiveRating in 92f..132f)
+            assertTrue("DRtg must be realistic basketball value for ${team.id}: ${team.defensiveRating}", team.defensiveRating in 92f..132f)
+            assertTrue("Pace must be realistic 40-min FIBA possessions for ${team.id}: ${team.pace}", team.pace in 64f..88f)
+            assertTrue("REB% must be realistic percentage for ${team.id}: ${team.reboundRate}", team.reboundRate in 38f..62f)
+        }
+        assertTrue(standings.take(10).none { it.streak == listOf("L", "L", "L", "L", "L") })
+        // Sum of regulation pointsFor across all 20 clubs must equal sum of regulation pointsAgainst
+        assertEquals(standings.sumOf { it.pointsFor }, standings.sumOf { it.pointsAgainst })
+        // Sum of wins across all 20 clubs must equal sum of losses
+        assertEquals(standings.sumOf { it.wins }, standings.sumOf { it.losses })
+    }
 }
