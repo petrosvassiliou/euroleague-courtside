@@ -533,5 +533,41 @@ class EuroLeagueCourtsideUnitTest {
         assertEquals(16, enrichedOtFinal.quarters.otHome)
         assertEquals(13, enrichedOtFinal.quarters.otAway)
     }
-}
 
+    @Test
+    fun `standings team page resolves last 3 games and next 3 upcoming games and removes Play-In labels in all 6 languages`() {
+        val freshRepo = EuroLeagueMockRepository()
+        val oly = freshRepo.findTeam("OLY") ?: freshRepo.teams.first()
+        val pan = freshRepo.findTeam("PAN") ?: freshRepo.teams[1]
+        val mun = freshRepo.findTeam("MUN") ?: freshRepo.teams[2]
+        val mad = freshRepo.findTeam("MAD") ?: freshRepo.teams[3]
+        val template = freshRepo.games.value.first()
+
+        val syntheticGames = listOf(
+            template.copy(id = "g_r8", round = 8, homeTeam = oly, awayTeam = pan, homeScore = 82, awayScore = 77, status = GameStatus.FINAL),
+            template.copy(id = "g_r9", round = 9, homeTeam = mun, awayTeam = oly, homeScore = 79, awayScore = 85, status = GameStatus.FINAL),
+            template.copy(id = "g_r10", round = 10, homeTeam = oly, awayTeam = mad, homeScore = 91, awayScore = 88, status = GameStatus.FINAL),
+            template.copy(id = "g_r11", round = 11, homeTeam = pan, awayTeam = oly, homeScore = 80, awayScore = 76, status = GameStatus.FINAL),
+            template.copy(id = "g_other", round = 12, homeTeam = mun, awayTeam = mad, homeScore = 0, awayScore = 0, status = GameStatus.UPCOMING),
+            template.copy(id = "g_r12", round = 12, homeTeam = oly, awayTeam = mun, status = GameStatus.UPCOMING),
+            template.copy(id = "g_r13", round = 13, homeTeam = mad, awayTeam = oly, status = GameStatus.UPCOMING),
+            template.copy(id = "g_r14", round = 14, homeTeam = oly, awayTeam = pan, status = GameStatus.UPCOMING),
+            template.copy(id = "g_r15", round = 15, homeTeam = mun, awayTeam = oly, status = GameStatus.UPCOMING)
+        )
+
+        val (last3, next3) = com.euroleague.courtside.ui.navigation.resolveTeamLastAndUpcomingGames(oly, syntheticGames)
+        assertEquals(listOf(11, 10, 9), last3.map { it.round })
+        assertEquals(listOf(12, 13, 14), next3.map { it.round })
+        assertTrue(last3.none { it.id == "g_other" })
+        assertTrue(next3.none { it.id == "g_other" })
+
+        AppLanguage.entries.forEach { lang ->
+            val strings = CourtsideTranslations.forLanguage(lang)
+            assertFalse(strings.standingsHeader.contains("Play-In", ignoreCase = true))
+            assertTrue(strings.backToStandingsButton.isNotBlank())
+            assertTrue(strings.last3GamesHeader.isNotBlank())
+            assertTrue(strings.next3GamesHeader.isNotBlank())
+            assertTrue(strings.clickTeamHint.isNotBlank())
+        }
+    }
+}
