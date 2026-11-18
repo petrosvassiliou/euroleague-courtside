@@ -1265,12 +1265,10 @@ private fun UpcomingMatchPreviewCard(
     val strings = LocalCourtsideStrings.current
     val home = game.homeTeam
     val away = game.awayTeam
-    val gpH = (home.wins + home.losses).coerceAtLeast(1)
-    val gpA = (away.wins + away.losses).coerceAtLeast(1)
-    val ppgH = ((home.pointsFor.toFloat() / gpH) * 10f).toInt() / 10f
-    val ppgA = ((away.pointsFor.toFloat() / gpA) * 10f).toInt() / 10f
-    val oppgH = ((home.pointsAgainst.toFloat() / gpH) * 10f).toInt() / 10f
-    val oppgA = ((away.pointsAgainst.toFloat() / gpA) * 10f).toInt() / 10f
+    val ppgH = home.ppg
+    val ppgA = away.ppg
+    val oppgH = home.oppg
+    val oppgA = away.oppg
 
     val rows = listOf(
         Triple("${strings.winsColumn}-${strings.lossesColumn}", "${home.wins}-${home.losses}", "${away.wins}-${away.losses}"),
@@ -1732,7 +1730,7 @@ private fun SortableBoxscoreTable(
                     StatValueCell(row.steals.toString(), Modifier.weight(1f))
                     StatValueCell(row.blocks.toString(), Modifier.weight(1f))
                     Text(
-                        text = "${row.pir}.0",
+                        text = row.pir.toString(),
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.End,
                         color = Color(0xFFFF6600),

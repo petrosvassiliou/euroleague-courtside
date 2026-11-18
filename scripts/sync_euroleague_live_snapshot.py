@@ -298,6 +298,263 @@ def build_shots_for_played_game(game_code: int, home_code: str, away_code: str, 
     return shots
 
 
+def normalize_streak(raw_streak) -> list:
+    out = []
+    for item in (raw_streak or []):
+        token = str(item or "").strip().upper()
+        if token in ("W", "S"):
+            out.append("W")
+        elif token in ("L", "N"):
+            out.append("L")
+    return out[-5:]
+
+
+def regulation_standings_scores(game: dict) -> tuple:
+    h_score = int(game.get("homeScore") or 0)
+    a_score = int(game.get("awayScore") or 0)
+    q = game.get("quarters") or {}
+    reg_h = int(q.get("q1Home") or game.get("q1Home") or 0) + \
+            int(q.get("q2Home") or game.get("q2Home") or 0) + \
+            int(q.get("q3Home") or game.get("q3Home") or 0) + \
+            int(q.get("q4Home") or game.get("q4Home") or 0)
+    reg_a = int(q.get("q1Away") or game.get("q1Away") or 0) + \
+            int(q.get("q2Away") or game.get("q2Away") or 0) + \
+            int(q.get("q3Away") or game.get("q3Away") or 0) + \
+            int(q.get("q4Away") or game.get("q4Away") or 0)
+    ot_h = q.get("otHome")
+    ot_a = q.get("otAway")
+    has_ot = ((ot_h is not None and int(ot_h) > 0) or (ot_a is not None and int(ot_a) > 0) or
+              int(game.get("currentQuarter") or 4) >= 5 or
+              (reg_h > 0 and reg_a > 0 and reg_h == reg_a and (h_score > reg_h or a_score > reg_a)))
+    if has_ot and reg_h > 0 and reg_a > 0 and reg_h <= h_score and reg_a <= a_score:
+        return reg_h, reg_a
+    return h_score, a_score
+
+
+def sort_official_standings(teams: list, final_games: list) -> list:
+    def win_pct_bucket(t):
+        gp = int(t.get("wins") or 0) + int(t.get("losses") or 0)
+        return round((int(t.get("wins") or 0) / gp) * 100000) if gp > 0 else 0
+
+    buckets = {}
+    for t in teams:
+        buckets.setdefault(win_pct_bucket(t), []).append(t)
+
+    sorted_out = []
+    for b_key in sorted(buckets.keys(), reverse=True):
+        tied = buckets[b_key]
+        if len(tied) <= 1:
+            sorted_out.extend(tied)
+            continue
+        tied_ids = {t["id"] for t in tied}
+        h2h_games = [
+            g for g in final_games
+            if g.get("homeTeamId") in tied_ids and g.get("awayTeamId") in tied_ids
+            and (int(g.get("homeScore") or 0) > 0 or int(g.get("awayScore") or 0) > 0)
+        ]
+        expected_games = len(tied) * (len(tied) - 1)
+        pair_counts = {}
+        for g in h2h_games:
+            pair = tuple(sorted((g["homeTeamId"], g["awayTeamId"])))
+            pair_counts[pair] = pair_counts.get(pair, 0) + 1
+        all_pairs_complete = (
+            len(h2h_games) >= expected_games and
+            all(
+                pair_counts.get(tuple(sorted((tied[i]["id"], tied[j]["id"]))), 0) >= 2
+                for i in range(len(tied)) for j in range(i + 1, len(tied))
+            )
+        )
+        mini = {tid: {"wins": 0, "diff": 0, "pf": 0} for tid in tied_ids}
+        if all_pairs_complete:
+            for g in h2h_games:
+                hid, aid = g["homeTeamId"], g["awayTeamId"]
+                hs, as_ = int(g.get("homeScore") or 0), int(g.get("awayScore") or 0)
+                rh, ra = regulation_standings_scores(g)
+                if hs > as_:
+                    mini[hid]["wins"] += 1
+                elif as_ > hs:
+                    mini[aid]["wins"] += 1
+                mini[hid]["diff"] += (rh - ra)
+                mini[aid]["diff"] += (ra - rh)
+                mini[hid]["pf"] += rh
+                mini[aid]["pf"] += ra
+
+        def tie_key(t):
+            tid = t["id"]
+            reg_pf = int(t.get("pointsFor") or 0)
+            reg_pa = int(t.get("pointsAgainst") or 0)
+            reg_diff = reg_pf - reg_pa
+            m = mini[tid]
+            if all_pairs_complete:
+                return (-m["wins"], -m["diff"], -m["pf"], -reg_diff, -reg_pf, t.get("name", ""))
+            return (-reg_diff, -reg_pf, t.get("name", ""))
+
+        sorted_out.extend(sorted(tied, key=tie_key))
+    return sorted_out
+
+
+def recompute_official_standings_and_team_analytics(teams_out: list, games_out: list, team_stats_by_code: dict = None) -> tuple:
+    team_stats_by_code = team_stats_by_code or {}
+    final_games = sorted(
+        [
+            g for g in games_out
+            if g.get("status") == "FINAL" and (int(g.get("homeScore") or 0) > 0 or int(g.get("awayScore") or 0) > 0)
+        ],
+        key=lambda g: (int(g.get("round") or 0), int(g.get("tipOffEpochMillis") or 0), int(g.get("gameCode") or 0))
+    )
+
+    if not final_games:
+        for t in teams_out:
+            t["streak"] = normalize_streak(t.get("streak"))
+            t.setdefault("totalPointsFor", int(t.get("pointsFor") or 0))
+            t.setdefault("totalPointsAgainst", int(t.get("pointsAgainst") or 0))
+        return teams_out, games_out
+
+    acc = {}
+    for t in teams_out:
+        acc[t["id"]] = {
+            "wins": 0, "losses": 0,
+            "reg_pf": 0, "reg_pa": 0,
+            "tot_pf": 0, "tot_pa": 0,
+            "streak": [],
+            "box_games": 0, "box_pts": 0, "box_opp_pts": 0,
+            "box_poss": 0.0, "box_mins": 0.0,
+            "fg2m": 0, "fg2a": 0, "fg3m": 0, "fg3a": 0,
+            "treb": 0, "opp_treb": 0
+        }
+
+    h2h_wins = {}
+    for g in final_games:
+        hid = str(g.get("homeTeamId") or "")
+        aid = str(g.get("awayTeamId") or "")
+        hs = int(g.get("homeScore") or 0)
+        as_ = int(g.get("awayScore") or 0)
+        rh, ra = regulation_standings_scores(g)
+
+        if hs > as_:
+            h2h_wins[(hid, aid)] = h2h_wins.get((hid, aid), 0) + 1
+        elif as_ > hs:
+            h2h_wins[(aid, hid)] = h2h_wins.get((aid, hid), 0) + 1
+
+        for side_id, opp_id, my_s, opp_s, my_reg, opp_reg in [
+            (hid, aid, hs, as_, rh, ra),
+            (aid, hid, as_, hs, ra, rh)
+        ]:
+            if side_id not in acc:
+                continue
+            rec = acc[side_id]
+            rec["reg_pf"] += my_reg
+            rec["reg_pa"] += opp_reg
+            rec["tot_pf"] += my_s
+            rec["tot_pa"] += opp_s
+            if my_s > opp_s:
+                rec["wins"] += 1
+                rec["streak"].append("W")
+            elif opp_s > my_s:
+                rec["losses"] += 1
+                rec["streak"].append("L")
+
+        bh = g.get("boxscoreHome") or []
+        ba = g.get("boxscoreAway") or []
+        if bh and ba and hid in acc and aid in acc:
+            def box_totals(rows):
+                fg2m = sum(int(r.get("twoPtMade") or 0) for r in rows)
+                fg2a = sum(int(r.get("twoPtAttempted") or 0) for r in rows)
+                fg3m = sum(int(r.get("threePtMade") or 0) for r in rows)
+                fg3a = sum(int(r.get("threePtAttempted") or 0) for r in rows)
+                fta = sum(int(r.get("ftAttempted") or 0) for r in rows)
+                oreb = sum(int(r.get("offRebounds") or 0) for r in rows)
+                dreb = sum(int(r.get("defRebounds") or 0) for r in rows)
+                tov = sum(int(r.get("turnovers") or 0) for r in rows)
+                fga = fg2a + fg3a
+                poss = fga - oreb + tov + 0.44 * fta
+                return fg2m, fg2a, fg3m, fg3a, oreb + dreb, poss, fga
+
+            h_fg2m, h_fg2a, h_fg3m, h_fg3a, h_treb, h_poss, h_fga = box_totals(bh)
+            a_fg2m, a_fg2a, a_fg3m, a_fg3a, a_treb, a_poss, a_fga = box_totals(ba)
+            if h_fga > 0 and a_fga > 0 and h_poss > 30.0 and a_poss > 30.0:
+                shared_poss = 0.5 * (h_poss + a_poss)
+                ot_pts = int((g.get("quarters") or {}).get("otHome") or 0) + int((g.get("quarters") or {}).get("otAway") or 0)
+                has_ot = ot_pts > 0 or int(g.get("currentQuarter") or 4) >= 5 or (rh > 0 and ra > 0 and rh == ra and (hs > rh or as_ > ra))
+                ot_periods = max(1, round(max(hs - rh, as_ - ra) / 11.0)) if has_ot else 0
+                game_mins = 40.0 + 5.0 * ot_periods
+
+                h_rec = acc[hid]
+                h_rec["box_games"] += 1
+                h_rec["box_pts"] += hs
+                h_rec["box_opp_pts"] += as_
+                h_rec["box_poss"] += shared_poss
+                h_rec["box_mins"] += game_mins
+                h_rec["fg2m"] += h_fg2m
+                h_rec["fg2a"] += h_fg2a
+                h_rec["fg3m"] += h_fg3m
+                h_rec["fg3a"] += h_fg3a
+                h_rec["treb"] += h_treb
+                h_rec["opp_treb"] += a_treb
+
+                a_rec = acc[aid]
+                a_rec["box_games"] += 1
+                a_rec["box_pts"] += as_
+                a_rec["box_opp_pts"] += hs
+                a_rec["box_poss"] += shared_poss
+                a_rec["box_mins"] += game_mins
+                a_rec["fg2m"] += a_fg2m
+                a_rec["fg2a"] += a_fg2a
+                a_rec["fg3m"] += a_fg3m
+                a_rec["fg3a"] += a_fg3a
+                a_rec["treb"] += a_treb
+                a_rec["opp_treb"] += h_treb
+
+    for t in teams_out:
+        tid = t["id"]
+        rec = acc.get(tid)
+        if not rec or (rec["wins"] + rec["losses"]) == 0:
+            t["streak"] = normalize_streak(t.get("streak"))
+            t["totalPointsFor"] = int(t.get("totalPointsFor") or t.get("pointsFor") or 0)
+            t["totalPointsAgainst"] = int(t.get("totalPointsAgainst") or t.get("pointsAgainst") or 0)
+            continue
+
+        t["wins"] = rec["wins"]
+        t["losses"] = rec["losses"]
+        t["pointsFor"] = rec["reg_pf"]
+        t["pointsAgainst"] = rec["reg_pa"]
+        t["totalPointsFor"] = rec["tot_pf"]
+        t["totalPointsAgainst"] = rec["tot_pa"]
+        t["streak"] = rec["streak"][-5:]
+
+        if rec["box_games"] > 0 and rec["box_poss"] > 0.0 and rec["box_mins"] > 0.0:
+            t["offensiveRating"] = round(100.0 * rec["box_pts"] / rec["box_poss"], 1)
+            t["defensiveRating"] = round(100.0 * rec["box_opp_pts"] / rec["box_poss"], 1)
+            t["pace"] = round(40.0 * rec["box_poss"] / rec["box_mins"], 1)
+            if rec["fg2a"] > 0:
+                t["twoPointPct"] = round(100.0 * rec["fg2m"] / rec["fg2a"], 1)
+            if rec["fg3a"] > 0:
+                t["threePointPct"] = round(100.0 * rec["fg3m"] / rec["fg3a"], 1)
+            if (rec["treb"] + rec["opp_treb"]) > 0:
+                t["reboundRate"] = round(100.0 * rec["treb"] / (rec["treb"] + rec["opp_treb"]), 1)
+        else:
+            t_stat = team_stats_by_code.get(tid) or {}
+            gp = max(1, rec["wins"] + rec["losses"])
+            ppg = float(t_stat.get("pointsScored") or (rec["tot_pf"] / gp))
+            oppg = rec["tot_pa"] / gp
+            fga_pg = float(t_stat.get("twoPointersAttempted") or 0.0) + float(t_stat.get("threePointersAttempted") or 0.0)
+            if fga_pg > 0:
+                poss_pg = max(55.0, fga_pg - float(t_stat.get("offensiveRebounds") or 0.0) +
+                              float(t_stat.get("turnovers") or 0.0) + 0.44 * float(t_stat.get("freeThrowsAttempted") or 0.0))
+                t["offensiveRating"] = round(100.0 * ppg / poss_pg, 1)
+                t["defensiveRating"] = round(100.0 * oppg / poss_pg, 1)
+                t["pace"] = round(poss_pg, 1)
+
+    for g in games_out:
+        hid = str(g.get("homeTeamId") or "")
+        aid = str(g.get("awayTeamId") or "")
+        g["headToHeadHomeWins"] = h2h_wins.get((hid, aid), 0)
+        g["headToHeadAwayWins"] = h2h_wins.get((aid, hid), 0)
+
+    teams_sorted = sort_official_standings(teams_out, final_games)
+    return teams_sorted, games_out
+
+
 def main():
     DRAWABLE_DIR.mkdir(parents=True, exist_ok=True)
     ASSETS_DIR.mkdir(parents=True, exist_ok=True)
@@ -375,7 +632,7 @@ def main():
     all_games_raw = extract_rows(all_games_payload)
     print(f"[INFO] Loaded {len(all_games_raw)} total games for season {season_code}")
 
-    # Compute standings & last-5 form per club code from played games
+    # Compute preliminary standings & last-5 form per club code from played games (excluding OT points in PF/PA)
     club_records = {}
     for c in clubs_raw:
         code = str(c.get("code") or "").strip()
@@ -385,6 +642,8 @@ def main():
                 "losses": 0,
                 "pointsFor": 0,
                 "pointsAgainst": 0,
+                "totalPointsFor": 0,
+                "totalPointsAgainst": 0,
                 "results": []
             }
 
@@ -402,25 +661,36 @@ def main():
         r_score = int(road.get("score") or 0)
         if l_score == 0 and r_score == 0:
             continue
+        l_part = local.get("partials") or {}
+        r_part = road.get("partials") or {}
+        reg_l = int(l_part.get("partials1") or 0) + int(l_part.get("partials2") or 0) + int(l_part.get("partials3") or 0) + int(l_part.get("partials4") or 0)
+        reg_r = int(r_part.get("partials1") or 0) + int(r_part.get("partials2") or 0) + int(r_part.get("partials3") or 0) + int(r_part.get("partials4") or 0)
+        is_ot = reg_l > 0 and reg_r > 0 and reg_l == reg_r and (l_score > reg_l or r_score > reg_r)
+        st_l = reg_l if is_ot else l_score
+        st_r = reg_r if is_ot else r_score
         rnd = int(g.get("round") or 0)
         if l_code in club_records:
-            club_records[l_code]["pointsFor"] += l_score
-            club_records[l_code]["pointsAgainst"] += r_score
+            club_records[l_code]["pointsFor"] += st_l
+            club_records[l_code]["pointsAgainst"] += st_r
+            club_records[l_code]["totalPointsFor"] += l_score
+            club_records[l_code]["totalPointsAgainst"] += r_score
             if l_score > r_score:
                 club_records[l_code]["wins"] += 1
-                club_records[l_code]["results"].append((rnd, "S"))
+                club_records[l_code]["results"].append((rnd, "W"))
             else:
                 club_records[l_code]["losses"] += 1
-                club_records[l_code]["results"].append((rnd, "N"))
+                club_records[l_code]["results"].append((rnd, "L"))
         if r_code in club_records:
-            club_records[r_code]["pointsFor"] += r_score
-            club_records[r_code]["pointsAgainst"] += l_score
+            club_records[r_code]["pointsFor"] += st_r
+            club_records[r_code]["pointsAgainst"] += st_l
+            club_records[r_code]["totalPointsFor"] += r_score
+            club_records[r_code]["totalPointsAgainst"] += l_score
             if r_score > l_score:
                 club_records[r_code]["wins"] += 1
-                club_records[r_code]["results"].append((rnd, "S"))
+                club_records[r_code]["results"].append((rnd, "W"))
             else:
                 club_records[r_code]["losses"] += 1
-                club_records[r_code]["results"].append((rnd, "N"))
+                club_records[r_code]["results"].append((rnd, "L"))
 
     teams_out = []
     rosters_out = []
@@ -462,26 +732,30 @@ def main():
             "country": str((c.get("country") or {}).get("name") or "")
         }
 
-        rec = club_records.get(code) or {"wins": 0, "losses": 0, "pointsFor": 0, "pointsAgainst": 0, "results": []}
-        if rec["wins"] == 0 and rec["losses"] == 0 and code in old_teams_by_id:
-            old_t = old_teams_by_id[code]
+        rec = club_records.get(code) or {
+            "wins": 0, "losses": 0, "pointsFor": 0, "pointsAgainst": 0,
+            "totalPointsFor": 0, "totalPointsAgainst": 0, "results": []
+        }
+        old_t = old_teams_by_id.get(code) or {}
+        if rec["wins"] == 0 and rec["losses"] == 0 and old_t:
             rec["wins"] = int(old_t.get("wins") or 0)
             rec["losses"] = int(old_t.get("losses") or 0)
             rec["pointsFor"] = int(old_t.get("pointsFor") or 0)
             rec["pointsAgainst"] = int(old_t.get("pointsAgainst") or 0)
-            last5 = list(old_t.get("streak") or ["S", "N", "S", "S", "N"])
+            rec["totalPointsFor"] = int(old_t.get("totalPointsFor") or rec["pointsFor"])
+            rec["totalPointsAgainst"] = int(old_t.get("totalPointsAgainst") or rec["pointsAgainst"])
+            last5 = normalize_streak(old_t.get("streak") or [])
         else:
             last5 = [r[1] for r in rec["results"][-5:]]
-            while len(last5) < 5:
-                last5.append("S")
 
         t_stat = team_stats_by_code.get(code) or {}
         gp = max(1, rec["wins"] + rec["losses"])
-        ppg = float(t_stat.get("pointsScored") or (rec["pointsFor"] / gp if gp else 82.0))
-        opp_ppg = (rec["pointsAgainst"] / gp) if (rec["wins"] + rec["losses"]) > 0 else 80.0
-        two_pct_raw = str(t_stat.get("twoPointersPercentage") or "54.5").replace("%", "")
-        three_pct_raw = str(t_stat.get("threePointersPercentage") or "37.2").replace("%", "")
-        reb_raw = float(t_stat.get("totalRebounds") or 34.5)
+        tot_pf_val = rec["totalPointsFor"] or rec["pointsFor"]
+        tot_pa_val = rec["totalPointsAgainst"] or rec["pointsAgainst"]
+        ppg = float(t_stat.get("pointsScored") or (tot_pf_val / gp if tot_pf_val > 0 else 82.0))
+        opp_ppg = (tot_pa_val / gp) if tot_pa_val > 0 else 82.0
+        two_pct_raw = str(t_stat.get("twoPointersPercentage") or old_t.get("twoPointPct") or "54.5").replace("%", "")
+        three_pct_raw = str(t_stat.get("threePointersPercentage") or old_t.get("threePointPct") or "36.0").replace("%", "")
 
         try:
             two_pct = float(two_pct_raw)
@@ -495,7 +769,24 @@ def main():
             if three_pct <= 1.0:
                 three_pct *= 100.0
         except Exception:
-            three_pct = 37.2
+            three_pct = 36.0
+
+        fga_pg = float(t_stat.get("twoPointersAttempted") or 0.0) + float(t_stat.get("threePointersAttempted") or 0.0)
+        if fga_pg > 0.0:
+            poss_pg = max(
+                55.0,
+                fga_pg - float(t_stat.get("offensiveRebounds") or 0.0) +
+                float(t_stat.get("turnovers") or 0.0) +
+                0.44 * float(t_stat.get("freeThrowsAttempted") or 0.0)
+            )
+            init_ortg = round(100.0 * ppg / poss_pg, 1)
+            init_drtg = round(100.0 * opp_ppg / poss_pg, 1)
+            init_pace = round(poss_pg, 1)
+        else:
+            init_ortg = float(old_t.get("offensiveRating") or 112.0)
+            init_drtg = float(old_t.get("defensiveRating") or 112.0)
+            init_pace = float(old_t.get("pace") or 72.0)
+        init_reb_rate = float(old_t.get("reboundRate") or 50.0)
 
         city_str = str(c.get("city") or style["city"]).title()
         country_str = str((c.get("country") or {}).get("name") or style["country"])
@@ -516,13 +807,15 @@ def main():
             "losses": rec["losses"],
             "pointsFor": rec["pointsFor"],
             "pointsAgainst": rec["pointsAgainst"],
+            "totalPointsFor": tot_pf_val,
+            "totalPointsAgainst": tot_pa_val,
             "streak": last5,
-            "offensiveRating": round(ppg * 1.32, 1),
-            "defensiveRating": round(opp_ppg * 1.32, 1),
-            "pace": round(70.0 + (ppg - 78.0) * 0.35, 1),
+            "offensiveRating": init_ortg,
+            "defensiveRating": init_drtg,
+            "pace": init_pace,
             "threePointPct": round(three_pct, 1),
             "twoPointPct": round(two_pct, 1),
-            "reboundRate": round(min(57.5, max(44.5, reb_raw * 1.42)), 1)
+            "reboundRate": round(init_reb_rate, 1)
         })
 
         time.sleep(0.08)
@@ -643,7 +936,7 @@ def main():
         active_round = latest_played_round
         print(f"[INFO] Active round set to latest played round: Round {active_round}")
 
-        live_fetch_budget = [24]  # Fetch up to 24 official game boxscores/shot-charts per run safely
+        live_fetch_budget = [60]  # Fetch up to 60 official game boxscores/shot-charts per run safely
 
         games_out = []
         for g in sorted_games:
@@ -718,12 +1011,12 @@ def main():
                         if (sq1a + sq1b + sq2a + sq2b) > 0:
                             q1_h = max(0, sq1a)
                             q2_h = max(0, sq2a - sq1a) if sq2a > 0 else 0
-                            q3_h = max(0, sq3a - sq2a) if sq3a > 0 else 0
-                            q4_h = max(0, sq4a - sq3a) if sq4a > 0 else 0
+                            q3_h = max(0, sq3a - sq2a) if sq3a >= sq2a and sq3a > 0 else max(0, sq3a)
+                            q4_h = max(0, sq4a - sq3a) if sq4a >= sq3a and sq4a > 0 else max(0, sq4a)
                             q1_a = max(0, sq1b)
                             q2_a = max(0, sq2b - sq1b) if sq2b > 0 else 0
-                            q3_a = max(0, sq3b - sq2b) if sq3b > 0 else 0
-                            q4_a = max(0, sq4b - sq3b) if sq4b > 0 else 0
+                            q3_a = max(0, sq3b - sq2b) if sq3b >= sq2b and sq3b > 0 else max(0, sq3b)
+                            q4_a = max(0, sq4b - sq3b) if sq4b >= sq3b and sq4b > 0 else max(0, sq4b)
                         q_raw = str(hdr.get("Quarter") or "").strip().upper()
                         gt_raw = str(hdr.get("GameTime") or "").split(":")[0].strip()
                         gt_min = int(gt_raw) if gt_raw.isdigit() else 0
@@ -796,6 +1089,9 @@ def main():
                                     dorsal_num = int(re.sub(r"\D", "", raw_dorsal) or "0")
                                 except Exception:
                                     dorsal_num = 0
+                                raw_val = st.get("valuation")
+                                if raw_val is None:
+                                    raw_val = st.get(" valuation")
                                 target_list.append({
                                     "playerId": p_id,
                                     "playerName": p_name,
@@ -808,6 +1104,7 @@ def main():
                                     "assists": int(st.get("assistances") or 0),
                                     "steals": int(st.get("steals") or 0),
                                     "blocks": int(st.get("blocksFavour") or 0),
+                                    "blocksAgainst": int(st.get("blocksAgainst") or 0),
                                     "turnovers": int(st.get("turnovers") or 0),
                                     "twoPtMade": int(st.get("fieldGoalsMade2") or 0),
                                     "twoPtAttempted": int(st.get("fieldGoalsAttempted2") or 0),
@@ -816,7 +1113,8 @@ def main():
                                     "ftMade": int(st.get("freeThrowsMade") or 0),
                                     "ftAttempted": int(st.get("freeThrowsAttempted") or 0),
                                     "foulsDrawn": int(st.get("foulsReceived") or 0),
-                                    "foulsCommitted": int(st.get("foulsCommited") or 0)
+                                    "foulsCommitted": int(st.get("foulsCommited") or 0),
+                                    "valuationOverride": int(round(float(raw_val))) if raw_val is not None else None
                                 })
                         if box_home and box_away:
                             is_official = True
@@ -905,6 +1203,12 @@ def main():
                 "shotChart": shots_list,
                 "shots": shots_list
             })
+
+    teams_out, games_out = recompute_official_standings_and_team_analytics(
+        teams_out=teams_out,
+        games_out=games_out,
+        team_stats_by_code=team_stats_by_code
+    )
 
     snapshot = {
         "syncedAtUtc": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),

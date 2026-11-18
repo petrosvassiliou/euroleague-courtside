@@ -187,6 +187,7 @@ data class EuroLeagueBoxscoreStatsDto(
     @SerialName("assistances") val assistances: Double? = null,
     @SerialName("steals") val steals: Double? = null,
     @SerialName("blocksFavour") val blocksFavour: Double? = null,
+    @SerialName("blocksAgainst") val blocksAgainst: Double? = null,
     @SerialName("turnovers") val turnovers: Double? = null,
     @SerialName("fieldGoalsMade2") val fieldGoalsMade2: Double? = null,
     @SerialName("fieldGoalsAttempted2") val fieldGoalsAttempted2: Double? = null,
@@ -227,9 +228,15 @@ data class EuroLeagueTeamStatsEnvelopeDto(
 data class EuroLeagueTeamTraditionalDto(
     @SerialName("team") val team: EuroLeagueStatTeamMetaDto = EuroLeagueStatTeamMetaDto(),
     @SerialName("pointsScored") val pointsScored: Double = 0.0,
+    @SerialName("twoPointersAttempted") val twoPointersAttempted: Double = 0.0,
     @SerialName("twoPointersPercentage") val twoPointersPercentage: String? = null,
+    @SerialName("threePointersAttempted") val threePointersAttempted: Double = 0.0,
     @SerialName("threePointersPercentage") val threePointersPercentage: String? = null,
+    @SerialName("freeThrowsAttempted") val freeThrowsAttempted: Double = 0.0,
+    @SerialName("offensiveRebounds") val offensiveRebounds: Double = 0.0,
+    @SerialName("defensiveRebounds") val defensiveRebounds: Double = 0.0,
     @SerialName("totalRebounds") val totalRebounds: Double = 0.0,
+    @SerialName("turnovers") val turnovers: Double = 0.0,
     @SerialName("pir") val pir: Double = 0.0
 )
 
@@ -271,8 +278,10 @@ data class EuroLeagueLivePlayerStatDto(
     @SerialName("Steals") val steals: Int = 0,
     @SerialName("Turnovers") val turnovers: Int = 0,
     @SerialName("BlocksFavour") val blocks: Int = 0,
+    @SerialName("BlocksAgainst") val blocksAgainst: Int = 0,
     @SerialName("FoulsCommited") val foulsCommitted: Int = 0,
-    @SerialName("FoulsReceived") val foulsDrawn: Int = 0
+    @SerialName("FoulsReceived") val foulsDrawn: Int = 0,
+    @SerialName("Valuation") val valuation: Int? = null
 )
 
 @Serializable
@@ -346,6 +355,8 @@ data class BundledTeamDto(
     val losses: Int,
     val pointsFor: Int,
     val pointsAgainst: Int,
+    val totalPointsFor: Int? = null,
+    val totalPointsAgainst: Int? = null,
     val streak: List<String> = emptyList(),
     val offensiveRating: Float,
     val defensiveRating: Float,
@@ -425,6 +436,7 @@ data class BundledBoxscoreStatDto(
     val assists: Int,
     val steals: Int,
     val blocks: Int,
+    val blocksAgainst: Int = 0,
     val turnovers: Int,
     val twoPtMade: Int,
     val twoPtAttempted: Int,
@@ -433,7 +445,8 @@ data class BundledBoxscoreStatDto(
     val ftMade: Int,
     val ftAttempted: Int,
     val foulsDrawn: Int,
-    val foulsCommitted: Int
+    val foulsCommitted: Int,
+    val valuationOverride: Int? = null
 )
 
 @Serializable
@@ -607,7 +620,9 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                 losses = dto.losses,
                 pointsFor = dto.pointsFor,
                 pointsAgainst = dto.pointsAgainst,
-                streak = dto.streak,
+                totalPointsFor = dto.totalPointsFor ?: dto.pointsFor,
+                totalPointsAgainst = dto.totalPointsAgainst ?: dto.pointsAgainst,
+                streak = EuroLeagueMockRepository.normalizeStreakList(dto.streak),
                 offensiveRating = dto.offensiveRating,
                 defensiveRating = dto.defensiveRating,
                 pace = dto.pace,
@@ -682,6 +697,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         assists = b.assists,
                         steals = b.steals,
                         blocks = b.blocks,
+                        blocksAgainst = b.blocksAgainst,
                         turnovers = b.turnovers,
                         twoPtMade = b.twoPtMade,
                         twoPtAttempted = b.twoPtAttempted,
@@ -690,7 +706,8 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         ftMade = b.ftMade,
                         ftAttempted = b.ftAttempted,
                         foulsDrawn = b.foulsDrawn,
-                        foulsCommitted = b.foulsCommitted
+                        foulsCommitted = b.foulsCommitted,
+                        valuationOverride = b.valuationOverride
                     )
                 },
                 boxscoreAway = g.boxscoreAway.map { b ->
@@ -706,6 +723,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         assists = b.assists,
                         steals = b.steals,
                         blocks = b.blocks,
+                        blocksAgainst = b.blocksAgainst,
                         turnovers = b.turnovers,
                         twoPtMade = b.twoPtMade,
                         twoPtAttempted = b.twoPtAttempted,
@@ -714,7 +732,8 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         ftMade = b.ftMade,
                         ftAttempted = b.ftAttempted,
                         foulsDrawn = b.foulsDrawn,
-                        foulsCommitted = b.foulsCommitted
+                        foulsCommitted = b.foulsCommitted,
+                        valuationOverride = b.valuationOverride
                     )
                 },
                 shots = g.shotChart.map { s ->
@@ -769,41 +788,64 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                 val existingGamesById = fallbackMockRepository.games.value.associateBy { it.id }
                 val existingPlayersByTeam = fallbackMockRepository.players.groupBy { it.teamId }
 
-                // 1. Berechne aktuelle Tabellenstände & Formkurven aus allen gespielten Spielen
+                // 1. Berechne aktuelle Tabellenstände (exkl. Overtime-Punkte gemäß EuroLeague-Bylaws) & echte Formkurven ("W"/"L")
                 data class MutableStanding(
                     var wins: Int = 0,
                     var losses: Int = 0,
-                    var pf: Int = 0,
-                    var pa: Int = 0,
+                    var regPf: Int = 0,
+                    var regPa: Int = 0,
+                    var totalPf: Int = 0,
+                    var totalPa: Int = 0,
                     val streak: MutableList<String> = mutableListOf()
                 )
                 val standingsMap = clubs.associate { it.code to MutableStanding() }.toMutableMap()
 
                 allGamesDto
                     .filter { it.played && it.local.score != null && it.road.score != null }
-                    .sortedBy { it.utcDate ?: "" }
+                    .sortedWith(
+                        compareBy<EuroLeagueRemoteGameDto> { it.round }
+                            .thenBy { it.utcDate ?: "" }
+                            .thenBy { it.gameCode }
+                    )
                     .forEach { g ->
                         val hCode = g.local.club.code
                         val aCode = g.road.club.code
                         val hScore = g.local.score ?: 0
                         val aScore = g.road.score ?: 0
                         if (hScore == 0 && aScore == 0) return@forEach
+
+                        val hReg = (g.local.partials?.partials1 ?: 0) +
+                            (g.local.partials?.partials2 ?: 0) +
+                            (g.local.partials?.partials3 ?: 0) +
+                            (g.local.partials?.partials4 ?: 0)
+                        val aReg = (g.road.partials?.partials1 ?: 0) +
+                            (g.road.partials?.partials2 ?: 0) +
+                            (g.road.partials?.partials3 ?: 0) +
+                            (g.road.partials?.partials4 ?: 0)
+                        val isOvertime = hReg > 0 && aReg > 0 && hReg == aReg && (hScore > hReg || aScore > aReg)
+                        val standingsH = if (isOvertime) hReg else hScore
+                        val standingsA = if (isOvertime) aReg else aScore
+
                         val hRec = standingsMap.getOrPut(hCode) { MutableStanding() }
                         val aRec = standingsMap.getOrPut(aCode) { MutableStanding() }
-                        hRec.pf += hScore
-                        hRec.pa += aScore
-                        aRec.pf += aScore
-                        aRec.pa += hScore
-                        if (hScore >= aScore) {
+                        hRec.regPf += standingsH
+                        hRec.regPa += standingsA
+                        hRec.totalPf += hScore
+                        hRec.totalPa += aScore
+                        aRec.regPf += standingsA
+                        aRec.regPa += standingsH
+                        aRec.totalPf += aScore
+                        aRec.totalPa += hScore
+                        if (hScore > aScore) {
                             hRec.wins += 1
                             aRec.losses += 1
-                            hRec.streak.add("S")
-                            aRec.streak.add("N")
-                        } else {
+                            hRec.streak.add("W")
+                            aRec.streak.add("L")
+                        } else if (aScore > hScore) {
                             aRec.wins += 1
                             hRec.losses += 1
-                            aRec.streak.add("S")
-                            hRec.streak.add("N")
+                            aRec.streak.add("W")
+                            hRec.streak.add("L")
                         }
                     }
 
@@ -814,20 +856,55 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                     val existing = existingTeamsById[code] ?: existingTeamsById[tvCode]
                     val tStat = teamStatsMap[code] ?: teamStatsMap[tvCode]
                     val gp = (st.wins + st.losses).coerceAtLeast(1)
-                    val ppg = if ((tStat?.pointsScored ?: 0.0) > 0.0) {
-                        tStat!!.pointsScored.toFloat()
-                    } else if (st.pf > 0) {
-                        st.pf.toFloat() / gp
-                    } else {
-                        82f
+                    val ppg = when {
+                        (tStat?.pointsScored ?: 0.0) > 0.0 -> tStat!!.pointsScored.toFloat()
+                        st.totalPf > 0 -> st.totalPf.toFloat() / gp
+                        existing != null -> existing.ppg
+                        else -> 82f
                     }
-                    val oppg = if (st.pa > 0) st.pa.toFloat() / gp else 80f
+                    val oppg = when {
+                        st.totalPa > 0 -> st.totalPa.toFloat() / gp
+                        existing != null -> existing.oppg
+                        else -> 82f
+                    }
                     val parsedTwoPct = parsePercentageString(tStat?.twoPointersPercentage)
                     val parsedThreePct = parsePercentageString(tStat?.threePointersPercentage)
-                    val parsedRebRate = if ((tStat?.totalRebounds ?: 0.0) > 0.0) {
-                        ((tStat!!.totalRebounds.toFloat() * 1.42f * 10f).roundToInt() / 10f).coerceIn(44.5f, 57.5f)
+
+                    val fgaPerGame = (tStat?.twoPointersAttempted ?: 0.0) + (tStat?.threePointersAttempted ?: 0.0)
+                    val possPerGame = if (fgaPerGame > 0.0) {
+                        (fgaPerGame - (tStat?.offensiveRebounds ?: 0.0) +
+                            (tStat?.turnovers ?: 0.0) +
+                            0.44 * (tStat?.freeThrowsAttempted ?: 0.0)).toFloat().coerceAtLeast(55f)
                     } else {
                         null
+                    }
+                    val computedOffRtg = if (possPerGame != null) {
+                        (((100f * ppg / possPerGame) * 10f).roundToInt() / 10f)
+                    } else {
+                        existing?.offensiveRating ?: 112.0f
+                    }
+                    val computedDefRtg = if (possPerGame != null) {
+                        (((100f * oppg / possPerGame) * 10f).roundToInt() / 10f)
+                    } else {
+                        existing?.defensiveRating ?: 112.0f
+                    }
+                    val computedPace = if (possPerGame != null) {
+                        ((possPerGame * 10f).roundToInt() / 10f)
+                    } else {
+                        existing?.pace ?: 72.0f
+                    }
+                    val leagueAvgReb = teamStatsMap.values
+                        .map { it.totalRebounds }
+                        .filter { it > 0.0 }
+                        .average()
+                        .takeIf { !it.isNaN() && it > 0.0 } ?: 34.5
+                    val computedRebRate = when {
+                        existing != null && existing.reboundRate in 35f..65f -> existing.reboundRate
+                        (tStat?.totalRebounds ?: 0.0) > 0.0 -> {
+                            val reb = tStat!!.totalRebounds
+                            (((100.0 * reb / (reb + leagueAvgReb)) * 10.0).roundToInt() / 10f)
+                        }
+                        else -> 50.0f
                     }
                     val colors = officialPalette[code]
                         ?: officialPalette[tvCode]
@@ -845,19 +922,25 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         accentColorHex = colors.third,
                         wins = st.wins,
                         losses = st.losses,
-                        pointsFor = st.pf,
-                        pointsAgainst = st.pa,
-                        streak = st.streak.takeLast(5).ifEmpty { existing?.streak ?: listOf("S", "N", "S", "S", "N") },
-                        offensiveRating = ((ppg * 1.32f * 10f).roundToInt() / 10f),
-                        defensiveRating = ((oppg * 1.32f * 10f).roundToInt() / 10f),
-                        pace = (((70f + (ppg - 78f) * 0.35f) * 10f).roundToInt() / 10f),
-                        threePointPct = parsedThreePct ?: existing?.threePointPct ?: (((34.5f + (ppg - 78f) * 0.32f) * 10f).roundToInt() / 10f),
-                        twoPointPct = parsedTwoPct ?: existing?.twoPointPct ?: (((52.5f + (ppg - 78f) * 0.38f) * 10f).roundToInt() / 10f),
-                        reboundRate = parsedRebRate ?: existing?.reboundRate ?: (((48.5f + (st.wins - st.losses) * 0.45f) * 10f).roundToInt() / 10f),
+                        pointsFor = st.regPf,
+                        pointsAgainst = st.regPa,
+                        totalPointsFor = st.totalPf,
+                        totalPointsAgainst = st.totalPa,
+                        streak = if (st.wins + st.losses > 0) {
+                            EuroLeagueMockRepository.normalizeStreakList(st.streak.takeLast(5))
+                        } else {
+                            EuroLeagueMockRepository.normalizeStreakList(existing?.streak ?: emptyList())
+                        },
+                        offensiveRating = computedOffRtg,
+                        defensiveRating = computedDefRtg,
+                        pace = computedPace,
+                        threePointPct = parsedThreePct ?: existing?.threePointPct ?: 35.5f,
+                        twoPointPct = parsedTwoPct ?: existing?.twoPointPct ?: 54.0f,
+                        reboundRate = computedRebRate,
                         logoUrl = c.images?.crest ?: existing?.logoUrl ?: "",
                         localLogoResName = "club_logo_${code.lowercase()}"
                     )
-                }.sortedWith(compareByDescending<EuroLeagueTeam> { it.wins }.thenByDescending { it.pointDiff })
+                }
 
                 val teamById = liveTeams.associateBy { it.id }
 
@@ -993,8 +1076,13 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                     ?.let { maxOf(activeRound, it) }
                     ?: activeRound
 
+                val syncedTeams = EuroLeagueMockRepository.recomputeOfficialStandingsFromGames(
+                    seedTeams = liveTeams,
+                    allGames = liveGames
+                )
+
                 fallbackMockRepository.applyLiveDataset(
-                    liveTeams = liveTeams,
+                    liveTeams = syncedTeams,
                     livePlayers = allVerifiedPlayers,
                     liveGames = liveGames,
                     activeRound = resolvedActiveRound,
@@ -1002,7 +1090,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                     syncLabel = "$seasonCode • Round $resolvedActiveRound"
                 )
 
-                persistToRoomCache(liveTeams, liveGames)
+                persistToRoomCache(fallbackMockRepository.teams, fallbackMockRepository.games.value)
             }.recoverCatching {
                 // Offline-Fallback: Speichere aktuellen Stand aus dem Mock/Snapshot-Repository in Room
                 persistToRoomCache(fallbackMockRepository.teams, fallbackMockRepository.games.value)
@@ -1106,6 +1194,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                             seasonCode = seasonCode,
                             syncLabel = "$seasonCode • Round $resolvedActiveRound"
                         )
+                        persistToRoomCache(fallbackMockRepository.teams, fallbackMockRepository.games.value)
                     }
                 } else {
                     val existingGames = fallbackMockRepository.games.value
@@ -1158,6 +1247,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         .filter { it.status == GameStatus.LIVE || it.status == GameStatus.FINAL }
                         .maxOfOrNull { it.round }
                         ?.let { maxOf(activeRound, it) }
+                        ?.coerceAtLeast(1)
                         ?: activeRound
                     fallbackMockRepository.applyLiveDataset(
                         liveTeams = fallbackMockRepository.teams,
@@ -1167,6 +1257,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                         seasonCode = seasonCode,
                         syncLabel = "$seasonCode • Round $resolvedActiveRound"
                     )
+                    persistToRoomCache(fallbackMockRepository.teams, fallbackMockRepository.games.value)
                 }
             }
         }
@@ -1515,6 +1606,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                 assists = r.assists,
                 steals = r.steals,
                 blocks = r.blocks,
+                blocksAgainst = r.blocksAgainst,
                 turnovers = r.turnovers,
                 twoPtMade = r.fgm2,
                 twoPtAttempted = r.fga2,
@@ -1523,7 +1615,8 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                 ftMade = r.ftm,
                 ftAttempted = r.fta,
                 foulsDrawn = r.foulsDrawn,
-                foulsCommitted = r.foulsCommitted
+                foulsCommitted = r.foulsCommitted,
+                valuationOverride = r.valuation
             )
         }.sortedByDescending { it.pir }
     }
@@ -1540,6 +1633,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
             if (secs <= 0 && pts <= 0) return@mapNotNull null
 
             val mins = "%02d:%02d".format(secs / 60, secs % 60)
+            val rawVal = st.valuation ?: st.valuationAlt
             PlayerBoxscoreStat(
                 playerId = "${teamId}_${item.player.person.code}",
                 playerName = formatPlayerDisplayName(item.player.person),
@@ -1552,6 +1646,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                 assists = (st.assistances ?: 0.0).roundToInt(),
                 steals = (st.steals ?: 0.0).roundToInt(),
                 blocks = (st.blocksFavour ?: 0.0).roundToInt(),
+                blocksAgainst = (st.blocksAgainst ?: 0.0).roundToInt(),
                 turnovers = (st.turnovers ?: 0.0).roundToInt(),
                 twoPtMade = (st.fieldGoalsMade2 ?: 0.0).roundToInt(),
                 twoPtAttempted = (st.fieldGoalsAttempted2 ?: 0.0).roundToInt(),
@@ -1560,7 +1655,8 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                 ftMade = (st.freeThrowsMade ?: 0.0).roundToInt(),
                 ftAttempted = (st.freeThrowsAttempted ?: 0.0).roundToInt(),
                 foulsDrawn = (st.foulsReceived ?: 0.0).roundToInt(),
-                foulsCommitted = (st.foulsCommited ?: 0.0).roundToInt()
+                foulsCommitted = (st.foulsCommited ?: 0.0).roundToInt(),
+                valuationOverride = rawVal?.roundToInt()
             )
         }.sortedByDescending { it.pir }
     }

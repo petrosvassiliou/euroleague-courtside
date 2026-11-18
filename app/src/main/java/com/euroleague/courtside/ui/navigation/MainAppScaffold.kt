@@ -515,7 +515,7 @@ fun MainAppScaffold(
                         )
 
                         CourtsideDestination.STANDINGS_PLAYOFFS -> {
-                            val standingsList = remember(allTeams) { repository.getStandings() }
+                            val standingsList = remember(allTeams, games) { repository.getStandings() }
                             val selectedTeamForDetail = selectedStandingsTeamId?.let { id ->
                                 standingsList.firstOrNull { matchesClubCode(id, it) }
                                     ?: repository.findTeam(id)
@@ -1483,8 +1483,8 @@ private fun MyTeamDashboardScreen(
                             fontSize = 22.sp
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            primaryTeam.streak.forEach { res ->
-                                val isWin = res == "S" || res == "W"
+                            primaryTeam.streak.takeLast(5).forEach { res ->
+                                val isWin = isWinStreakEntry(res)
                                 Box(
                                     modifier = Modifier
                                         .size(18.dp)
@@ -1934,6 +1934,10 @@ private fun StandingsScreen(
     }
 }
 
+internal fun isWinStreakEntry(entry: String): Boolean {
+    return entry.equals("W", ignoreCase = true) || entry.equals("S", ignoreCase = true)
+}
+
 @Composable
 private fun StandingsFormStreakRow(
     streak: List<String>,
@@ -1944,7 +1948,7 @@ private fun StandingsFormStreakRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         streak.takeLast(5).forEach { entry ->
-            val isWin = entry.equals("W", ignoreCase = true)
+            val isWin = isWinStreakEntry(entry)
             val badgeBg = if (isWin) Color(0x2600E676) else Color(0x26FF3B30)
             val badgeTextCol = if (isWin) CourtsideDesignTokens.NeonMadeGreen else CourtsideDesignTokens.NeonMissedRed
             Box(
@@ -2498,20 +2502,18 @@ private fun SeasonLeadersAndComparisonScreen(
 
     val h2hGames = remember(games, teamA.id, teamB.id) {
         games.filter { g ->
-            val aHome = g.homeTeam.id == teamA.id || g.homeTeam.code == teamA.code
-            val bAway = g.awayTeam.id == teamB.id || g.awayTeam.code == teamB.code
-            val bHome = g.homeTeam.id == teamB.id || g.homeTeam.code == teamB.code
-            val aAway = g.awayTeam.id == teamA.id || g.awayTeam.code == teamA.code
+            val aHome = matchesClubCode(g.homeTeam.id, teamA) || matchesClubCode(g.homeTeam.code, teamA)
+            val bAway = matchesClubCode(g.awayTeam.id, teamB) || matchesClubCode(g.awayTeam.code, teamB)
+            val bHome = matchesClubCode(g.homeTeam.id, teamB) || matchesClubCode(g.homeTeam.code, teamB)
+            val aAway = matchesClubCode(g.awayTeam.id, teamA) || matchesClubCode(g.awayTeam.code, teamA)
             (aHome && bAway) || (bHome && aAway)
         }.sortedBy { it.round }
     }
 
-    val gpA = (teamA.wins + teamA.losses).coerceAtLeast(1)
-    val gpB = (teamB.wins + teamB.losses).coerceAtLeast(1)
-    val ppgA = ((teamA.pointsFor.toFloat() / gpA) * 10f).toInt() / 10f
-    val ppgB = ((teamB.pointsFor.toFloat() / gpB) * 10f).toInt() / 10f
-    val oppgA = ((teamA.pointsAgainst.toFloat() / gpA) * 10f).toInt() / 10f
-    val oppgB = ((teamB.pointsAgainst.toFloat() / gpB) * 10f).toInt() / 10f
+    val ppgA = teamA.ppg
+    val ppgB = teamB.ppg
+    val oppgA = teamA.oppg
+    val oppgB = teamB.oppg
 
     data class ComparisonMetric(
         val label: String,
@@ -2587,8 +2589,7 @@ private fun SeasonLeadersAndComparisonScreen(
 
     val matchupAndLeaguePlayers = remember(players, teamA.id, teamB.id) {
         val teamABStars = players.filter {
-            it.teamId == teamA.id || it.teamId == teamA.code ||
-                it.teamId == teamB.id || it.teamId == teamB.code
+            matchesClubCode(it.teamId, teamA) || matchesClubCode(it.teamId, teamB)
         }.sortedByDescending { it.pir }.take(8)
         val others = players.sortedByDescending { it.pir }.filterNot { p -> teamABStars.any { it.id == p.id } }
         teamABStars + others
@@ -2956,8 +2957,8 @@ private fun SeasonLeadersAndComparisonScreen(
 
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 itemsIndexed(matchupAndLeaguePlayers, key = { _, p -> p.id }) { idx, p ->
-                    val isTeamA = p.teamId == teamA.id || p.teamId == teamA.code
-                    val isTeamB = p.teamId == teamB.id || p.teamId == teamB.code
+                    val isTeamA = matchesClubCode(p.teamId, teamA)
+                    val isTeamB = matchesClubCode(p.teamId, teamB)
                     val teamColor = when {
                         isTeamA -> CourtsideDesignTokens.EuroLeagueOrange
                         isTeamB -> CourtsideDesignTokens.NeonMadeGreen
@@ -3031,20 +3032,20 @@ private fun RadarAxisBadge(
 @Composable
 private fun TeamComparisonRadarCanvas(teamA: EuroLeagueTeam, teamB: EuroLeagueTeam) {
     // 5 Radar Axes matching the 5 RadarAxisBadges:
-    // 0 (Top): OFF RTG, 1 (Right): DEF Efficiency (215 - defRtg), 2 (Bottom-Right): 3P%, 3 (Bottom-Left): 2P%, 4 (Left): REB%
+    // 0 (Top): OFF RTG, 1 (Right): DEF Efficiency (lower DRtg = higher polygon vertex), 2 (Bottom-Right): 3P%, 3 (Bottom-Left): 2P%, 4 (Left): REB%
     val metricsA = listOf(
-        ((teamA.offensiveRating - 95f) / 30f).coerceIn(0.25f, 0.96f),
-        ((125f - teamA.defensiveRating) / 25f).coerceIn(0.25f, 0.96f),
-        ((teamA.threePointPct - 28f) / 16f).coerceIn(0.25f, 0.96f),
-        ((teamA.twoPointPct - 45f) / 18f).coerceIn(0.25f, 0.96f),
-        ((teamA.reboundRate - 40f) / 20f).coerceIn(0.25f, 0.96f)
+        ((teamA.offensiveRating - 98f) / 26f).coerceIn(0.25f, 0.96f),
+        ((126f - teamA.defensiveRating) / 26f).coerceIn(0.25f, 0.96f),
+        ((teamA.threePointPct - 27f) / 16f).coerceIn(0.25f, 0.96f),
+        ((teamA.twoPointPct - 47f) / 15f).coerceIn(0.25f, 0.96f),
+        ((teamA.reboundRate - 42f) / 15f).coerceIn(0.25f, 0.96f)
     )
     val metricsB = listOf(
-        ((teamB.offensiveRating - 95f) / 30f).coerceIn(0.25f, 0.96f),
-        ((125f - teamB.defensiveRating) / 25f).coerceIn(0.25f, 0.96f),
-        ((teamB.threePointPct - 28f) / 16f).coerceIn(0.25f, 0.96f),
-        ((teamB.twoPointPct - 45f) / 18f).coerceIn(0.25f, 0.96f),
-        ((teamB.reboundRate - 40f) / 20f).coerceIn(0.25f, 0.96f)
+        ((teamB.offensiveRating - 98f) / 26f).coerceIn(0.25f, 0.96f),
+        ((126f - teamB.defensiveRating) / 26f).coerceIn(0.25f, 0.96f),
+        ((teamB.threePointPct - 27f) / 16f).coerceIn(0.25f, 0.96f),
+        ((teamB.twoPointPct - 47f) / 15f).coerceIn(0.25f, 0.96f),
+        ((teamB.reboundRate - 42f) / 15f).coerceIn(0.25f, 0.96f)
     )
 
     Canvas(modifier = Modifier.fillMaxSize()) {
