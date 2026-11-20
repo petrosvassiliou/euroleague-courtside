@@ -233,6 +233,9 @@ fun CourtsideLivePill(
                 color = Color.White,
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 11.sp,
+                maxLines = 1,
+                softWrap = false,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
             )
         }
@@ -241,6 +244,9 @@ fun CourtsideLivePill(
             color = Color(0xFFE5E5EA),
             fontWeight = FontWeight.SemiBold,
             fontSize = 11.sp,
+            maxLines = 1,
+            softWrap = false,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
         )
     }

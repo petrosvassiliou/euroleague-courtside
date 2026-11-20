@@ -14,19 +14,24 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -92,9 +97,11 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.window.core.layout.WindowWidthSizeClass
@@ -134,6 +141,12 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import kotlin.math.cos
 import kotlin.math.sin
+
+internal fun shouldUseSingleColumnMobileLayout(widthClass: WindowWidthSizeClass): Boolean =
+    widthClass == WindowWidthSizeClass.COMPACT
+
+internal fun isAndroidPhoneViewport(isCompactWidth: Boolean, smallestScreenWidthDp: Int): Boolean =
+    isCompactWidth || smallestScreenWidthDp < 600
 
 enum class CourtsideDestination(
     val title: String,
@@ -262,7 +275,9 @@ fun MainAppScaffold(
 
     val adaptiveInfo = currentWindowAdaptiveInfo()
     val widthClass = adaptiveInfo.windowSizeClass.windowWidthSizeClass
-    val isCompact = widthClass == WindowWidthSizeClass.COMPACT
+    val isCompact = shouldUseSingleColumnMobileLayout(widthClass)
+    val configuration = LocalConfiguration.current
+    val isPhoneDevice = isAndroidPhoneViewport(isCompact, configuration.smallestScreenWidthDp)
 
     var isLiveSyncing by remember { mutableStateOf(false) }
     var syncFeedbackBanner by remember { mutableStateOf<LiveSyncFeedbackState?>(null) }
@@ -373,6 +388,15 @@ fun MainAppScaffold(
             modifier = Modifier
                 .fillMaxSize()
                 .background(CourtsideDesignTokens.ShellObsidian)
+                .then(
+                    if (isPhoneDevice) {
+                        Modifier
+                            .statusBarsPadding()
+                            .displayCutoutPadding()
+                    } else {
+                        Modifier
+                    }
+                )
                 .focusRequester(focusRequester)
                 .focusTarget()
                 .onPreviewKeyEvent { event ->
@@ -417,6 +441,26 @@ fun MainAppScaffold(
                     }
                 }
         ) {
+            if (isCompact) {
+                CourtsideMobileTopBar(
+                    activeLanguage = activeLanguage,
+                    isSyncing = isLiveSyncing,
+                    updateInfo = updateInfo,
+                    onCycleLanguage = {
+                        val nextIdx = (AppLanguage.entries.indexOf(activeLanguage) + 1) % AppLanguage.entries.size
+                        onChangeLanguage(AppLanguage.entries[nextIdx])
+                    },
+                    onLiveRefresh = triggerLiveSync,
+                    onVersionClick = {
+                        if (updateInfo.status == UpdateStatus.UPDATE_AVAILABLE) {
+                            CourtsideAppUpdateManager.launchPlayProtectCompliantUpdate(context, updateInfo)
+                        } else {
+                            triggerManualUpdateCheck()
+                        }
+                    }
+                )
+            }
+
             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 // Linke Courtside-Sidebar für Desktop (Expanded) & Foldable/Tablet (Medium)
                 if (!isCompact) {
@@ -446,6 +490,7 @@ fun MainAppScaffold(
                             activeRound = activeRound,
                             syncStatus = syncStatus,
                             isTableTopPosture = isTableTopPosture,
+                            isCompact = isCompact,
                             onSelectPrimaryTeam = { teamId ->
                                 repository.selectPrimaryTeam(teamId)
                                 preferencesDataStore?.savePrimaryTeamImmediate(teamId)
@@ -483,6 +528,7 @@ fun MainAppScaffold(
                             filterOnlyFavorites = filterOnlyFavorites,
                             favoriteTeamIds = favoriteIds,
                             hingeInBookPosture = isBookPosture,
+                            isCompact = isCompact,
                             notificationManager = notificationManager,
                             onPreviousRound = {
                                 userManuallySelectedRound = true
@@ -575,6 +621,7 @@ fun MainAppScaffold(
                                 games = games,
                                 teamA = resolvedTeamA,
                                 teamB = resolvedTeamB,
+                                isCompact = isCompact,
                                 onSelectTeamA = { newA ->
                                     comparisonTeamAId = newA
                                     if (comparisonTeamBId == newA) {
@@ -594,6 +641,7 @@ fun MainAppScaffold(
                             primaryTeam = primaryTeam,
                             games = games,
                             activeLanguage = activeLanguage,
+                            isCompact = isCompact,
                             onSelectLanguage = onChangeLanguage,
                             notificationManager = notificationManager,
                             updateInfo = updateInfo,
@@ -710,7 +758,11 @@ fun MainAppScaffold(
                         exit = fadeOut(),
                         modifier = Modifier
                             .align(Alignment.BottomStart)
-                            .padding(start = 16.dp, bottom = 12.dp, end = 96.dp)
+                            .padding(
+                                start = if (isCompact) 12.dp else 16.dp,
+                                bottom = 12.dp,
+                                end = if (isCompact) 12.dp else 96.dp
+                            )
                     ) {
                         val banner = syncFeedbackBanner
                         if (banner != null) {
@@ -757,39 +809,41 @@ fun MainAppScaffold(
                         }
                     }
 
-                    // Permanente Versionsnummer unten rechts (Klick prüft manuell auf Updates)
-                    val hasNewUpdate = updateInfo.status == UpdateStatus.UPDATE_AVAILABLE
-                    Surface(
-                        color = if (hasNewUpdate) Color(0xD9102A1E) else Color(0xCC121216),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(end = 12.dp, bottom = 8.dp)
-                            .border(
-                                1.dp,
-                                if (hasNewUpdate) CourtsideDesignTokens.NeonMadeGreen else Color(0x38FF6600),
-                                RoundedCornerShape(8.dp)
-                            )
-                            .clickable {
-                                if (hasNewUpdate) {
-                                    CourtsideAppUpdateManager.launchPlayProtectCompliantUpdate(context, updateInfo)
-                                } else {
-                                    triggerManualUpdateCheck()
+                    // Permanente Versionsnummer unten rechts auf Tablet/Laptop (auf Smartphones sitzt sie oben in CourtsideMobileTopBar)
+                    if (!isCompact) {
+                        val hasNewUpdate = updateInfo.status == UpdateStatus.UPDATE_AVAILABLE
+                        Surface(
+                            color = if (hasNewUpdate) Color(0xD9102A1E) else Color(0xCC121216),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(end = 12.dp, bottom = 8.dp)
+                                .border(
+                                    1.dp,
+                                    if (hasNewUpdate) CourtsideDesignTokens.NeonMadeGreen else Color(0x38FF6600),
+                                    RoundedCornerShape(8.dp)
+                                )
+                                .clickable {
+                                    if (hasNewUpdate) {
+                                        CourtsideAppUpdateManager.launchPlayProtectCompliantUpdate(context, updateInfo)
+                                    } else {
+                                        triggerManualUpdateCheck()
+                                    }
                                 }
-                            }
-                            .pointerHoverIcon(PointerIcon.Hand)
-                    ) {
-                        Text(
-                            text = if (hasNewUpdate) {
-                                "🚀 v${BuildConfig.VERSION_NAME} → v${updateInfo.latestVersionName}"
-                            } else {
-                                "v${BuildConfig.VERSION_NAME}"
-                            },
-                            color = if (hasNewUpdate) CourtsideDesignTokens.NeonMadeGreen else Color(0xFFD1D5DB),
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                        )
+                                .pointerHoverIcon(PointerIcon.Hand)
+                        ) {
+                            Text(
+                                text = if (hasNewUpdate) {
+                                    "🚀 v${BuildConfig.VERSION_NAME} → v${updateInfo.latestVersionName}"
+                                } else {
+                                    "v${BuildConfig.VERSION_NAME}"
+                                },
+                                color = if (hasNewUpdate) CourtsideDesignTokens.NeonMadeGreen else Color(0xFFD1D5DB),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -807,7 +861,16 @@ fun MainAppScaffold(
                             selected = selected,
                             onClick = { navigateToDestination(dest) },
                             icon = { Icon(dest.icon, contentDescription = navTitle) },
-                            label = { Text(navTitle, fontSize = 11.sp) },
+                            alwaysShowLabel = true,
+                            label = {
+                                Text(
+                                    text = navTitle,
+                                    fontSize = 10.sp,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = CourtsideDesignTokens.EuroLeagueOrange,
                                 selectedTextColor = CourtsideDesignTokens.EuroLeagueOrange,
@@ -815,6 +878,135 @@ fun MainAppScaffold(
                                 unselectedIconColor = CourtsideDesignTokens.MutedText,
                                 unselectedTextColor = CourtsideDesignTokens.MutedText
                             )
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CourtsideMobileTopBar(
+    activeLanguage: AppLanguage,
+    isSyncing: Boolean,
+    updateInfo: AppUpdateInfo,
+    onCycleLanguage: () -> Unit,
+    onLiveRefresh: () -> Unit,
+    onVersionClick: () -> Unit
+) {
+    val hasNewUpdate = updateInfo.status == UpdateStatus.UPDATE_AVAILABLE
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(CourtsideDesignTokens.SidebarObsidian)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(Color(0xFFFF6600), Color(0xFFFF3D00))
+                        )
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.SportsBasketball,
+                    contentDescription = null,
+                    tint = Color.Black,
+                    modifier = Modifier.size(17.dp)
+                )
+            }
+            Text(
+                text = "EuroLeague Courtside",
+                color = Color.White,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Surface(
+                color = if (hasNewUpdate) Color(0x3300E676) else Color(0xFF16161B),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .border(
+                        1.dp,
+                        if (hasNewUpdate) CourtsideDesignTokens.NeonMadeGreen else Color(0x38FF6600),
+                        RoundedCornerShape(8.dp)
+                    )
+                    .clickable { onVersionClick() }
+            ) {
+                Text(
+                    text = if (hasNewUpdate) "🚀 v${updateInfo.latestVersionName}" else "v${BuildConfig.VERSION_NAME}",
+                    color = if (hasNewUpdate) CourtsideDesignTokens.NeonMadeGreen else Color(0xFFD1D5DB),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                )
+            }
+
+            Surface(
+                color = Color(0xFF16161B),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .border(1.dp, Color(0x55FF6600), RoundedCornerShape(8.dp))
+                    .clickable { onCycleLanguage() }
+            ) {
+                Text(
+                    text = "${activeLanguage.flagEmoji} ${activeLanguage.shortLabel}",
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 4.dp)
+                )
+            }
+
+            Surface(
+                color = if (isSyncing) Color(0x40FF6600) else Color(0x24FF6600),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .border(
+                        1.dp,
+                        if (isSyncing) CourtsideDesignTokens.EuroLeagueOrange else Color(0x88FF6600),
+                        RoundedCornerShape(8.dp)
+                    )
+                    .clickable(enabled = !isSyncing) { onLiveRefresh() }
+            ) {
+                Box(
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isSyncing) {
+                        CircularProgressIndicator(
+                            color = CourtsideDesignTokens.EuroLeagueOrange,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    } else {
+                        Text(
+                            text = "⚡ Sync",
+                            color = CourtsideDesignTokens.EuroLeagueOrange,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 10.sp,
+                            maxLines = 1
                         )
                     }
                 }
@@ -1225,6 +1417,7 @@ private fun MyTeamDashboardScreen(
     activeRound: Int = 11,
     syncStatus: String = "LIVE API • E2026",
     isTableTopPosture: Boolean,
+    isCompact: Boolean = false,
     onSelectPrimaryTeam: (String) -> Unit,
     onVerifyRosterNow: () -> Unit = {}
 ) {
@@ -1257,6 +1450,409 @@ private fun MyTeamDashboardScreen(
             remainingMillis = (nextGame.tipOffEpochMillis - System.currentTimeMillis()).coerceAtLeast(0L)
             delay(1_000L)
         }
+    }
+
+    val countdownLabel = strings.formatTipOffCountdown(remainingMillis)
+    val isLiveGame = nextGame.status == GameStatus.LIVE
+    val isPlayedFinal = nextGame.status == GameStatus.FINAL && (nextGame.homeScore > 0 || nextGame.awayScore > 0)
+    val pillBadgeText = when {
+        isLiveGame -> "● ${strings.statusLive}"
+        isPlayedFinal -> strings.statusFinal
+        else -> strings.nextTipOffBadge
+    }
+    val pillDetailText = when {
+        isLiveGame -> "Q${nextGame.currentQuarter.coerceAtMost(4)} • ${nextGame.remainingClock}"
+        isPlayedFinal -> "${nextGame.homeScore} : ${nextGame.awayScore}"
+        else -> countdownLabel
+    }
+    val pillBadgeColor = if (isLiveGame) {
+        CourtsideDesignTokens.NeonMissedRed
+    } else {
+        CourtsideDesignTokens.EuroLeagueOrange
+    }
+
+    if (isCompact) {
+        // Smartphone (COMPACT): Einheitlicher vertikaler Feed mit Club-Banner, horizontalem Club-Umschalter, Spieltagskarte & Kader
+        val clubListState = rememberLazyListState()
+        LaunchedEffect(primaryTeam.id, allTeams.size) {
+            val selectedIdx = allTeams.indexOfFirst { it.id == primaryTeam.id || it.code == primaryTeam.code }
+            if (selectedIdx >= 0) {
+                clubListState.animateScrollToItem((selectedIdx - 1).coerceAtLeast(0))
+            }
+        }
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(CourtsideDesignTokens.ShellObsidian),
+            contentPadding = PaddingValues(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // 1. Club Hero Banner (mit Bilanz & 5-Spiele-Formkurve immer sichtbar rechts)
+            item {
+                CourtsideDualToneBanner(
+                    leftColor = primaryTeam.primaryColor,
+                    rightColor = primaryTeam.secondaryColor,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            CourtsideClubCrest(primaryTeam, size = 42.dp)
+                            Column {
+                                Text(
+                                    text = primaryTeam.name,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 16.sp,
+                                    lineHeight = 19.sp,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "${primaryTeam.arena} • ${primaryTeam.city}",
+                                    color = Color(0xFFD1D5DB),
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "${primaryTeam.wins}${strings.winLetter} - ${primaryTeam.losses}${strings.lossLetter}",
+                                color = Color.White,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 18.sp,
+                                maxLines = 1
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                primaryTeam.streak.takeLast(5).forEach { res ->
+                                    val isWin = isWinStreakEntry(res)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(17.dp)
+                                            .clip(CircleShape)
+                                            .background(if (isWin) CourtsideDesignTokens.NeonMadeGreen else CourtsideDesignTokens.NeonMissedRed),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = if (isWin) strings.winLetter else strings.lossLetter,
+                                            color = Color.Black,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 9.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Kompakter horizontaler Verein-Umschalter für alle 20 EuroLeague-Clubs
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = strings.myTeamHubTitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White
+                        )
+                        Surface(
+                            color = Color(0xFF1B1B21),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.border(1.dp, Color(0xFF2C2C34), RoundedCornerShape(8.dp))
+                        ) {
+                            Text(
+                                text = "${allTeams.size} ${strings.clubsSuffix}",
+                                color = Color(0xFFD1D5DB),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+
+                    LazyRow(
+                        state = clubListState,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(allTeams, key = { "m_club_${it.id}" }) { team ->
+                            val isSelected = team.id == primaryTeam.id || team.code == primaryTeam.code
+                            CourtsideGlassCard(
+                                isSelected = isSelected,
+                                glowColor = team.primaryColor,
+                                onClick = { onSelectPrimaryTeam(team.id) }
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                                ) {
+                                    CourtsideClubCrest(team = team, size = 22.dp)
+                                    Text(
+                                        text = team.code,
+                                        color = if (isSelected) Color.White else CourtsideDesignTokens.MutedText,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Vollbreite Spieltags- / Countdown-Karte
+            item {
+                CourtsideGlassCard(isSelected = true, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(modifier = Modifier.weight(1f, fill = false)) {
+                                CourtsideLivePill(
+                                    badgeText = pillBadgeText,
+                                    detailText = pillDetailText,
+                                    badgeColor = pillBadgeColor
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "${strings.roundPrefix} ${nextGame.round}",
+                                color = CourtsideDesignTokens.MutedText,
+                                fontSize = 12.sp,
+                                maxLines = 1
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                CourtsideClubCrest(nextGame.homeTeam, size = 34.dp)
+                                Column {
+                                    Text(
+                                        text = nextGame.homeTeam.name,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        lineHeight = 15.sp,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = nextGame.homeTeam.arena,
+                                        color = CourtsideDesignTokens.MutedText,
+                                        fontSize = 10.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            Text(
+                                text = if (isLiveGame || isPlayedFinal) "${nextGame.homeScore} : ${nextGame.awayScore}" else "VS",
+                                color = pillBadgeColor,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = if (isLiveGame || isPlayedFinal) 15.sp else 13.sp,
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.End,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.End,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                ) {
+                                    Text(
+                                        text = nextGame.awayTeam.name,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp,
+                                        lineHeight = 15.sp,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        textAlign = TextAlign.End
+                                    )
+                                    Text(
+                                        text = nextGame.awayTeam.city,
+                                        color = CourtsideDesignTokens.MutedText,
+                                        fontSize = 10.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        textAlign = TextAlign.End
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                CourtsideClubCrest(nextGame.awayTeam, size = 34.dp)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { CalendarExportHelper.exportSingleGameToNativeCalendar(context, nextGame) },
+                                colors = ButtonDefaults.buttonColors(containerColor = CourtsideDesignTokens.EuroLeagueOrange),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 9.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = Color.Black, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = strings.googleCalendarButton,
+                                    color = Color.Black,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Button(
+                                onClick = { CalendarExportHelper.exportTeamSeasonToIcsFile(context, primaryTeam, games) },
+                                colors = ButtonDefaults.buttonColors(containerColor = CourtsideDesignTokens.PillSurface),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 9.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.Share, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = strings.seasonIcsButton,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. Aktiver Kader im Vollbreiten-Kartenblock
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${strings.activeRosterHeader} (${roster.size} ${strings.playersWord})",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        color = Color(0x2200E676),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .border(1.dp, CourtsideDesignTokens.NeonMadeGreen.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                            .clickable { onVerifyRosterNow() }
+                    ) {
+                        Text(
+                            text = strings.rosterVerifiedBadge,
+                            color = CourtsideDesignTokens.NeonMadeGreen,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            maxLines = 1,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            item {
+                CourtsideGlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            Text(strings.playerColumn, Modifier.weight(2.6f), color = CourtsideDesignTokens.MutedText, fontSize = 11.sp)
+                            Text("POS", Modifier.weight(0.75f), color = CourtsideDesignTokens.MutedText, fontSize = 11.sp, textAlign = TextAlign.Center)
+                            Text("PPG", Modifier.weight(0.95f), color = CourtsideDesignTokens.MutedText, fontSize = 11.sp, textAlign = TextAlign.Center)
+                            Text("RPG", Modifier.weight(0.95f), color = CourtsideDesignTokens.MutedText, fontSize = 11.sp, textAlign = TextAlign.Center)
+                            Text("APG", Modifier.weight(0.95f), color = CourtsideDesignTokens.MutedText, fontSize = 11.sp, textAlign = TextAlign.Center)
+                            Text("PIR ⌄", Modifier.weight(1f), color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.Bold, fontSize = 11.sp, textAlign = TextAlign.End)
+                        }
+                        HorizontalDivider(color = Color(0x1AFFFFFF))
+                        roster.forEachIndexed { idx, p ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(2.6f).padding(end = 4.dp)) {
+                                    Text(
+                                        text = "${idx + 1}. #${p.number} ${p.name}",
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    val injColor = when (p.injuryStatus) {
+                                        InjuryStatus.FIT -> CourtsideDesignTokens.NeonMadeGreen
+                                        InjuryStatus.GAME_TIME_DECISION, InjuryStatus.QUESTIONABLE -> CourtsideDesignTokens.EuroLeagueOrange
+                                        InjuryStatus.OUT -> CourtsideDesignTokens.NeonMissedRed
+                                    }
+                                    val localizedInjuryLabel = p.injuryStatus.localizedLabel(strings)
+                                    val injText = if (p.injuryDetail.isNotBlank()) {
+                                        "$localizedInjuryLabel • ${p.injuryDetail}"
+                                    } else {
+                                        "$localizedInjuryLabel • ${p.nationality} • ${p.heightCm}cm"
+                                    }
+                                    Text(
+                                        text = injText,
+                                        color = injColor,
+                                        fontSize = 10.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                Text(p.position, Modifier.weight(0.75f), color = Color(0xFFD1D5DB), fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
+                                Text(p.ppg.toString(), Modifier.weight(0.95f), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
+                                Text(p.rpg.toString(), Modifier.weight(0.95f), color = Color(0xFFD1D5DB), fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
+                                Text(p.apg.toString(), Modifier.weight(0.95f), color = Color(0xFFD1D5DB), fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
+                                Text(p.pir.toString(), Modifier.weight(1f), color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, textAlign = TextAlign.End, maxLines = 1)
+                            }
+                            if (idx < roster.lastIndex) {
+                                HorizontalDivider(color = Color(0x0DFFFFFF))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return
     }
 
     Row(
@@ -1328,25 +1924,6 @@ private fun MyTeamDashboardScreen(
             }
 
             // Matchday / Countdown Broadcast Card für den aktuellen Spieltag (z. B. Round 11)
-            val countdownLabel = strings.formatTipOffCountdown(remainingMillis)
-            val isLiveGame = nextGame.status == GameStatus.LIVE
-            val isPlayedFinal = nextGame.status == GameStatus.FINAL && (nextGame.homeScore > 0 || nextGame.awayScore > 0)
-            val pillBadgeText = when {
-                isLiveGame -> "● ${strings.statusLive}"
-                isPlayedFinal -> strings.statusFinal
-                else -> strings.nextTipOffBadge
-            }
-            val pillDetailText = when {
-                isLiveGame -> "Q${nextGame.currentQuarter.coerceAtMost(4)} • ${nextGame.remainingClock}"
-                isPlayedFinal -> "${nextGame.homeScore} : ${nextGame.awayScore}"
-                else -> countdownLabel
-            }
-            val pillBadgeColor = if (isLiveGame) {
-                CourtsideDesignTokens.NeonMissedRed
-            } else {
-                CourtsideDesignTokens.EuroLeagueOrange
-            }
-
             CourtsideGlassCard(isSelected = true, modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Row(
@@ -1854,6 +2431,23 @@ private fun StandingsScreen(
                                             maxLines = 1,
                                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                         )
+                                    } else if (team.streak.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            team.streak.takeLast(5).forEach { entry ->
+                                                val isWin = isWinStreakEntry(entry)
+                                                val badgeTextCol = if (isWin) CourtsideDesignTokens.NeonMadeGreen else CourtsideDesignTokens.NeonMissedRed
+                                                Text(
+                                                    text = if (isWin) strings.winLetter else strings.lossLetter,
+                                                    color = badgeTextCol,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontSize = 9.sp
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -2107,7 +2701,7 @@ private fun StandingsTeamDetailScreen(
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
                     )
-                    if (!isCompact && team.streak.isNotEmpty()) {
+                    if (team.streak.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(4.dp))
                         StandingsFormStreakRow(streak = team.streak, strings = strings)
                     }
@@ -2298,6 +2892,7 @@ private fun TeamPageGameCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
+                    modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
@@ -2305,7 +2900,8 @@ private fun TeamPageGameCard(
                         text = "${strings.roundPrefix} ${game.round}",
                         color = CourtsideDesignTokens.EuroLeagueOrange,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize = 11.sp
+                        fontSize = 11.sp,
+                        maxLines = 1
                     )
                     Surface(
                         color = Color(0xFF22222A),
@@ -2316,6 +2912,7 @@ private fun TeamPageGameCard(
                             color = Color(0xFFD1D5DB),
                             fontWeight = FontWeight.Bold,
                             fontSize = 10.sp,
+                            maxLines = 1,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
@@ -2327,10 +2924,13 @@ private fun TeamPageGameCard(
                         Text(
                             text = "• $dateLabel",
                             color = CourtsideDesignTokens.MutedText,
-                            fontSize = 11.sp
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
+                Spacer(modifier = Modifier.width(6.dp))
 
                 when {
                     isLive -> {
@@ -2495,6 +3095,7 @@ private fun SeasonLeadersAndComparisonScreen(
     games: List<EuroLeagueGame> = emptyList(),
     teamA: EuroLeagueTeam,
     teamB: EuroLeagueTeam,
+    isCompact: Boolean = false,
     onSelectTeamA: (String) -> Unit = {},
     onSelectTeamB: (String) -> Unit
 ) {
@@ -2593,6 +3194,513 @@ private fun SeasonLeadersAndComparisonScreen(
         }.sortedByDescending { it.pir }.take(8)
         val others = players.sortedByDescending { it.pir }.filterNot { p -> teamABStars.any { it.id == p.id } }
         teamABStars + others
+    }
+
+    if (isCompact) {
+        // Smartphone (COMPACT): Einheitlicher Vollbreiten-Feed ohne gequetschte Nebenspalten
+        val teamAListState = rememberLazyListState()
+        val teamBListState = rememberLazyListState()
+        LaunchedEffect(teamA.id, teams.size) {
+            val idxA = teams.indexOfFirst { it.id == teamA.id }
+            if (idxA >= 0) teamAListState.animateScrollToItem((idxA - 1).coerceAtLeast(0))
+        }
+        LaunchedEffect(teamB.id, teams.size) {
+            val idxB = teams.indexOfFirst { it.id == teamB.id }
+            if (idxB >= 0) teamBListState.animateScrollToItem((idxB - 1).coerceAtLeast(0))
+        }
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(CourtsideDesignTokens.ShellObsidian),
+            contentPadding = PaddingValues(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                Text(
+                    text = strings.teamAnalyticsTitle,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color.White
+                )
+            }
+
+            // 1. Vollbreite Team-A & Team-B Auswahl-Karte
+            item {
+                CourtsideGlassCard(isSelected = true, modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "TEAM A: ${teamA.name}",
+                            color = CourtsideDesignTokens.EuroLeagueOrange,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        LazyRow(
+                            state = teamAListState,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(teams, key = { "m_teamA_${it.id}" }) { candidate ->
+                                val selected = candidate.id == teamA.id
+                                Surface(
+                                    color = if (selected) Color(0x38FF6600) else Color(0xFF1B1B21),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier
+                                        .border(
+                                            width = if (selected) 1.5.dp else 1.dp,
+                                            color = if (selected) Color(0xFFFF6600) else Color(0xFF2C2C34),
+                                            shape = RoundedCornerShape(10.dp)
+                                        )
+                                        .clickable { onSelectTeamA(candidate.id) }
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp)
+                                    ) {
+                                        CourtsideClubCrest(team = candidate, size = 20.dp)
+                                        Text(
+                                            text = candidate.code,
+                                            color = if (selected) Color.White else Color(0xFF9CA3AF),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(color = Color(0x1AFFFFFF))
+
+                        Text(
+                            text = "TEAM B: ${teamB.name}",
+                            color = CourtsideDesignTokens.NeonMadeGreen,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        LazyRow(
+                            state = teamBListState,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(teams, key = { "m_teamB_${it.id}" }) { candidate ->
+                                val selected = candidate.id == teamB.id
+                                Surface(
+                                    color = if (selected) Color(0x3300E676) else Color(0xFF1B1B21),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier
+                                        .border(
+                                            width = if (selected) 1.5.dp else 1.dp,
+                                            color = if (selected) CourtsideDesignTokens.NeonMadeGreen else Color(0xFF2C2C34),
+                                            shape = RoundedCornerShape(10.dp)
+                                        )
+                                        .clickable { onSelectTeamB(candidate.id) }
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp)
+                                    ) {
+                                        CourtsideClubCrest(team = candidate, size = 20.dp)
+                                        Text(
+                                            text = candidate.code,
+                                            color = if (selected) Color.White else Color(0xFF9CA3AF),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Vollbreites Dual-Tone Matchup Banner (ohne 2-Buchstaben-Zeilenumbruch!)
+            item {
+                CourtsideDualToneBanner(
+                    leftColor = teamA.primaryColor,
+                    rightColor = teamB.primaryColor,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            CourtsideClubCrest(teamA, size = 34.dp)
+                            Column {
+                                Text(
+                                    text = teamA.name,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    lineHeight = 15.sp,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "${teamA.wins}${strings.winLetter}-${teamA.losses}${strings.lossLetter} • OFF ${teamA.offensiveRating}",
+                                    color = CourtsideDesignTokens.EuroLeagueOrange,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                        Text(
+                            text = "VS",
+                            color = CourtsideDesignTokens.EuroLeagueOrange,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 13.sp,
+                            modifier = Modifier.padding(horizontal = 6.dp)
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.End,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.End,
+                                modifier = Modifier.weight(1f, fill = false)
+                            ) {
+                                Text(
+                                    text = teamB.name,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    lineHeight = 15.sp,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = TextAlign.End
+                                )
+                                Text(
+                                    text = "${teamB.wins}${strings.winLetter}-${teamB.losses}${strings.lossLetter} • OFF ${teamB.offensiveRating}",
+                                    color = CourtsideDesignTokens.NeonMadeGreen,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    textAlign = TextAlign.End
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            CourtsideClubCrest(teamB, size = 34.dp)
+                        }
+                    }
+                }
+            }
+
+            // 3. Vollbreites 5-Achsen-Radar-Diagramm mit gepolsterter Beschriftung & umbrechender Legende
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(Color(0xFF151519))
+                        .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(18.dp))
+                        .padding(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(244.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 24.dp, vertical = 20.dp)
+                        ) {
+                            TeamComparisonRadarCanvas(teamA = teamA, teamB = teamB)
+                        }
+
+                        RadarAxisBadge(
+                            title = "OFF",
+                            valA = "${teamA.offensiveRating}",
+                            valB = "${teamB.offensiveRating}",
+                            modifier = Modifier.align(Alignment.TopCenter)
+                        )
+                        RadarAxisBadge(
+                            title = "DEF",
+                            valA = "${teamA.defensiveRating}",
+                            valB = "${teamB.defensiveRating}",
+                            modifier = Modifier.align(Alignment.CenterEnd)
+                        )
+                        RadarAxisBadge(
+                            title = "3P%",
+                            valA = "${teamA.threePointPct}%",
+                            valB = "${teamB.threePointPct}%",
+                            modifier = Modifier.align(Alignment.BottomEnd)
+                        )
+                        RadarAxisBadge(
+                            title = "2P%",
+                            valA = "${teamA.twoPointPct}%",
+                            valB = "${teamB.twoPointPct}%",
+                            modifier = Modifier.align(Alignment.BottomStart)
+                        )
+                        RadarAxisBadge(
+                            title = "REB%",
+                            valA = "${teamA.reboundRate}%",
+                            valB = "${teamB.reboundRate}%",
+                            modifier = Modifier.align(Alignment.CenterStart)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Box(modifier = Modifier.size(9.dp).clip(CircleShape).background(CourtsideDesignTokens.EuroLeagueOrange))
+                            Text(
+                                text = "${teamA.code} (${teamA.name})",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Box(modifier = Modifier.size(9.dp).clip(CircleShape).background(CourtsideDesignTokens.NeonMadeGreen))
+                            Text(
+                                text = "${teamB.code} (${teamB.name})",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 4. Direkte Saison-Duelle (H2H)
+            if (h2hGames.isNotEmpty()) {
+                item {
+                    CourtsideGlassCard(isSelected = false, modifier = Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "H2H • ${teamA.code} vs ${teamB.code}",
+                                color = CourtsideDesignTokens.EuroLeagueOrange,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 11.sp
+                            )
+                            h2hGames.forEach { g ->
+                                val statusText = when (g.status) {
+                                    GameStatus.FINAL -> "${g.homeTeam.code} ${g.homeScore} : ${g.awayScore} ${g.awayTeam.code} (${strings.statusFinal})"
+                                    GameStatus.LIVE -> "${g.homeTeam.code} ${g.homeScore} : ${g.awayScore} ${g.awayTeam.code} (${strings.statusLive})"
+                                    GameStatus.UPCOMING -> "${g.homeTeam.code} vs ${g.awayTeam.code} (${strings.statusUpcoming})"
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${strings.roundPrefix} ${g.round}",
+                                        color = CourtsideDesignTokens.MutedText,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = statusText,
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 5. Alle 8 visuellen Head-to-Head Statistik-Balken
+            items(comparisonMetrics, key = { "m_metric_${it.label}" }) { metric ->
+                val aLeads = if (metric.lowerIsBetter) metric.rawA <= metric.rawB else metric.rawA >= metric.rawB
+                val bLeads = if (metric.lowerIsBetter) metric.rawB <= metric.rawA else metric.rawB >= metric.rawA
+                val total = (metric.rawA + metric.rawB).coerceAtLeast(1f)
+                val fractionA = if (metric.lowerIsBetter) {
+                    (metric.rawB / total).coerceIn(0.15f, 0.85f)
+                } else {
+                    (metric.rawA / total).coerceIn(0.15f, 0.85f)
+                }
+
+                Surface(
+                    color = Color(0xFF17171C),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(12.dp))
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = metric.displayA,
+                                color = if (aLeads) CourtsideDesignTokens.EuroLeagueOrange else Color(0xFFD1D5DB),
+                                fontWeight = if (aLeads) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = metric.label,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1.4f)
+                            )
+                            Text(
+                                text = metric.displayB,
+                                color = if (bLeads) CourtsideDesignTokens.NeonMadeGreen else Color(0xFFD1D5DB),
+                                fontWeight = if (bLeads) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                fontSize = 13.sp,
+                                textAlign = TextAlign.End,
+                                maxLines = 1,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(Color(0xFF26262E))
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(fractionA)
+                                    .fillMaxHeight()
+                                    .background(CourtsideDesignTokens.EuroLeagueOrange)
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Box(
+                                modifier = Modifier
+                                    .weight((1f - fractionA).coerceAtLeast(0.1f))
+                                    .fillMaxHeight()
+                                    .background(CourtsideDesignTokens.NeonMadeGreen)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 6. Saison MVP & PIR-Leader Tabelle im Vollbreiten-Design (volle Spielernamen ohne Abschneiden!)
+            item {
+                Text(
+                    text = "${teamA.code} vs ${teamB.code} • ${strings.seasonLeadersHeader}",
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 15.sp
+                )
+            }
+
+            item {
+                CourtsideGlassCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(strings.playerColumn, Modifier.weight(2.7f), color = CourtsideDesignTokens.MutedText, fontSize = 11.sp)
+                            Text("PPG", Modifier.weight(0.95f), color = CourtsideDesignTokens.MutedText, fontSize = 11.sp, textAlign = TextAlign.Center)
+                            Text("RPG", Modifier.weight(0.95f), color = CourtsideDesignTokens.MutedText, fontSize = 11.sp, textAlign = TextAlign.Center)
+                            Text("APG", Modifier.weight(0.95f), color = CourtsideDesignTokens.MutedText, fontSize = 11.sp, textAlign = TextAlign.Center)
+                            Text("PIR", Modifier.weight(1f), color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.Bold, fontSize = 11.sp, textAlign = TextAlign.End)
+                        }
+                        HorizontalDivider(color = Color(0x1AFFFFFF))
+                        matchupAndLeaguePlayers.take(20).forEachIndexed { idx, p ->
+                            val isTeamA = matchesClubCode(p.teamId, teamA)
+                            val isTeamB = matchesClubCode(p.teamId, teamB)
+                            val teamColor = when {
+                                isTeamA -> CourtsideDesignTokens.EuroLeagueOrange
+                                isTeamB -> CourtsideDesignTokens.NeonMadeGreen
+                                else -> Color(0xFF9CA3AF)
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(2.7f).padding(end = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Text(
+                                        text = "${idx + 1}.",
+                                        color = CourtsideDesignTokens.MutedText,
+                                        fontSize = 11.sp,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        text = p.teamId,
+                                        color = teamColor,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 11.sp,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        text = p.name,
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                Text("${p.ppg}", Modifier.weight(0.95f), color = Color(0xFFD1D5DB), fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
+                                Text("${p.rpg}", Modifier.weight(0.95f), color = Color(0xFFD1D5DB), fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
+                                Text("${p.apg}", Modifier.weight(0.95f), color = Color(0xFFD1D5DB), fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
+                                Text("${p.pir}", Modifier.weight(1f), color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, textAlign = TextAlign.End, maxLines = 1)
+                            }
+                            if (idx < minOf(matchupAndLeaguePlayers.size, 20) - 1) {
+                                HorizontalDivider(color = Color(0x0DFFFFFF))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return
     }
 
     Row(
@@ -3131,6 +4239,7 @@ private fun SettingsAndNotificationTestScreen(
     primaryTeam: EuroLeagueTeam,
     games: List<EuroLeagueGame>,
     activeLanguage: AppLanguage,
+    isCompact: Boolean = false,
     onSelectLanguage: (AppLanguage) -> Unit,
     notificationManager: EuroLeagueNotificationManager,
     updateInfo: AppUpdateInfo = AppUpdateInfo(),
@@ -3147,6 +4256,383 @@ private fun SettingsAndNotificationTestScreen(
     var statusBanner by remember { mutableStateOf<String?>(null) }
 
     val sampleLiveGame = games.firstOrNull { it.status == GameStatus.LIVE } ?: games.first()
+    val hasUpdateAvailable = updateInfo.status == UpdateStatus.UPDATE_AVAILABLE
+    val isCheckingUpdates = updateInfo.status == UpdateStatus.CHECKING
+    val previewPayload = remember(sampleLiveGame, activeLanguage) {
+        notificationManager.buildTestPushContent(sampleLiveGame, activeLanguage)
+    }
+
+    if (isCompact) {
+        // Smartphone (COMPACT): Einheitlicher Vollbreiten-Feed ohne gequetschte Doppelspalten
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(CourtsideDesignTokens.ShellObsidian)
+                .verticalScroll(rememberScrollState())
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // 1. 6-Language Selector Card
+            CourtsideGlassCard(isSelected = true, modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = strings.languageSectionTitle,
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 15.sp
+                        )
+                        Surface(
+                            color = Color(0x26FF6600),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.border(1.dp, Color(0x66FF6600), RoundedCornerShape(8.dp))
+                        ) {
+                            Text(
+                                text = "v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})",
+                                color = CourtsideDesignTokens.EuroLeagueOrange,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        text = strings.languageSectionSubtitle,
+                        color = CourtsideDesignTokens.MutedText,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 10.dp)
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        AppLanguage.entries.forEach { lang ->
+                            val isSelected = lang == activeLanguage
+                            Surface(
+                                color = if (isSelected) Color(0x33FF6600) else Color(0xFF1B1B21),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .border(
+                                        width = if (isSelected) 1.5.dp else 1.dp,
+                                        color = if (isSelected) Color(0xFFFF6600) else Color(0xFF2C2C34),
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable { onSelectLanguage(lang) }
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp)
+                                ) {
+                                    Text(text = lang.flagEmoji, fontSize = 14.sp)
+                                    Text(
+                                        text = lang.nativeName,
+                                        color = if (isSelected) Color.White else Color(0xFFD1D5DB),
+                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2. Google Play Protect-Compliant App Updates Card
+            CourtsideGlassCard(
+                isSelected = true,
+                glowColor = if (hasUpdateAvailable) CourtsideDesignTokens.NeonMadeGreen else CourtsideDesignTokens.EuroLeagueOrange,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = strings.updateSectionTitle,
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 15.sp
+                        )
+                        Surface(
+                            color = Color(0x2600E676),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.border(1.dp, Color(0x6600E676), RoundedCornerShape(8.dp))
+                        ) {
+                            Text(
+                                text = strings.playProtectBadge,
+                                color = CourtsideDesignTokens.NeonMadeGreen,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF15151B))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text(
+                                text = strings.autoUpdateToggleTitle,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                text = strings.autoUpdateToggleSubtitle,
+                                color = CourtsideDesignTokens.MutedText,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = autoUpdateCheckEnabled,
+                            onCheckedChange = onToggleAutoUpdateCheck,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.Black,
+                                checkedTrackColor = CourtsideDesignTokens.NeonMadeGreen
+                            )
+                        )
+                    }
+
+                    val statusHeadline = when (updateInfo.status) {
+                        UpdateStatus.CHECKING -> strings.checkingUpdatesLabel
+                        UpdateStatus.UPDATE_AVAILABLE -> "${strings.updateAvailablePrefix} v${updateInfo.latestVersionName}" +
+                            (updateInfo.latestVersionCode?.let { " (Build $it)" } ?: "")
+                        UpdateStatus.ERROR -> "⚠️ ${updateInfo.errorMessage ?: "GitHub Releases unreachable"}"
+                        else -> "${strings.upToDateLabel} (v${BuildConfig.VERSION_NAME} • Build ${BuildConfig.VERSION_CODE})"
+                    }
+                    val statusColor = when (updateInfo.status) {
+                        UpdateStatus.CHECKING -> CourtsideDesignTokens.EuroLeagueOrange
+                        UpdateStatus.UPDATE_AVAILABLE -> CourtsideDesignTokens.NeonMadeGreen
+                        UpdateStatus.ERROR -> CourtsideDesignTokens.NeonMissedRed
+                        else -> CourtsideDesignTokens.NeonMadeGreen
+                    }
+
+                    Surface(
+                        color = Color(0xFF141419),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, statusColor.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                if (isCheckingUpdates) {
+                                    CircularProgressIndicator(
+                                        color = CourtsideDesignTokens.EuroLeagueOrange,
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                                Text(
+                                    text = statusHeadline,
+                                    color = statusColor,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            val subText = buildString {
+                                if (updateInfo.releaseTitle.isNotBlank()) {
+                                    append(updateInfo.releaseTitle)
+                                } else {
+                                    append("v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})")
+                                }
+                                if (updateInfo.lastCheckedTime.isNotBlank()) {
+                                    append(" • ${updateInfo.lastCheckedTime}")
+                                }
+                                if (!updateInfo.sha256Digest.isNullOrBlank()) {
+                                    append(" • SHA-256: ${updateInfo.sha256Digest.take(12)}…")
+                                }
+                            }
+                            Text(
+                                text = subText,
+                                color = Color(0xFFD1D5DB),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = onCheckForUpdatesManual,
+                            enabled = !isCheckingUpdates,
+                            colors = ButtonDefaults.buttonColors(containerColor = CourtsideDesignTokens.EuroLeagueOrange),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 9.dp),
+                            modifier = Modifier.weight(1.2f)
+                        ) {
+                            Text(
+                                text = strings.checkForUpdatesButton,
+                                color = Color.Black,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Button(
+                            onClick = onOpenReleaseNotes,
+                            colors = ButtonDefaults.buttonColors(containerColor = CourtsideDesignTokens.PillSurface),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 9.dp),
+                            modifier = Modifier.weight(0.8f)
+                        ) {
+                            Text(
+                                text = strings.viewReleaseNotesButton,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    if (hasUpdateAvailable) {
+                        Button(
+                            onClick = onInstallUpdate,
+                            colors = ButtonDefaults.buttonColors(containerColor = CourtsideDesignTokens.NeonMadeGreen),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "${strings.downloadInstallUpdateButton} (v${updateInfo.latestVersionName})",
+                                color = Color.Black,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 3. Notification Channels
+            Text(strings.notificationChannelsTitle, style = MaterialTheme.typography.titleLarge, color = Color.White)
+
+            CourtsideGlassCard(isSelected = tipOffEnabled, modifier = Modifier.fillMaxWidth()) {
+                ChannelToggleRow(
+                    badge = "WORKMANAGER",
+                    title = "${strings.tipOffChannelTitle} (${primaryTeam.code})",
+                    subtitle = strings.tipOffChannelSubtitle,
+                    checked = tipOffEnabled,
+                    onCheckedChange = { tipOffEnabled = it }
+                )
+            }
+            CourtsideGlassCard(isSelected = halftimeFinalEnabled, modifier = Modifier.fillMaxWidth()) {
+                ChannelToggleRow(
+                    badge = "SCORES",
+                    title = strings.scoresChannelTitle,
+                    subtitle = strings.scoresChannelSubtitle,
+                    checked = halftimeFinalEnabled,
+                    onCheckedChange = { halftimeFinalEnabled = it }
+                )
+            }
+            CourtsideGlassCard(isSelected = closeGameAlertEnabled, modifier = Modifier.fillMaxWidth()) {
+                ChannelToggleRow(
+                    badge = "CRUNCH TIME",
+                    title = strings.closeGameChannelTitle,
+                    subtitle = strings.closeGameChannelSubtitle,
+                    checked = closeGameAlertEnabled,
+                    onCheckedChange = { closeGameAlertEnabled = it }
+                )
+            }
+
+            // 4. Push Preview & Instant Test Button
+            CourtsideDualToneBanner(
+                leftColor = sampleLiveGame.homeTeam.primaryColor,
+                rightColor = sampleLiveGame.awayTeam.primaryColor,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column {
+                    CourtsideLivePill(
+                        badgeText = strings.livePushPreviewBadge,
+                        detailText = "Q${sampleLiveGame.currentQuarter} ${sampleLiveGame.remainingClock}"
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = previewPayload.title,
+                        color = Color.White,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = previewPayload.bigText,
+                        color = CourtsideDesignTokens.MutedText,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
+            Button(
+                onClick = {
+                    notificationManager.sendInstantTestPushNotification(sampleLiveGame, activeLanguage)
+                    statusBanner = "${strings.testPushSentPrefix} '${previewPayload.title}'"
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = CourtsideDesignTokens.EuroLeagueOrange),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+            ) {
+                Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = Color.Black)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = strings.sendTestPushButton,
+                    color = Color.Black,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 13.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (statusBanner != null) {
+                CourtsideGlassCard(
+                    isSelected = true,
+                    glowColor = CourtsideDesignTokens.NeonMadeGreen,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = statusBanner!!,
+                        color = CourtsideDesignTokens.NeonMadeGreen,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(14.dp)
+                    )
+                }
+            }
+        }
+        return
+    }
 
     Row(
         modifier = Modifier
@@ -3281,8 +4767,6 @@ private fun SettingsAndNotificationTestScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // Google Play Protect-Compliant App Updates & Manual Update Checker Card
-            val hasUpdateAvailable = updateInfo.status == UpdateStatus.UPDATE_AVAILABLE
-            val isCheckingUpdates = updateInfo.status == UpdateStatus.CHECKING
             CourtsideGlassCard(
                 isSelected = true,
                 glowColor = if (hasUpdateAvailable) CourtsideDesignTokens.NeonMadeGreen else CourtsideDesignTokens.EuroLeagueOrange,
@@ -3477,9 +4961,6 @@ private fun SettingsAndNotificationTestScreen(
                 }
             }
 
-            val previewPayload = remember(sampleLiveGame, activeLanguage) {
-                notificationManager.buildTestPushContent(sampleLiveGame, activeLanguage)
-            }
             CourtsideDualToneBanner(
                 leftColor = sampleLiveGame.homeTeam.primaryColor,
                 rightColor = sampleLiveGame.awayTeam.primaryColor,

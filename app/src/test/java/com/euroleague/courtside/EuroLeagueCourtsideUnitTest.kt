@@ -746,4 +746,19 @@ class EuroLeagueCourtsideUnitTest {
         // Sum of wins across all 20 clubs must equal sum of losses
         assertEquals(standings.sumOf { it.wins }, standings.sumOf { it.losses })
     }
+
+    @Test
+    fun `Android phones use compact single-column layout and status-bar safe area while tablets and laptops preserve desktop split-view`() {
+        // Portrait smartphones (< 600dp width, sw360dp..sw440dp) -> single-column compact layout + phone safe-area insets
+        assertTrue(com.euroleague.courtside.ui.navigation.shouldUseSingleColumnMobileLayout(androidx.window.core.layout.WindowWidthSizeClass.COMPACT))
+        assertTrue(com.euroleague.courtside.ui.navigation.isAndroidPhoneViewport(isCompactWidth = true, smallestScreenWidthDp = 393))
+        assertTrue(com.euroleague.courtside.ui.navigation.isAndroidPhoneViewport(isCompactWidth = false, smallestScreenWidthDp = 412))
+
+        // Tablets (sw600dp..sw800dp) and Laptops/Chromebooks (sw840dp..sw1080dp) -> preserve untouched multi-column split-view
+        assertFalse(com.euroleague.courtside.ui.navigation.shouldUseSingleColumnMobileLayout(androidx.window.core.layout.WindowWidthSizeClass.MEDIUM))
+        assertFalse(com.euroleague.courtside.ui.navigation.shouldUseSingleColumnMobileLayout(androidx.window.core.layout.WindowWidthSizeClass.EXPANDED))
+        assertFalse(com.euroleague.courtside.ui.navigation.isAndroidPhoneViewport(isCompactWidth = false, smallestScreenWidthDp = 600))
+        assertFalse(com.euroleague.courtside.ui.navigation.isAndroidPhoneViewport(isCompactWidth = false, smallestScreenWidthDp = 840))
+        assertFalse(com.euroleague.courtside.ui.navigation.isAndroidPhoneViewport(isCompactWidth = false, smallestScreenWidthDp = 1080))
+    }
 }
