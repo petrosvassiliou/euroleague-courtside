@@ -1,5 +1,6 @@
 package com.euroleague.courtside.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -12,6 +13,9 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -97,7 +101,7 @@ enum class BoxscoreSortColumn {
  *   2. Glowing Half-Court Shot-Chart (`Made` grüne Leuchtkreise, `Missed` rote Kreuze)
  *   3. `Player boxscore ⌄` mit leuchtend orangener `PIR`-Spalte (`#FF6600`).
  */
-@OptIn(ExperimentalMaterial3AdaptiveApi::class)
+@OptIn(ExperimentalMaterial3AdaptiveApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun MatchCenterScreen(
     games: List<EuroLeagueGame>,
@@ -106,6 +110,7 @@ fun MatchCenterScreen(
     filterOnlyFavorites: Boolean,
     favoriteTeamIds: Set<String>,
     hingeInBookPosture: Boolean,
+    isCompact: Boolean = false,
     notificationManager: EuroLeagueNotificationManager,
     onPreviousRound: () -> Unit,
     onNextRound: () -> Unit,
@@ -123,6 +128,12 @@ fun MatchCenterScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var showRoundDropdown by remember { mutableStateOf(false) }
     var filterOnlyLive by rememberSaveable { mutableStateOf(false) }
+
+    BackHandler(enabled = navigator.canNavigateBack()) {
+        scope.launch {
+            navigator.navigateBack()
+        }
+    }
 
     // Automatischer Echtzeit-Live-Score-Ticker (sofort beim Öffnen + alle 15 Sekunden), solange der EuroLeague-Screen geöffnet ist
     androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -231,89 +242,156 @@ fun MatchCenterScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0E0E11))
-            .padding(16.dp),
+            .padding(if (isCompact) 12.dp else 16.dp),
         listPane = {
             AnimatedPane {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(end = 12.dp)
+                        .padding(end = if (isCompact) 0.dp else 12.dp)
                 ) {
-                    // Clean Header + Wide Search Box
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = strings.matchCenterTitle,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
-                        )
-
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            placeholder = {
-                                Text(
-                                    text = "${strings.searchPlaceholder} (Team, Code, City)...",
-                                    fontSize = 13.sp,
-                                    color = Color(0xFF8E8E93),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.Search,
-                                    contentDescription = strings.searchPlaceholder,
-                                    tint = Color(0xFFFF6600),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            },
-                            trailingIcon = if (searchQuery.isNotEmpty()) {
-                                {
-                                    Text(
-                                        text = "✕",
-                                        color = Color(0xFF9CA3AF),
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp,
-                                        modifier = Modifier
-                                            .clickable { searchQuery = "" }
-                                            .padding(8.dp)
-                                    )
-                                }
-                            } else null,
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                color = Color.White,
-                                fontSize = 13.sp
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = Color(0xFF1B1B21),
-                                unfocusedContainerColor = Color(0xFF1B1B21),
-                                focusedBorderColor = Color(0xFFFF6600),
-                                unfocusedBorderColor = Color(0xFF2C2C34),
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White
-                            ),
+                    // Clean Header + Wide Search Box (stacked full-width on phone, side-by-side on tablet/laptop)
+                    if (isCompact) {
+                        Column(
                             modifier = Modifier
-                                .weight(1f)
-                                .height(52.dp)
-                        )
+                                .fillMaxWidth()
+                                .padding(bottom = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = strings.matchCenterTitle,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White
+                            )
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = {
+                                    Text(
+                                        text = "${strings.searchPlaceholder} (Team, Code, City)...",
+                                        fontSize = 13.sp,
+                                        color = Color(0xFF8E8E93),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Search,
+                                        contentDescription = strings.searchPlaceholder,
+                                        tint = Color(0xFFFF6600),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                trailingIcon = if (searchQuery.isNotEmpty()) {
+                                    {
+                                        Text(
+                                            text = "✕",
+                                            color = Color(0xFF9CA3AF),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            modifier = Modifier
+                                                .clickable { searchQuery = "" }
+                                                .padding(8.dp)
+                                        )
+                                    }
+                                } else null,
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                    color = Color.White,
+                                    fontSize = 13.sp
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = Color(0xFF1B1B21),
+                                    unfocusedContainerColor = Color(0xFF1B1B21),
+                                    focusedBorderColor = Color(0xFFFF6600),
+                                    unfocusedBorderColor = Color(0xFF2C2C34),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(50.dp)
+                            )
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = strings.matchCenterTitle,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White
+                            )
+
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = {
+                                    Text(
+                                        text = "${strings.searchPlaceholder} (Team, Code, City)...",
+                                        fontSize = 13.sp,
+                                        color = Color(0xFF8E8E93),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Search,
+                                        contentDescription = strings.searchPlaceholder,
+                                        tint = Color(0xFFFF6600),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                trailingIcon = if (searchQuery.isNotEmpty()) {
+                                    {
+                                        Text(
+                                            text = "✕",
+                                            color = Color(0xFF9CA3AF),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            modifier = Modifier
+                                                .clickable { searchQuery = "" }
+                                                .padding(8.dp)
+                                        )
+                                    }
+                                } else null,
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                    color = Color.White,
+                                    fontSize = 13.sp
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = Color(0xFF1B1B21),
+                                    unfocusedContainerColor = Color(0xFF1B1B21),
+                                    focusedBorderColor = Color(0xFFFF6600),
+                                    unfocusedBorderColor = Color(0xFF2C2C34),
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(52.dp)
+                            )
+                        }
                     }
 
                     // Round Switcher Bar (1..38) + Live Filter & Favorites Filter Pills
-                    Row(
+                    FlowRow(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = 10.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -544,6 +622,13 @@ fun MatchCenterScreen(
                 if (selectedGame != null) {
                     MatchDetailPane(
                         game = selectedGame,
+                        isCompact = isCompact,
+                        showBackButton = navigator.canNavigateBack(),
+                        onBackToGames = {
+                            scope.launch {
+                                navigator.navigateBack()
+                            }
+                        },
                         onExportCalendar = {
                             CalendarExportHelper.exportSingleGameToNativeCalendar(context, selectedGame)
                         },
@@ -873,6 +958,7 @@ private fun MatchSummaryCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
+                        modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
@@ -884,6 +970,7 @@ private fun MatchSummaryCard(
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
+                                .weight(1f, fill = false)
                                 .background(Color(0xFF121216), RoundedCornerShape(8.dp))
                                 .border(1.dp, pillBorderColor, RoundedCornerShape(8.dp))
                                 .padding(2.dp)
@@ -911,6 +998,8 @@ private fun MatchSummaryCard(
                                     color = Color.White,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 10.sp,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                                 )
                             }
@@ -923,6 +1012,8 @@ private fun MatchSummaryCard(
                                 color = Color(0xFFE5E5EA),
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 11.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                             )
                         }
@@ -1163,6 +1254,9 @@ private fun ClubCrestColumn(
 @Composable
 private fun MatchDetailPane(
     game: EuroLeagueGame,
+    isCompact: Boolean = false,
+    showBackButton: Boolean = false,
+    onBackToGames: () -> Unit = {},
     onExportCalendar: () -> Unit,
     onTriggerCloseGameAlert: () -> Unit,
     onOpenTeamStats: (String) -> Unit = {}
@@ -1184,72 +1278,276 @@ private fun MatchDetailPane(
         if (sortAscending) all.sortedWith(comparator) else all.sortedWith(comparator.reversed())
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        // 1. Top Dual-Tone Gradient Scoreboard Banner
-        DualToneScoreboardBanner(
-            game = game,
-            onExportCalendar = onExportCalendar,
-            onTriggerCloseGameAlert = onTriggerCloseGameAlert
-        )
+    if (isCompact || showBackButton) {
+        // Smartphone Single-Pane Detail: Zurück-Leiste + einheitlicher vertikaler Scroll-Feed für Scoreboard, Shot-Chart & kompletten Boxscore
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(bottom = 16.dp)
+        ) {
+            if (showBackButton) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            color = Color(0xFF17171C),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .border(1.dp, Color(0xAAFF6600), RoundedCornerShape(10.dp))
+                                .clickable { onBackToGames() }
+                                .pointerHoverIcon(PointerIcon.Hand)
+                        ) {
+                            Text(
+                                text = "← ${strings.matchCenterTitle}",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                            )
+                        }
+                        Text(
+                            text = "${strings.roundPrefix} ${game.round}",
+                            color = Color(0xFFFF6600),
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
 
-        if (game.status == GameStatus.UPCOMING) {
-            // Vorbericht & Direkter Team-Vergleich für geplante Spiele (keine erfundenen Boxscores!)
-            UpcomingMatchPreviewCard(
-                game = game,
-                onExportCalendar = onExportCalendar,
-                onOpenTeamStats = onOpenTeamStats,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            )
-        } else {
-            // 2. Glowing Half-Court Shot-Chart Card
-            InteractiveCourtShotChart(
-                shots = game.shots,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1.05f)
-            )
+            item {
+                DualToneScoreboardBanner(
+                    game = game,
+                    isCompact = true,
+                    onExportCalendar = onExportCalendar,
+                    onTriggerCloseGameAlert = onTriggerCloseGameAlert
+                )
+            }
 
-            // 3. Sleek Player Boxscore Table
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 6.dp)
-                ) {
-                    Text(
-                        text = strings.playerBoxscoreHeader,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp
+            if (game.status == GameStatus.UPCOMING) {
+                item {
+                    val home = game.homeTeam
+                    val away = game.awayTeam
+                    val previewRows = listOf(
+                        Triple("${strings.winsColumn}-${strings.lossesColumn}", "${home.wins}-${home.losses}", "${away.wins}-${away.losses}"),
+                        Triple("PPG", "${home.ppg}", "${away.ppg}"),
+                        Triple("OPPG", "${home.oppg}", "${away.oppg}"),
+                        Triple("OFF RTG", "${home.offensiveRating}", "${away.offensiveRating}"),
+                        Triple("DEF RTG", "${home.defensiveRating}", "${away.defensiveRating}"),
+                        Triple("3P%", "${home.threePointPct}%", "${away.threePointPct}%"),
+                        Triple("2P%", "${home.twoPointPct}%", "${away.twoPointPct}%"),
+                        Triple("REB%", "${home.reboundRate}%", "${away.reboundRate}%")
                     )
-                    Icon(
-                        Icons.Default.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = Color(0xFF8E8E93),
-                        modifier = Modifier.size(18.dp)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(Color(0xFF151519))
+                            .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(18.dp))
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "${home.arena} • ${home.city}",
+                            color = Color(0xFFFF6600),
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = formatTipOffDateTime(game.tipOffEpochMillis),
+                            color = Color(0xFFD1D5DB),
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 11.sp
+                        )
+                        HorizontalDivider(color = Color(0x1AFFFFFF))
+                        previewRows.forEach { (label, valH, valA) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFF1B1B21), RoundedCornerShape(10.dp))
+                                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(valH, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                Text(label, color = Color(0xFFFF6600), fontWeight = FontWeight.Bold, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1.2f))
+                                Text(valA, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
+            } else {
+                item {
+                    InteractiveCourtShotChart(
+                        shots = game.shots,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(216.dp)
                     )
                 }
 
-                SortableBoxscoreTable(
-                    stats = combinedPlayers,
-                    sortColumn = sortColumn,
-                    sortAscending = sortAscending,
-                    onSortChange = { col ->
-                        if (sortColumn == col) sortAscending = !sortAscending
-                        else {
-                            sortColumn = col
-                            sortAscending = false
+                item {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        ) {
+                            Text(
+                                text = strings.playerBoxscoreHeader,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp
+                            )
+                            Icon(
+                                Icons.Default.KeyboardArrowDown,
+                                contentDescription = null,
+                                tint = Color(0xFF8E8E93),
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = strings.playerColumn,
+                                modifier = Modifier.weight(2.7f),
+                                color = Color(0xFF8E8E93),
+                                fontSize = 11.sp
+                            )
+                            BoxscoreSortColumn.entries.forEach { col ->
+                                val isPir = col == BoxscoreSortColumn.PIR
+                                Text(
+                                    text = if (isPir) "PIR ⌄" else col.name,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable {
+                                            if (sortColumn == col) sortAscending = !sortAscending
+                                            else {
+                                                sortColumn = col
+                                                sortAscending = false
+                                            }
+                                        },
+                                    textAlign = if (isPir) TextAlign.End else TextAlign.Center,
+                                    color = if (isPir || sortColumn == col) Color(0xFFFF6600) else Color(0xFF8E8E93),
+                                    fontWeight = if (isPir || sortColumn == col) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                        HorizontalDivider(color = Color(0x1AFFFFFF))
                     }
+                }
+
+                itemsIndexed(combinedPlayers, key = { index, item -> "m_${item.teamId}_${item.playerId}_$index" }) { index, row ->
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${index + 1}. #${row.jerseyNumber} ${row.playerName}",
+                                modifier = Modifier.weight(2.7f),
+                                color = Color(0xFFE5E5EA),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            StatValueCell(row.points.toString(), Modifier.weight(1f))
+                            StatValueCell(row.totalRebounds.toString(), Modifier.weight(1f))
+                            StatValueCell(row.assists.toString(), Modifier.weight(1f))
+                            StatValueCell(row.steals.toString(), Modifier.weight(1f))
+                            StatValueCell(row.blocks.toString(), Modifier.weight(1f))
+                            Text(
+                                text = row.pir.toString(),
+                                modifier = Modifier.weight(1f),
+                                textAlign = TextAlign.End,
+                                color = Color(0xFFFF6600),
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 12.sp
+                            )
+                        }
+                        HorizontalDivider(color = Color(0x0DFFFFFF))
+                    }
+                }
+            }
+        }
+    } else {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // 1. Top Dual-Tone Gradient Scoreboard Banner
+            DualToneScoreboardBanner(
+                game = game,
+                onExportCalendar = onExportCalendar,
+                onTriggerCloseGameAlert = onTriggerCloseGameAlert
+            )
+
+            if (game.status == GameStatus.UPCOMING) {
+                // Vorbericht & Direkter Team-Vergleich für geplante Spiele (keine erfundenen Boxscores!)
+                UpcomingMatchPreviewCard(
+                    game = game,
+                    onExportCalendar = onExportCalendar,
+                    onOpenTeamStats = onOpenTeamStats,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
                 )
+            } else {
+                // 2. Glowing Half-Court Shot-Chart Card
+                InteractiveCourtShotChart(
+                    shots = game.shots,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1.05f)
+                )
+
+                // 3. Sleek Player Boxscore Table
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    ) {
+                        Text(
+                            text = strings.playerBoxscoreHeader,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                        Icon(
+                            Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = Color(0xFF8E8E93),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    SortableBoxscoreTable(
+                        stats = combinedPlayers,
+                        sortColumn = sortColumn,
+                        sortAscending = sortAscending,
+                        onSortChange = { col ->
+                            if (sortColumn == col) sortAscending = !sortAscending
+                            else {
+                                sortColumn = col
+                                sortAscending = false
+                            }
+                        }
+                    )
+                }
             }
         }
     }
@@ -1355,6 +1653,7 @@ private fun UpcomingMatchPreviewCard(
 @Composable
 private fun DualToneScoreboardBanner(
     game: EuroLeagueGame,
+    isCompact: Boolean = false,
     onExportCalendar: () -> Unit,
     onTriggerCloseGameAlert: () -> Unit
 ) {
@@ -1374,7 +1673,7 @@ private fun DualToneScoreboardBanner(
             )
             .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(18.dp))
             .clickable { onExportCalendar() }
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(horizontal = if (isCompact) 12.dp else 16.dp, vertical = 12.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -1402,8 +1701,10 @@ private fun DualToneScoreboardBanner(
                 Text(
                     text = topPillText,
                     color = if (game.status == GameStatus.LIVE) Color(0xFFFFB07C) else Color(0xFFE5E5EA),
-                    fontSize = 11.sp,
+                    fontSize = if (isCompact) 10.sp else 11.sp,
                     fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                 )
             }
@@ -1417,56 +1718,65 @@ private fun DualToneScoreboardBanner(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(if (isCompact) 8.dp else 10.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    ClubCrestBadgeSmall(game.homeTeam)
+                    com.euroleague.courtside.ui.theme.CourtsideClubCrest(
+                        team = game.homeTeam,
+                        size = if (isCompact) 32.dp else 38.dp
+                    )
                     Text(
                         text = game.homeTeam.name,
                         color = Color.White,
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp,
-                        maxLines = 2
+                        fontSize = if (isCompact) 12.sp else 13.sp,
+                        lineHeight = 15.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
                 if (game.status == GameStatus.UPCOMING) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(horizontal = 6.dp)
+                    ) {
                         Text(
                             text = "VS",
                             color = Color(0xFFFF6600),
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 20.sp
+                            fontSize = if (isCompact) 17.sp else 20.sp
                         )
                         Text(
                             text = "${game.homeTeam.wins}-${game.homeTeam.losses}  |  ${game.awayTeam.wins}-${game.awayTeam.losses}",
                             color = Color(0xFFD1D5DB),
-                            fontSize = 11.sp,
+                            fontSize = if (isCompact) 10.sp else 11.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
                 } else {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.spacedBy(if (isCompact) 6.dp else 10.dp),
+                        modifier = Modifier.padding(horizontal = 6.dp)
                     ) {
                         Text(
                             text = game.homeScore.toString(),
                             color = Color.White,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 28.sp
+                            fontSize = if (isCompact) 22.sp else 28.sp
                         )
                         Text(
                             text = ":",
                             color = Color(0xFFFF6600),
                             fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
+                            fontSize = if (isCompact) 18.sp else 20.sp
                         )
                         Text(
                             text = game.awayScore.toString(),
                             color = Color.White,
                             fontWeight = FontWeight.ExtraBold,
-                            fontSize = 28.sp
+                            fontSize = if (isCompact) 22.sp else 28.sp
                         )
                     }
                 }
@@ -1480,13 +1790,18 @@ private fun DualToneScoreboardBanner(
                         text = game.awayTeam.name,
                         color = Color.White,
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp,
+                        fontSize = if (isCompact) 12.sp else 13.sp,
+                        lineHeight = 15.sp,
                         textAlign = TextAlign.End,
                         maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false)
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    ClubCrestBadgeSmall(game.awayTeam)
+                    Spacer(modifier = Modifier.width(if (isCompact) 8.dp else 10.dp))
+                    com.euroleague.courtside.ui.theme.CourtsideClubCrest(
+                        team = game.awayTeam,
+                        size = if (isCompact) 32.dp else 38.dp
+                    )
                 }
             }
         }
