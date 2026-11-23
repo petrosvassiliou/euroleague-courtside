@@ -138,13 +138,16 @@ def extract_rows(payload):
 
 def format_person_name(raw_name: str, passport_name: str = "", passport_surname: str = "") -> str:
     if passport_name and passport_surname:
-        return f"{passport_name.strip().title()} {passport_surname.strip().title()}"
+        clean_given = passport_name.split(",", 1)[0].strip()
+        clean_surname = passport_surname.split(",", 1)[0].strip()
+        return " ".join(f"{clean_given} {clean_surname}".title().split())
     if not raw_name:
         return "Unknown Player"
     if "," in raw_name:
         parts = [p.strip() for p in raw_name.split(",", 1)]
-        return f"{parts[1].title()} {parts[0].title()}"
-    return raw_name.strip().title()
+        clean_given = parts[1].split(",", 1)[0].strip()
+        return " ".join(f"{clean_given} {parts[0]}".title().split())
+    return " ".join(raw_name.strip().title().split())
 
 
 def map_position(pos_name: str, pos_code=None) -> str:

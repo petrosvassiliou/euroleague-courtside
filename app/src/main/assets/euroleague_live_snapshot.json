@@ -3355,7 +3355,7 @@
       "id": "014597",
       "teamId": "ASV",
       "number": 7,
-      "name": "Lorenz,Antoine Sanz",
+      "name": "Lorenz Sanz",
       "position": "G",
       "nationality": "FRA",
       "heightCm": 187,
@@ -3371,7 +3371,7 @@
       "id": "008161",
       "teamId": "ASV",
       "number": 97,
-      "name": "Juhann, Mathieu Begarin",
+      "name": "Juhann Begarin",
       "position": "F",
       "nationality": "FRA",
       "heightCm": 196,
@@ -3451,7 +3451,7 @@
       "id": "015164",
       "teamId": "ASV",
       "number": 25,
-      "name": "Hugo, Eric Besson",
+      "name": "Hugo Besson",
       "position": "G",
       "nationality": "FRA",
       "heightCm": 194,
@@ -3499,7 +3499,7 @@
       "id": "013900",
       "teamId": "ASV",
       "number": 14,
-      "name": "Both, Tut Gach",
+      "name": "Both Gach",
       "position": "F",
       "nationality": "SSD",
       "heightCm": 200,
@@ -4043,7 +4043,7 @@
       "id": "013380",
       "teamId": "OLY",
       "number": 94,
-      "name": "Evan , Mehdi Fournier",
+      "name": "Evan Fournier",
       "position": "F",
       "nationality": "FRA",
       "heightCm": 200,
@@ -4459,7 +4459,7 @@
       "id": "006591",
       "teamId": "PRS",
       "number": 5,
-      "name": "Frank, Bryan Ntilikina",
+      "name": "Frank Ntilikina",
       "position": "G",
       "nationality": "FRA",
       "heightCm": 194,
@@ -4635,7 +4635,7 @@
       "id": "006904",
       "teamId": "PRS",
       "number": 11,
-      "name": "Joel, Jean Michel, Ayte, Oluwa Toby Ayayi",
+      "name": "Joel Ayayi",
       "position": "G",
       "nationality": "FRA",
       "heightCm": 196,
@@ -5771,7 +5771,7 @@
       "id": "011837",
       "teamId": "VIR",
       "number": 3,
-      "name": "Kevin, Mbala Kokila",
+      "name": "Kevin Kokila",
       "position": "C",
       "nationality": "FRA",
       "heightCm": 205,
@@ -8813,7 +8813,7 @@
       "id": "014597",
       "teamId": "ASV",
       "number": 7,
-      "name": "Lorenz,Antoine Sanz",
+      "name": "Lorenz Sanz",
       "position": "G",
       "nationality": "FRA",
       "heightCm": 187,
@@ -8829,7 +8829,7 @@
       "id": "008161",
       "teamId": "ASV",
       "number": 97,
-      "name": "Juhann, Mathieu Begarin",
+      "name": "Juhann Begarin",
       "position": "F",
       "nationality": "FRA",
       "heightCm": 196,
@@ -8909,7 +8909,7 @@
       "id": "015164",
       "teamId": "ASV",
       "number": 25,
-      "name": "Hugo, Eric Besson",
+      "name": "Hugo Besson",
       "position": "G",
       "nationality": "FRA",
       "heightCm": 194,
@@ -8957,7 +8957,7 @@
       "id": "013900",
       "teamId": "ASV",
       "number": 14,
-      "name": "Both, Tut Gach",
+      "name": "Both Gach",
       "position": "F",
       "nationality": "SSD",
       "heightCm": 200,
@@ -9501,7 +9501,7 @@
       "id": "013380",
       "teamId": "OLY",
       "number": 94,
-      "name": "Evan , Mehdi Fournier",
+      "name": "Evan Fournier",
       "position": "F",
       "nationality": "FRA",
       "heightCm": 200,
@@ -9917,7 +9917,7 @@
       "id": "006591",
       "teamId": "PRS",
       "number": 5,
-      "name": "Frank, Bryan Ntilikina",
+      "name": "Frank Ntilikina",
       "position": "G",
       "nationality": "FRA",
       "heightCm": 194,
@@ -10093,7 +10093,7 @@
       "id": "006904",
       "teamId": "PRS",
       "number": 11,
-      "name": "Joel, Jean Michel, Ayte, Oluwa Toby Ayayi",
+      "name": "Joel Ayayi",
       "position": "G",
       "nationality": "FRA",
       "heightCm": 196,
@@ -11229,7 +11229,7 @@
       "id": "011837",
       "teamId": "VIR",
       "number": 3,
-      "name": "Kevin, Mbala Kokila",
+      "name": "Kevin Kokila",
       "position": "C",
       "nationality": "FRA",
       "heightCm": 205,
@@ -18395,7 +18395,7 @@
         },
         {
           "playerId": "OLY_013380",
-          "playerName": "Evan , Mehdi Fournier",
+          "playerName": "Evan Fournier",
           "jerseyNumber": 94,
           "teamId": "OLY",
           "minutes": "24:46",
@@ -21349,7 +21349,7 @@
       "boxscoreHome": [
         {
           "playerId": "ASV_015164",
-          "playerName": "Hugo, Eric Besson",
+          "playerName": "Hugo Besson",
           "jerseyNumber": 25,
           "teamId": "ASV",
           "minutes": "17:01",
@@ -21459,7 +21459,7 @@
         },
         {
           "playerId": "ASV_013900",
-          "playerName": "Both, Tut Gach",
+          "playerName": "Both Gach",
           "jerseyNumber": 14,
           "teamId": "ASV",
           "minutes": "17:06",
@@ -29709,7 +29709,7 @@
         },
         {
           "playerId": "OLY_013380",
-          "playerName": "Evan , Mehdi Fournier",
+          "playerName": "Evan Fournier",
           "jerseyNumber": 94,
           "teamId": "OLY",
           "minutes": "20:09",
@@ -39367,7 +39367,7 @@
         },
         {
           "playerId": "PRS_006591",
-          "playerName": "Frank, Bryan Ntilikina",
+          "playerName": "Frank Ntilikina",
           "jerseyNumber": 5,
           "teamId": "PRS",
           "minutes": "10:03",
@@ -42699,7 +42699,7 @@
       "boxscoreAway": [
         {
           "playerId": "ASV_015164",
-          "playerName": "Hugo, Eric Besson",
+          "playerName": "Hugo Besson",
           "jerseyNumber": 25,
           "teamId": "ASV",
           "minutes": "17:59",
@@ -42809,7 +42809,7 @@
         },
         {
           "playerId": "ASV_013900",
-          "playerName": "Both, Tut Gach",
+          "playerName": "Both Gach",
           "jerseyNumber": 14,
           "teamId": "ASV",
           "minutes": "12:43",
@@ -47639,7 +47639,7 @@
         },
         {
           "playerId": "OLY_013380",
-          "playerName": "Evan , Mehdi Fournier",
+          "playerName": "Evan Fournier",
           "jerseyNumber": 94,
           "teamId": "OLY",
           "minutes": "20:00",
@@ -48983,7 +48983,7 @@
       "boxscoreHome": [
         {
           "playerId": "PRS_006904",
-          "playerName": "Joel, Jean Michel, Ayte, Oluwa Toby Ayayi",
+          "playerName": "Joel Ayayi",
           "jerseyNumber": 11,
           "teamId": "PRS",
           "minutes": "11:49",
@@ -55489,7 +55489,7 @@
       "boxscoreHome": [
         {
           "playerId": "ASV_015164",
-          "playerName": "Hugo, Eric Besson",
+          "playerName": "Hugo Besson",
           "jerseyNumber": 25,
           "teamId": "ASV",
           "minutes": "22:07",
@@ -55599,7 +55599,7 @@
         },
         {
           "playerId": "ASV_013900",
-          "playerName": "Both, Tut Gach",
+          "playerName": "Both Gach",
           "jerseyNumber": 14,
           "teamId": "ASV",
           "minutes": "19:02",
@@ -60363,7 +60363,7 @@
       "boxscoreHome": [
         {
           "playerId": "PRS_006904",
-          "playerName": "Joel, Jean Michel, Ayte, Oluwa Toby Ayayi",
+          "playerName": "Joel Ayayi",
           "jerseyNumber": 11,
           "teamId": "PRS",
           "minutes": "16:25",
@@ -60629,7 +60629,7 @@
       "boxscoreAway": [
         {
           "playerId": "ASV_015164",
-          "playerName": "Hugo, Eric Besson",
+          "playerName": "Hugo Besson",
           "jerseyNumber": 25,
           "teamId": "ASV",
           "minutes": "27:37",
@@ -60717,7 +60717,7 @@
         },
         {
           "playerId": "ASV_013900",
-          "playerName": "Both, Tut Gach",
+          "playerName": "Both Gach",
           "jerseyNumber": 14,
           "teamId": "ASV",
           "minutes": "26:18",
@@ -65723,7 +65723,7 @@
         },
         {
           "playerId": "VIR_011837",
-          "playerName": "Kevin, Mbala Kokila",
+          "playerName": "Kevin Kokila",
           "jerseyNumber": 3,
           "teamId": "VIR",
           "minutes": "07:24",
@@ -71853,7 +71853,7 @@
         },
         {
           "playerId": "OLY_013380",
-          "playerName": "Evan , Mehdi Fournier",
+          "playerName": "Evan Fournier",
           "jerseyNumber": 94,
           "teamId": "OLY",
           "minutes": "20:27",
@@ -78337,7 +78337,7 @@
       "boxscoreHome": [
         {
           "playerId": "ASV_015164",
-          "playerName": "Hugo, Eric Besson",
+          "playerName": "Hugo Besson",
           "jerseyNumber": 25,
           "teamId": "ASV",
           "minutes": "17:46",
@@ -78403,7 +78403,7 @@
         },
         {
           "playerId": "ASV_013900",
-          "playerName": "Both, Tut Gach",
+          "playerName": "Both Gach",
           "jerseyNumber": 14,
           "teamId": "ASV",
           "minutes": "25:44",
@@ -86829,7 +86829,7 @@
         },
         {
           "playerId": "OLY_013380",
-          "playerName": "Evan , Mehdi Fournier",
+          "playerName": "Evan Fournier",
           "jerseyNumber": 94,
           "teamId": "OLY",
           "minutes": "37:23",
@@ -91415,7 +91415,7 @@
       "boxscoreHome": [
         {
           "playerId": "PRS_006904",
-          "playerName": "Joel, Jean Michel, Ayte, Oluwa Toby Ayayi",
+          "playerName": "Joel Ayayi",
           "jerseyNumber": 11,
           "teamId": "PRS",
           "minutes": "13:45",
@@ -91879,7 +91879,7 @@
         },
         {
           "playerId": "VIR_011837",
-          "playerName": "Kevin, Mbala Kokila",
+          "playerName": "Kevin Kokila",
           "jerseyNumber": 3,
           "teamId": "VIR",
           "minutes": "05:09",
@@ -98187,7 +98187,7 @@
       "boxscoreAway": [
         {
           "playerId": "ASV_015164",
-          "playerName": "Hugo, Eric Besson",
+          "playerName": "Hugo Besson",
           "jerseyNumber": 25,
           "teamId": "ASV",
           "minutes": "16:32",
@@ -98275,7 +98275,7 @@
         },
         {
           "playerId": "ASV_013900",
-          "playerName": "Both, Tut Gach",
+          "playerName": "Both Gach",
           "jerseyNumber": 14,
           "teamId": "ASV",
           "minutes": "20:45",
@@ -98385,7 +98385,7 @@
         },
         {
           "playerId": "ASV_014597",
-          "playerName": "Lorenz,Antoine Sanz",
+          "playerName": "Lorenz Sanz",
           "jerseyNumber": 7,
           "teamId": "ASV",
           "minutes": "01:10",
@@ -103039,7 +103039,7 @@
       "boxscoreAway": [
         {
           "playerId": "PRS_006904",
-          "playerName": "Joel, Jean Michel, Ayte, Oluwa Toby Ayayi",
+          "playerName": "Joel Ayayi",
           "jerseyNumber": 11,
           "teamId": "PRS",
           "minutes": "13:24",
@@ -106301,7 +106301,7 @@
         },
         {
           "playerId": "VIR_011837",
-          "playerName": "Kevin, Mbala Kokila",
+          "playerName": "Kevin Kokila",
           "jerseyNumber": 3,
           "teamId": "VIR",
           "minutes": "10:31",
@@ -107979,7 +107979,7 @@
       "boxscoreAway": [
         {
           "playerId": "OLY_013380",
-          "playerName": "Evan , Mehdi Fournier",
+          "playerName": "Evan Fournier",
           "jerseyNumber": 94,
           "teamId": "OLY",
           "minutes": "23:37",
@@ -109809,7 +109809,7 @@
         },
         {
           "playerId": "VIR_011837",
-          "playerName": "Kevin, Mbala Kokila",
+          "playerName": "Kevin Kokila",
           "jerseyNumber": 3,
           "teamId": "VIR",
           "minutes": "12:14",
@@ -120837,7 +120837,7 @@
       "boxscoreAway": [
         {
           "playerId": "ASV_015164",
-          "playerName": "Hugo, Eric Besson",
+          "playerName": "Hugo Besson",
           "jerseyNumber": 25,
           "teamId": "ASV",
           "minutes": "16:43",
@@ -120947,7 +120947,7 @@
         },
         {
           "playerId": "ASV_013900",
-          "playerName": "Both, Tut Gach",
+          "playerName": "Both Gach",
           "jerseyNumber": 14,
           "teamId": "ASV",
           "minutes": "19:16",
@@ -123791,7 +123791,7 @@
       "boxscoreHome": [
         {
           "playerId": "PRS_006904",
-          "playerName": "Joel, Jean Michel, Ayte, Oluwa Toby Ayayi",
+          "playerName": "Joel Ayayi",
           "jerseyNumber": 11,
           "teamId": "PRS",
           "minutes": "19:50",
@@ -125689,7 +125689,7 @@
       "boxscoreAway": [
         {
           "playerId": "PRS_006904",
-          "playerName": "Joel, Jean Michel, Ayte, Oluwa Toby Ayayi",
+          "playerName": "Joel Ayayi",
           "jerseyNumber": 11,
           "teamId": "PRS",
           "minutes": "18:45",
@@ -138435,7 +138435,7 @@
       "boxscoreHome": [
         {
           "playerId": "ASV_015164",
-          "playerName": "Hugo, Eric Besson",
+          "playerName": "Hugo Besson",
           "jerseyNumber": 25,
           "teamId": "ASV",
           "minutes": "19:22",
@@ -138523,7 +138523,7 @@
         },
         {
           "playerId": "ASV_013900",
-          "playerName": "Both, Tut Gach",
+          "playerName": "Both Gach",
           "jerseyNumber": 14,
           "teamId": "ASV",
           "minutes": "21:45",
@@ -140287,7 +140287,7 @@
         },
         {
           "playerId": "VIR_011837",
-          "playerName": "Kevin, Mbala Kokila",
+          "playerName": "Kevin Kokila",
           "jerseyNumber": 3,
           "teamId": "VIR",
           "minutes": "10:53",
@@ -143575,7 +143575,7 @@
       "boxscoreAway": [
         {
           "playerId": "PRS_006904",
-          "playerName": "Joel, Jean Michel, Ayte, Oluwa Toby Ayayi",
+          "playerName": "Joel Ayayi",
           "jerseyNumber": 11,
           "teamId": "PRS",
           "minutes": "13:58",
@@ -143773,7 +143773,7 @@
         },
         {
           "playerId": "PRS_006591",
-          "playerName": "Frank, Bryan Ntilikina",
+          "playerName": "Frank Ntilikina",
           "jerseyNumber": 5,
           "teamId": "PRS",
           "minutes": "08:23",
@@ -151381,7 +151381,7 @@
       "boxscoreHome": [
         {
           "playerId": "ASV_015164",
-          "playerName": "Hugo, Eric Besson",
+          "playerName": "Hugo Besson",
           "jerseyNumber": 25,
           "teamId": "ASV",
           "minutes": "17:29",
@@ -151469,7 +151469,7 @@
         },
         {
           "playerId": "ASV_013900",
-          "playerName": "Both, Tut Gach",
+          "playerName": "Both Gach",
           "jerseyNumber": 14,
           "teamId": "ASV",
           "minutes": "27:44",
@@ -154755,7 +154755,7 @@
         },
         {
           "playerId": "VIR_011837",
-          "playerName": "Kevin, Mbala Kokila",
+          "playerName": "Kevin Kokila",
           "jerseyNumber": 3,
           "teamId": "VIR",
           "minutes": "13:46",
@@ -159821,7 +159821,7 @@
       "boxscoreAway": [
         {
           "playerId": "006904",
-          "playerName": "Joel, Jean Michel, Ayte, Oluwa Toby Ayayi",
+          "playerName": "Joel Ayayi",
           "jerseyNumber": 11,
           "teamId": "PRS",
           "minutes": "11:05",
@@ -164693,7 +164693,7 @@
       "boxscoreHome": [
         {
           "playerId": "015164",
-          "playerName": "Hugo, Eric Besson",
+          "playerName": "Hugo Besson",
           "jerseyNumber": 25,
           "teamId": "ASV",
           "minutes": "20:46",
@@ -164781,7 +164781,7 @@
         },
         {
           "playerId": "013900",
-          "playerName": "Both, Tut Gach",
+          "playerName": "Both Gach",
           "jerseyNumber": 14,
           "teamId": "ASV",
           "minutes": "22:18",
@@ -169955,7 +169955,7 @@
       "boxscoreHome": [
         {
           "playerId": "013380",
-          "playerName": "Evan , Mehdi Fournier",
+          "playerName": "Evan Fournier",
           "jerseyNumber": 94,
           "teamId": "OLY",
           "minutes": "27:09",
@@ -172071,7 +172071,7 @@
         },
         {
           "playerId": "011837",
-          "playerName": "Kevin, Mbala Kokila",
+          "playerName": "Kevin Kokila",
           "jerseyNumber": 3,
           "teamId": "VIR",
           "minutes": "13:42",
@@ -177195,7 +177195,7 @@
         },
         {
           "playerId": "PRS_006591",
-          "playerName": "Frank, Bryan Ntilikina",
+          "playerName": "Frank Ntilikina",
           "jerseyNumber": 5,
           "teamId": "PRS",
           "minutes": "21:34",
@@ -180239,7 +180239,7 @@
       "boxscoreHome": [
         {
           "playerId": "OLY_013380",
-          "playerName": "Evan , Mehdi Fournier",
+          "playerName": "Evan Fournier",
           "jerseyNumber": 94,
           "teamId": "OLY",
           "minutes": "25:38",
@@ -187165,7 +187165,7 @@
         },
         {
           "playerId": "VIR_011837",
-          "playerName": "Kevin, Mbala Kokila",
+          "playerName": "Kevin Kokila",
           "jerseyNumber": 3,
           "teamId": "VIR",
           "minutes": "08:39",
@@ -189921,7 +189921,7 @@
       "boxscoreHome": [
         {
           "playerId": "ASV_015164",
-          "playerName": "Hugo, Eric Besson",
+          "playerName": "Hugo Besson",
           "jerseyNumber": 25,
           "teamId": "ASV",
           "minutes": "16:27",
@@ -190031,7 +190031,7 @@
         },
         {
           "playerId": "ASV_013900",
-          "playerName": "Both, Tut Gach",
+          "playerName": "Both Gach",
           "jerseyNumber": 14,
           "teamId": "ASV",
           "minutes": "21:59",
@@ -193473,7 +193473,7 @@
         },
         {
           "playerId": "OLY_013380",
-          "playerName": "Evan , Mehdi Fournier",
+          "playerName": "Evan Fournier",
           "jerseyNumber": 94,
           "teamId": "OLY",
           "minutes": "33:51",
@@ -195105,7 +195105,7 @@
         },
         {
           "playerId": "ASV_015164",
-          "playerName": "Hugo, Eric Besson",
+          "playerName": "Hugo Besson",
           "jerseyNumber": 25,
           "teamId": "ASV",
           "minutes": "13:34",
@@ -195171,7 +195171,7 @@
         },
         {
           "playerId": "ASV_013900",
-          "playerName": "Both, Tut Gach",
+          "playerName": "Both Gach",
           "jerseyNumber": 14,
           "teamId": "ASV",
           "minutes": "20:18",
@@ -198413,7 +198413,7 @@
         },
         {
           "playerId": "PRS_006591",
-          "playerName": "Frank, Bryan Ntilikina",
+          "playerName": "Frank Ntilikina",
           "jerseyNumber": 5,
           "teamId": "PRS",
           "minutes": "20:17",
@@ -204697,7 +204697,7 @@
         },
         {
           "playerId": "VIR_011837",
-          "playerName": "Kevin, Mbala Kokila",
+          "playerName": "Kevin Kokila",
           "jerseyNumber": 3,
           "teamId": "VIR",
           "minutes": "18:21",

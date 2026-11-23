@@ -30,7 +30,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -180,33 +183,11 @@ internal fun PlayerProfileDialog(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             modifier = Modifier.weight(1f)
                         ) {
-                            // Headshot / Jersey Avatar
-                            Box(
-                                modifier = Modifier
-                                    .size(if (isCompact) 56.dp else 66.dp)
-                                    .clip(CircleShape)
-                                    .background(CourtsideDesignTokens.PillSurface)
-                                    .border(2.dp, CourtsideDesignTokens.EuroLeagueOrange, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = "#${player.number}",
-                                    color = CourtsideDesignTokens.EuroLeagueOrange,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 15.sp
-                                )
-                                if (player.headshotUrl.isNotBlank()) {
-                                    AsyncImage(
-                                        model = ImageRequest.Builder(context)
-                                            .data(player.headshotUrl)
-                                            .crossfade(true)
-                                            .build(),
-                                        contentDescription = player.name,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.matchParentSize()
-                                    )
-                                }
-                            }
+                            // Headshot / Jersey Avatar (Top-aligned for 750x1000 3:4 EuroLeague portraits so heads are never cropped)
+                            CourtsidePlayerHeadshotAvatar(
+                                player = player,
+                                size = if (isCompact) 60.dp else 68.dp
+                            )
 
                             Column(modifier = Modifier.weight(1f)) {
                                 Row(
@@ -396,6 +377,57 @@ internal fun PlayerProfileDialog(
         }
     }
 }
+
+@Composable
+internal fun CourtsidePlayerHeadshotAvatar(
+    player: PlayerProfile,
+    size: androidx.compose.ui.unit.Dp = 68.dp,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    var imageLoaded by remember(player.headshotUrl) { mutableStateOf(false) }
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(CourtsideDesignTokens.PillSurface)
+            .border(2.dp, CourtsideDesignTokens.EuroLeagueOrange, CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        if (player.headshotUrl.isBlank() || !imageLoaded) {
+            Text(
+                text = "#${player.number}",
+                color = CourtsideDesignTokens.EuroLeagueOrange,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 15.sp
+            )
+        }
+        if (player.headshotUrl.isNotBlank()) {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(player.headshotUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = player.name,
+                alignment = PlayerHeadshotCropAlignment,
+                contentScale = ContentScale.Crop,
+                onSuccess = { imageLoaded = true },
+                onError = { imageLoaded = false },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 3.dp)
+            )
+        }
+    }
+}
+
+/**
+ * Offizielle EuroLeague-Spielerporträts haben das Hochformat `750 x 1000` (`3:4` Halbfigur).
+ * `Alignment.TopCenter` stellt sicher, dass Kopf & Haare vollständig sichtbar bleiben,
+ * statt wie bei `Alignment.Center` auf Brusthöhe beschnitten zu werden.
+ */
+internal val PlayerHeadshotCropAlignment: Alignment = Alignment.TopCenter
 
 @Composable
 private fun PlayerStatBox(

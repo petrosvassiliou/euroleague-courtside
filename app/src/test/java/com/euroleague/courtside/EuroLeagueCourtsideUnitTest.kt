@@ -1052,5 +1052,17 @@ class EuroLeagueCourtsideUnitTest {
         assertFalse(darkPalette.mode.isLight)
         assertTrue(lightPalette.cardSurface != darkPalette.cardSurface)
         assertTrue(lightPalette.primaryText != darkPalette.primaryText)
+
+        // Player headshots (750x1000 3:4 portraits) must anchor TopCenter so heads are never cut off
+        assertEquals(
+            androidx.compose.ui.Alignment.TopCenter,
+            com.euroleague.courtside.ui.screens.PlayerHeadshotCropAlignment
+        )
+
+        // Bundled snapshot player names must be clean without stray passport middle-name commas (e.g. "Evan Fournier")
+        val snapFile = java.io.File("src/main/assets/euroleague_live_snapshot.json").let {
+            if (it.exists()) it else java.io.File("app/src/main/assets/euroleague_live_snapshot.json")
+        }
+        assertFalse(snapFile.readText(Charsets.UTF_8).contains("Evan , Mehdi"))
     }
 }

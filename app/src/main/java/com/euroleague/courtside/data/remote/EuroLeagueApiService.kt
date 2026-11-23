@@ -1928,17 +1928,21 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
     }
 
     private fun formatPlayerDisplayName(person: EuroLeaguePersonDetailDto): String {
-        val given = person.passportName?.trim().orEmpty()
-        val surname = person.passportSurname?.trim().orEmpty()
+        val given = person.passportName?.substringBefore(",")?.trim().orEmpty()
+        val surname = person.passportSurname?.substringBefore(",")?.trim().orEmpty()
         if (given.isNotEmpty() && surname.isNotEmpty()) {
-            return "$given $surname".lowercase().split(" ").joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
+            return "$given $surname".lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }
+                .joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
         }
         val raw = person.name.trim()
         if ("," in raw) {
             val parts = raw.split(",", limit = 2).map { it.trim() }
-            return "${parts[1]} ${parts[0]}".lowercase().split(" ").joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
+            val firstPart = parts[1].substringBefore(",").trim()
+            return "$firstPart ${parts[0]}".lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }
+                .joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
         }
-        return raw.lowercase().split(" ").joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
+        return raw.lowercase().split(Regex("\\s+")).filter { it.isNotBlank() }
+            .joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
     }
 
     private fun matchPlayerInjury(
