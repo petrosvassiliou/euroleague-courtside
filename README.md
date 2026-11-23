@@ -56,18 +56,20 @@ Komplette Live-Lokalisierung in **6 Sprachen (`🇬🇧 EN`, `🇩🇪 DE`, `�
 - **Foldables (`BookPosture` & `TableTopPosture`):** Automatische Scharnier-Erkennung über Jetpack `WindowInfoTracker` (`FoldingFeature`).
 - **Smartphones (`COMPACT`):** Abgedunkelte `NavigationBar` am unteren Bildschirmrand.
 
-### 3. Live-Match-Center, PIR-Boxscore & Compose Canvas Charts
+### 3. Live-Match-Center, Play-by-Play, Momentum-Chart & Spieler-Scouting (`v1.8.0`)
 - **Split-View Match-Center (`MatchCenterScreen.kt`):**
   - Links: Live-Spielkarten mit `[LIVE | Q4 01:42]`-Badge, Vereinswappen und `Q1 Q2 Q3 Q4`-Matrix über alle 38 Spieltage.
-  - Rechts (gleichzeitig sichtbar): Dual-Tone-Scoreboard + leuchtendes **Half-Court Shot-Chart** (`Made` in `#00E676`, `Missed` in `#FF3B5C`) + sortierbare **`Player boxscore ⌄`**-Tabelle mit offizieller EuroLeague-**PIR**-Berechnung.
+  - Rechts (gleichzeitig sichtbar): Dual-Tone-Scoreboard + umschaltbares **Half-Court Shot-Chart** (`Made` in `#00E676`, `Missed` in `#FF3B5C`) & **Game-Flow / Momentum-Chart** (Führungsverlauf & Führungswechsel via Compose `Canvas`) + sortierbare **`Player boxscore ⌄`**-Tabelle & **Live Play-by-Play-Feed** (`live.euroleague.net/api/PlaybyPlay` inkl. Viertel- & Crunch-Time-Filter).
+- **Interaktive Spieler-Scouting-Karten (`PlayerProfileDialog.kt`):** Klick auf jeden beliebigen Spieler in **Mein Team**, **Tabellen-Teamseiten**, **Boxscore / Play-by-Play** oder **Analytics** öffnet das Scouting-Profil mit Headshot, Saison-Schnitt, Wurfquoten (`2P%`, `3P%`, `FT%`), PIR-Formkurve und dem rundenweisen **EuroLeague Spiel-Logbuch**.
 - **Team-Radar-Vergleich:** Nativ mit Compose `Canvas` gezeichnetes, beschriftetes 5-Achsen-Radar-Chart (`OFF`, `DEF`, `3P%`, `2P%`, `REB%`).
 
-### 4. Zwei Native Kalender-Export-Wege (`CalendarExportHelper.kt`)
+### 4. Zwei Native Kalender-Export-Wege & Android Startbildschirm-Widget
 1. **Google Kalender System-Intent:** `Intent(Intent.ACTION_INSERT)` mit `CalendarContract.Events.CONTENT_URI`, Arena als `EVENT_LOCATION` und 30-Minuten-Reminder.
 2. **RFC 5545 `.ics` Saison-Generator:** Erzeugt eine standardkonforme `.ics`-Datei inkl. `VALARM` (`-PT30M`) für alle Saisonspiele des Lieblingsteams und teilt sie über `FileProvider`.
+3. **Android Home-Screen Widget (`CourtsideAppWidgetProvider.kt`):** Obsidian/Orange Broadcast-Widget für den Android-Startbildschirm mit Nächster-Tip-Off-Countdown & Echtzeit-Live-Scoreboard an Spieltagen.
 
-### 5. Natives Benachrichtigungs-System in 6 Sprachen (`EuroLeagueNotificationManager.kt`)
-- Dedizierte `NotificationChannel`s für **Tip-Off-Alarme** (15 Min. vor Spielbeginn via `WorkManager`), **Halbzeit-/Endergebnisse** und **Crunch-Time Close-Game-Alerts** (Q4 `< 3:00` Restzeit bei `<= 5` Punkten Differenz) – vollständig lokalisiert in `EN`, `DE`, `FR`, `IT`, `ES` und `EL`.
+### 5. Natives Spieltags-Benachrichtigungs-System in 6 Sprachen (`EuroLeagueNotificationManager.kt`)
+- Automatische Hintergrund-Auswertung & deduplizierter Versand für **Tip-Off-Alarme** (15 Min. vor Spielbeginn via `WorkManager`), **Halbzeit-/Endergebnisse** und **Crunch-Time Close-Game-Alerts** (Q4 `< 3:00` Restzeit bei `<= 5` Punkten Differenz) inkl. direktem **Deep-Link ins Live-Spiel** – vollständig lokalisiert in `EN`, `DE`, `FR`, `IT`, `ES` und `EL`.
 - Integrierter **Test-Push-Button** im Einstellungs-Tab mit `NotificationCompat.BigTextStyle`.
 
 ---

@@ -45,6 +45,9 @@ class CourtsidePreferencesDataStore @Inject constructor(
         private const val KEY_QUICK_FAV_IDS = "favorite_team_ids"
         private const val KEY_QUICK_LANG = "app_language_code"
         private const val KEY_QUICK_AUTO_UPDATE = "auto_update_check_enabled"
+        private const val KEY_QUICK_TIP_OFF = "tip_off_alarm_enabled"
+        private const val KEY_QUICK_HT_FINAL = "halftime_final_score_enabled"
+        private const val KEY_QUICK_CLOSE_GAME = "close_game_alert_enabled"
     }
 
     private val quickBootPrefs by lazy {
@@ -74,6 +77,27 @@ class CourtsidePreferencesDataStore @Inject constructor(
 
     fun getSavedAutoUpdateEnabledImmediate(): Boolean =
         quickBootPrefs.getBoolean(KEY_QUICK_AUTO_UPDATE, true)
+
+    fun getSavedTipOffAlarmImmediate(): Boolean =
+        quickBootPrefs.getBoolean(KEY_QUICK_TIP_OFF, true)
+
+    fun getSavedHalftimeFinalImmediate(): Boolean =
+        quickBootPrefs.getBoolean(KEY_QUICK_HT_FINAL, true)
+
+    fun getSavedCloseGameAlertImmediate(): Boolean =
+        quickBootPrefs.getBoolean(KEY_QUICK_CLOSE_GAME, true)
+
+    fun saveNotificationChannelsImmediate(
+        tipOff: Boolean,
+        halftimeFinal: Boolean,
+        closeGame: Boolean
+    ) {
+        quickBootPrefs.edit()
+            .putBoolean(KEY_QUICK_TIP_OFF, tipOff)
+            .putBoolean(KEY_QUICK_HT_FINAL, halftimeFinal)
+            .putBoolean(KEY_QUICK_CLOSE_GAME, closeGame)
+            .commit()
+    }
 
     fun saveAutoUpdateEnabledImmediate(enabled: Boolean) {
         quickBootPrefs.edit()
@@ -124,9 +148,9 @@ class CourtsidePreferencesDataStore @Inject constructor(
         UserPreferencesState(
             primaryTeamId = resolvedTeamId,
             favoriteTeamIds = resolvedFavs,
-            tipOffAlarmEnabled = prefs[Keys.TIP_OFF_ALARM] ?: true,
-            halftimeFinalScoreEnabled = prefs[Keys.HALFTIME_FINAL_SCORE] ?: true,
-            closeGameAlertEnabled = prefs[Keys.CLOSE_GAME_ALERT] ?: true,
+            tipOffAlarmEnabled = prefs[Keys.TIP_OFF_ALARM] ?: getSavedTipOffAlarmImmediate(),
+            halftimeFinalScoreEnabled = prefs[Keys.HALFTIME_FINAL_SCORE] ?: getSavedHalftimeFinalImmediate(),
+            closeGameAlertEnabled = prefs[Keys.CLOSE_GAME_ALERT] ?: getSavedCloseGameAlertImmediate(),
             autoUpdateCheckEnabled = resolvedAutoUpdate,
             language = AppLanguage.fromCode(resolvedLangCode)
         )
@@ -182,6 +206,7 @@ class CourtsidePreferencesDataStore @Inject constructor(
         halftimeFinal: Boolean,
         closeGame: Boolean
     ) {
+        saveNotificationChannelsImmediate(tipOff, halftimeFinal, closeGame)
         context.dataStore.edit { prefs ->
             prefs[Keys.TIP_OFF_ALARM] = tipOff
             prefs[Keys.HALFTIME_FINAL_SCORE] = halftimeFinal

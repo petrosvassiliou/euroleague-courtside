@@ -359,6 +359,9 @@ class EuroLeagueCourtsideUnitTest {
         assertTrue(manager.compareSemanticVersions("v1.5.0", "1.4.2") > 0)
         assertEquals(0, manager.compareSemanticVersions("v1.5.0", "1.5.0"))
         assertTrue(manager.compareSemanticVersions("1.4.1", "v1.5.0") < 0)
+        assertTrue(manager.compareSemanticVersions("v1.8.0-beta.1", "1.7.0") > 0)
+        assertTrue(manager.compareSemanticVersions("v1.8.0-beta.2", "v1.8.0-beta.1") > 0)
+        assertTrue(manager.compareSemanticVersions("v1.8.0", "v1.8.0-beta.1") > 0)
         assertEquals(12, manager.extractBuildNumber("EuroLeague Courtside v1.5.0 (Build 12 — Official Signed Release APK)"))
 
         val sampleReleaseJson = """
@@ -719,6 +722,7 @@ class EuroLeagueCourtsideUnitTest {
             override suspend fun fetchLiveGameBoxscore(fullUrl: String) = com.euroleague.courtside.data.remote.EuroLeagueLiveBoxscoreEnvelopeDto()
             override suspend fun fetchLiveGameShotPoints(fullUrl: String) = com.euroleague.courtside.data.remote.EuroLeagueLivePointsDto()
             override suspend fun fetchLiveGameHeader(fullUrl: String) = com.euroleague.courtside.data.remote.EuroLeagueLiveHeaderDto()
+            override suspend fun fetchLiveGamePlayByPlay(fullUrl: String) = com.euroleague.courtside.data.remote.EuroLeagueLivePlayByPlayDto()
         }
 
         val repo = EuroLeagueMockRepository()
@@ -760,5 +764,251 @@ class EuroLeagueCourtsideUnitTest {
         assertFalse(com.euroleague.courtside.ui.navigation.isAndroidPhoneViewport(isCompactWidth = false, smallestScreenWidthDp = 600))
         assertFalse(com.euroleague.courtside.ui.navigation.isAndroidPhoneViewport(isCompactWidth = false, smallestScreenWidthDp = 840))
         assertFalse(com.euroleague.courtside.ui.navigation.isAndroidPhoneViewport(isCompactWidth = false, smallestScreenWidthDp = 1080))
+    }
+
+    @Test
+    fun `live PlayByPlay parser handles ForthQuarter and ExtraTime and computes LeadMomentumSummary`() {
+        val dto = com.euroleague.courtside.data.remote.EuroLeagueLivePlayByPlayDto(
+            live = true,
+            codeTeamA = "MUN",
+            codeTeamB = "PAN",
+            actualQuarter = 4,
+            firstQuarter = listOf(
+                com.euroleague.courtside.data.remote.EuroLeaguePlayByPlayRowDto(
+                    numberOfPlay = 10,
+                    codeTeam = "MUN       ",
+                    playerId = "P005001   ",
+                    playType = "3FGM",
+                    player = "EDWARDS, CARSEN",
+                    dorsal = "3",
+                    minute = 2,
+                    markerTime = "08:30",
+                    pointsA = 3,
+                    pointsB = 0,
+                    playInfo = "Three Pointer (1/1 - 3 pt)"
+                ),
+                com.euroleague.courtside.data.remote.EuroLeaguePlayByPlayRowDto(
+                    numberOfPlay = 14,
+                    codeTeam = "PAN       ",
+                    playerId = "P009999   ",
+                    playType = "2FGM",
+                    player = "NUNN, KENDRICK",
+                    dorsal = "25",
+                    minute = 3,
+                    markerTime = "07:15",
+                    pointsA = 3,
+                    pointsB = 5,
+                    playInfo = "Two Pointer"
+                )
+            ),
+            forthQuarter = listOf(
+                com.euroleague.courtside.data.remote.EuroLeaguePlayByPlayRowDto(
+                    numberOfPlay = 410,
+                    codeTeam = "MUN       ",
+                    playerId = "P005001   ",
+                    playType = "DUNK",
+                    player = "EDWARDS, CARSEN",
+                    dorsal = "3",
+                    minute = 39,
+                    markerTime = "01:12",
+                    pointsA = 84,
+                    pointsB = 82,
+                    playInfo = "Fastbreak Dunk"
+                )
+            )
+        )
+
+        val parsed = com.euroleague.courtside.data.remote.EuroLeagueOfflineFirstRepository.parseLivePlayByPlayStatic(
+            dto = dto,
+            gameCode = 120,
+            homeTeamId = "MUN",
+            awayTeamId = "PAN"
+        )
+        assertEquals(3, parsed.size)
+        assertEquals("Carsen Edwards", parsed.first().playerName)
+        assertEquals(com.euroleague.courtside.data.repository.PlayEventCategory.THREE_PT, parsed.first().category)
+        assertEquals(3, parsed.first().pointsScored)
+        assertTrue(parsed.last().isClutchPlay)
+        assertEquals(84, parsed.last().homeScore)
+        assertEquals(82, parsed.last().awayScore)
+
+        val liveGame = repository.games.value.first { it.id == "g_live_1" }.copy(playByPlay = parsed)
+        val momentum = EuroLeagueMockRepository.computeLeadMomentumSummary(liveGame, parsed)
+        assertEquals(3, momentum.maxHomeLead)
+        assertEquals(2, momentum.maxAwayLead)
+        assertEquals(2, momentum.leadChanges)
+    }
+
+    @Test
+    fun `player scouting summary aggregates shooting splits minutes and game log and resolves clicked players`() {
+        val freshRepo = EuroLeagueMockRepository()
+        val edwards = freshRepo.players.first { it.name.contains("Edwards", ignoreCase = true) }
+        val summary = EuroLeagueMockRepository.buildPlayerScoutingSummary(edwards, freshRepo.games.value)
+
+        assertTrue(summary.gamesLogged >= 1)
+        assertTrue(summary.gameLog.isNotEmpty())
+        assertTrue(summary.twoPtPct in 0f..100f)
+        assertTrue(summary.threePtPct in 0f..100f)
+        assertTrue(summary.ftPct in 0f..100f)
+
+        val resolved = com.euroleague.courtside.ui.screens.resolveClickedPlayerProfile(
+            playerId = "",
+            playerName = edwards.name,
+            teamId = edwards.teamId,
+            allPlayers = freshRepo.players,
+            allGames = freshRepo.games.value
+        )
+        assertTrue(resolved != null)
+        assertEquals(edwards.id, resolved?.id)
+    }
+
+    @Test
+    fun `automatic game-night alert engine deduplicates Tip-Off Halftime Final and Crunch-Time and preserves deep-link vs start destination`() {
+        val freshRepo = EuroLeagueMockRepository()
+        val now = 1_763_900_000_000L
+        val mun = freshRepo.findTeam("MUN") ?: freshRepo.teams.first()
+        val pan = freshRepo.findTeam("PAN") ?: freshRepo.teams[1]
+        val template = freshRepo.games.value.first()
+
+        val upcomingSoon = template.copy(
+            id = "g_up_fav",
+            round = 12,
+            homeTeam = mun,
+            awayTeam = pan,
+            status = GameStatus.UPCOMING,
+            tipOffEpochMillis = now + 3 * 3_600_000L
+        )
+        val liveHalftime = template.copy(
+            id = "g_ht_fav",
+            round = 12,
+            homeTeam = mun,
+            awayTeam = pan,
+            status = GameStatus.LIVE,
+            currentQuarter = 2,
+            remainingClock = "00:00",
+            homeScore = 44,
+            awayScore = 41
+        )
+        val recentFinal = template.copy(
+            id = "g_fin_recent",
+            round = 12,
+            homeTeam = mun,
+            awayTeam = pan,
+            status = GameStatus.FINAL,
+            homeScore = 89,
+            awayScore = 85,
+            tipOffEpochMillis = now - 3 * 3_600_000L
+        )
+        val oldRound1Final = recentFinal.copy(
+            id = "g_fin_old_r1",
+            round = 1,
+            tipOffEpochMillis = now - 30L * 24L * 3_600_000L
+        )
+        val liveCrunch = template.copy(
+            id = "g_crunch_fav",
+            round = 12,
+            homeTeam = mun,
+            awayTeam = pan,
+            status = GameStatus.LIVE,
+            currentQuarter = 4,
+            remainingClock = "01:20",
+            homeScore = 82,
+            awayScore = 80
+        )
+
+        val actions = com.euroleague.courtside.notifications.EuroLeagueNotificationManager.selectAutoAlertActions(
+            games = listOf(upcomingSoon, liveHalftime, recentFinal, oldRound1Final, liveCrunch),
+            favoriteTeamIds = setOf("MUN"),
+            tipOffEnabled = true,
+            halftimeFinalEnabled = true,
+            closeGameEnabled = true,
+            alreadySentKeys = emptySet(),
+            nowMillis = now
+        )
+        assertEquals(4, actions.size)
+        assertTrue(actions.none { it.game.id == "g_fin_old_r1" })
+
+        // Deduplication check: passing dispatched keys suppresses repeat alerts
+        val repeatActions = com.euroleague.courtside.notifications.EuroLeagueNotificationManager.selectAutoAlertActions(
+            games = listOf(upcomingSoon, liveHalftime, recentFinal, oldRound1Final, liveCrunch),
+            favoriteTeamIds = setOf("MUN"),
+            tipOffEnabled = true,
+            halftimeFinalEnabled = true,
+            closeGameEnabled = true,
+            alreadySentKeys = actions.map { it.dedupeKey }.toSet(),
+            nowMillis = now
+        )
+        assertTrue(repeatActions.isEmpty())
+
+        // Deep-link jumps to Match Center while normal reset restores My Team
+        freshRepo.openGameDeepLink("g_crunch_fav", 12)
+        assertEquals(com.euroleague.courtside.ui.navigation.CourtsideDestination.MATCHDAY, freshRepo.activeDestinationFlow.value)
+        assertEquals("g_crunch_fav" to 12, freshRepo.pendingDeepLinkGameFlow.value)
+        freshRepo.consumePendingDeepLinkGame()
+        assertEquals(null, freshRepo.pendingDeepLinkGameFlow.value)
+        freshRepo.resetToStartDestination()
+        assertEquals(com.euroleague.courtside.ui.navigation.CourtsideDestination.MY_TEAM, freshRepo.activeDestinationFlow.value)
+    }
+
+    @Test
+    fun `Courtside Android Home-Screen Widget builds live scoreboard and countdown states and Monaco offline crest exists`() {
+        val freshRepo = EuroLeagueMockRepository()
+        val mun = freshRepo.findTeam("MUN") ?: freshRepo.teams.first()
+        val pan = freshRepo.findTeam("PAN") ?: freshRepo.teams[1]
+        val template = freshRepo.games.value.first()
+        val now = 1_763_900_000_000L
+
+        val upcomingGame = template.copy(
+            id = "w_up",
+            round = 13,
+            homeTeam = mun,
+            awayTeam = pan,
+            status = GameStatus.UPCOMING,
+            tipOffEpochMillis = now + 26 * 3_600_000L
+        )
+        val countdownState = com.euroleague.courtside.widget.CourtsideAppWidgetProvider.buildWidgetMatchupState(
+            primaryTeam = mun,
+            games = listOf(upcomingGame),
+            activeRound = 13,
+            language = AppLanguage.EN,
+            nowMillis = now
+        )
+        assertFalse(countdownState.isLive)
+        assertTrue(countdownState.centerPrimaryText.contains("Day"))
+
+        val liveGame = upcomingGame.copy(
+            id = "w_live",
+            status = GameStatus.LIVE,
+            currentQuarter = 4,
+            remainingClock = "02:11",
+            homeScore = 79,
+            awayScore = 77
+        )
+        val liveState = com.euroleague.courtside.widget.CourtsideAppWidgetProvider.buildWidgetMatchupState(
+            primaryTeam = mun,
+            games = listOf(liveGame),
+            activeRound = 13,
+            language = AppLanguage.DE,
+            nowMillis = now
+        )
+        assertTrue(liveState.isLive)
+        assertEquals("79 : 77", liveState.centerPrimaryText)
+        assertTrue(liveState.badgeText.contains("Q4"))
+
+        // Verify offline AS Monaco crest PNG exists in drawable-nodpi
+        val mcoPng = java.io.File("src/main/res/drawable-nodpi/club_logo_mco.png").let {
+            if (it.exists()) it else java.io.File("app/src/main/res/drawable-nodpi/club_logo_mco.png")
+        }
+        assertTrue("Offline Monaco crest club_logo_mco.png must exist", mcoPng.exists() && mcoPng.length() > 500)
+
+        // Verify all 6 languages translate all v1.8.0 labels
+        AppLanguage.entries.forEach { lang ->
+            val s = CourtsideTranslations.forLanguage(lang)
+            assertTrue(s.playByPlayTabLabel.isNotBlank())
+            assertTrue(s.courtViewMomentumTab.isNotBlank())
+            assertTrue(s.playerProfileTitle.isNotBlank())
+            assertTrue(s.gameLogHeader.isNotBlank())
+            assertTrue(s.widgetSectionTitle.isNotBlank())
+        }
     }
 }

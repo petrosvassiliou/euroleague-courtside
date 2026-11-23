@@ -139,6 +139,96 @@ data class ShotAttempt(
     val isMade: Boolean get() = made
 }
 
+enum class PlayEventCategory(val badgeLabel: String) {
+    THREE_PT("3PT"),
+    DUNK("DUNK"),
+    TWO_PT("2PT"),
+    FREE_THROW("FT"),
+    MISS("MISS"),
+    ASSIST_REB("AST/REB"),
+    STEAL_BLK("DEF"),
+    TURNOVER("TO"),
+    FOUL("FOUL"),
+    TIMEOUT("TIMEOUT"),
+    PERIOD("PERIOD")
+}
+
+data class PlayByPlayEvent(
+    val id: String,
+    val playNumber: Int,
+    val quarter: Int,
+    val clock: String,
+    val gameMinute: Float,
+    val teamId: String,
+    val playerId: String = "",
+    val playerName: String = "",
+    val jerseyNumber: Int? = null,
+    val playType: String,
+    val category: PlayEventCategory,
+    val description: String,
+    val homeScore: Int,
+    val awayScore: Int,
+    val pointsScored: Int = 0
+) {
+    val isScoringPlay: Boolean get() = pointsScored > 0
+    val isClutchPlay: Boolean
+        get() {
+            if (quarter >= 5) return true
+            if (quarter < 4) return false
+            val minsLeft = clock.substringBefore(":").trim().toIntOrNull() ?: 99
+            return minsLeft < 5 && kotlin.math.abs(homeScore - awayScore) <= 8
+        }
+}
+
+data class LeadMomentumPoint(
+    val gameMinute: Float,
+    val homeScore: Int,
+    val awayScore: Int
+) {
+    val diff: Int get() = homeScore - awayScore
+}
+
+data class LeadMomentumSummary(
+    val points: List<LeadMomentumPoint>,
+    val totalMinutes: Float,
+    val maxHomeLead: Int,
+    val maxAwayLead: Int,
+    val leadChanges: Int
+)
+
+data class PlayerGameLogEntry(
+    val gameId: String,
+    val round: Int,
+    val opponentCode: String,
+    val opponentName: String,
+    val isHome: Boolean,
+    val isWin: Boolean,
+    val teamScore: Int,
+    val opponentScore: Int,
+    val isLive: Boolean,
+    val stat: PlayerBoxscoreStat
+)
+
+data class PlayerScoutingSummary(
+    val player: PlayerProfile,
+    val gamesLogged: Int,
+    val twoPtMade: Int,
+    val twoPtAttempted: Int,
+    val threePtMade: Int,
+    val threePtAttempted: Int,
+    val ftMade: Int,
+    val ftAttempted: Int,
+    val avgMinutes: String,
+    val gameLog: List<PlayerGameLogEntry>
+) {
+    val twoPtPct: Float
+        get() = if (twoPtAttempted > 0) kotlin.math.round((twoPtMade * 1000f) / twoPtAttempted) / 10f else 54.0f
+    val threePtPct: Float
+        get() = if (threePtAttempted > 0) kotlin.math.round((threePtMade * 1000f) / threePtAttempted) / 10f else 37.5f
+    val ftPct: Float
+        get() = if (ftAttempted > 0) kotlin.math.round((ftMade * 1000f) / ftAttempted) / 10f else 82.0f
+}
+
 data class EuroLeagueGame(
     val id: String,
     val round: Int,
@@ -157,7 +247,8 @@ data class EuroLeagueGame(
     val boxscoreAway: List<PlayerBoxscoreStat>,
     val shots: List<ShotAttempt>,
     val gameCode: Int = 0,
-    val seasonCode: String = "E2026"
+    val seasonCode: String = "E2026",
+    val playByPlay: List<PlayByPlayEvent> = emptyList()
 ) {
     val shotChart: List<ShotAttempt> get() = shots
 
@@ -223,12 +314,29 @@ class EuroLeagueMockRepository @Inject constructor() {
     private val _activeDestination = MutableStateFlow(com.euroleague.courtside.ui.navigation.CourtsideDestination.START_DESTINATION)
     val activeDestinationFlow: StateFlow<com.euroleague.courtside.ui.navigation.CourtsideDestination> = _activeDestination.asStateFlow()
 
+    private val _pendingDeepLinkGame = MutableStateFlow<Pair<String, Int>?>(null)
+    val pendingDeepLinkGameFlow: StateFlow<Pair<String, Int>?> = _pendingDeepLinkGame.asStateFlow()
+
     fun selectLanguage(language: com.euroleague.courtside.i18n.AppLanguage) {
         _appLanguage.value = language
     }
 
     fun selectDestination(destination: com.euroleague.courtside.ui.navigation.CourtsideDestination) {
         _activeDestination.value = destination
+    }
+
+    fun openGameDeepLink(gameId: String, round: Int) {
+        if (gameId.isBlank()) return
+        val safeRound = round.coerceIn(1, 38)
+        if (_activeRound.value != safeRound) {
+            // Keep activeRound intact; UI consumes round from pendingDeepLinkGameFlow
+        }
+        _pendingDeepLinkGame.value = gameId to safeRound
+        _activeDestination.value = com.euroleague.courtside.ui.navigation.CourtsideDestination.MATCHDAY
+    }
+
+    fun consumePendingDeepLinkGame() {
+        _pendingDeepLinkGame.value = null
     }
 
     /**
@@ -259,7 +367,14 @@ class EuroLeagueMockRepository @Inject constructor() {
             _activeRound.value = activeRound
         }
         if (liveGames.isNotEmpty()) {
-            val resolvedGames = ensureLiveScoresInGames(liveGames, targetRound)
+            val previousPbpById = _games.value.associate { it.id to it.playByPlay }
+            val mergedIncoming = liveGames.map { g ->
+                if (g.playByPlay.isEmpty()) {
+                    val prev = previousPbpById[g.id]
+                    if (!prev.isNullOrEmpty()) g.copy(playByPlay = prev) else g
+                } else g
+            }
+            val resolvedGames = ensureLiveScoresInGames(mergedIncoming, targetRound)
             val finalGamesCount = resolvedGames.count {
                 it.status == GameStatus.FINAL && (it.homeScore > 0 || it.awayScore > 0) && it.homeScore != it.awayScore
             }
@@ -657,6 +772,306 @@ class EuroLeagueMockRepository @Inject constructor() {
                     else -> null
                 }
             }.takeLast(5)
+
+        /**
+         * Erzeugt einen realistischen, viertelgenauen Offline-Play-by-Play-Feed aus den echten
+         * Viertelständen, Würfen und Boxscores, falls `live.euroleague.net/api/PlaybyPlay` noch lädt oder offline ist.
+         */
+        fun buildFallbackPlayByPlayForGame(game: EuroLeagueGame): List<PlayByPlayEvent> {
+            if (game.status == GameStatus.UPCOMING) return emptyList()
+            val qScores = mutableListOf(
+                1 to (game.quarters.q1Home to game.quarters.q1Away),
+                2 to (game.quarters.q2Home to game.quarters.q2Away),
+                3 to (game.quarters.q3Home to game.quarters.q3Away),
+                4 to (game.quarters.q4Home to game.quarters.q4Away)
+            )
+            if ((game.quarters.otHome ?: 0) > 0 || (game.quarters.otAway ?: 0) > 0 || game.currentQuarter >= 5) {
+                qScores.add(5 to ((game.quarters.otHome ?: 0) to (game.quarters.otAway ?: 0)))
+            }
+            val maxQuarter = if (game.status == GameStatus.LIVE) game.currentQuarter.coerceIn(1, 5) else qScores.last().first
+
+            val homePlayers = game.boxscoreHome
+            val awayPlayers = game.boxscoreAway
+            val events = mutableListOf<PlayByPlayEvent>()
+            var runH = 0
+            var runA = 0
+            var seq = 1
+
+            for ((q, pair) in qScores) {
+                if (q > maxQuarter) break
+                val (targetQH, targetQA) = pair
+                if (targetQH == 0 && targetQA == 0 && q > 1 && game.status == GameStatus.LIVE) break
+                val qDuration = if (q >= 5) 5f else 10f
+                val qStartMin = if (q <= 4) (q - 1) * 10f else 40f
+
+                var remH = targetQH
+                var remA = targetQA
+                val steps = maxOf((targetQH + targetQA) / 3, 6).coerceAtMost(18)
+
+                for (step in 1..steps) {
+                    if (remH <= 0 && remA <= 0) break
+                    val frac = step.toFloat() / (steps + 1).toFloat()
+                    val elapsedInQ = qDuration * frac
+                    val secsLeft = ((qDuration - elapsedInQ) * 60f).toInt().coerceAtLeast(0)
+                    val clock = "%02d:%02d".format(secsLeft / 60, secsLeft % 60)
+                    val gMin = qStartMin + elapsedInQ
+
+                    val homeTurn = if (remH > 0 && remA > 0) (step + q) % 2 == 1 else remH > 0
+                    if (homeTurn) {
+                        val pts = when {
+                            remH >= 3 && (step + q) % 3 == 0 -> 3
+                            remH >= 2 -> 2
+                            else -> 1
+                        }
+                        remH -= pts
+                        runH += pts
+                        val p = homePlayers.getOrNull((step - 1) % homePlayers.size.coerceAtLeast(1))
+                        val cat = when (pts) {
+                            3 -> PlayEventCategory.THREE_PT
+                            2 -> if (step % 5 == 0) PlayEventCategory.DUNK else PlayEventCategory.TWO_PT
+                            else -> PlayEventCategory.FREE_THROW
+                        }
+                        val label = when (cat) {
+                            PlayEventCategory.THREE_PT -> "3PT Jump Shot Made"
+                            PlayEventCategory.DUNK -> "Two-Handed Dunk"
+                            PlayEventCategory.TWO_PT -> "2PT Field Goal Made"
+                            else -> "Free Throw Made"
+                        }
+                        events.add(
+                            PlayByPlayEvent(
+                                id = "${game.id}_fb_$seq",
+                                playNumber = seq++,
+                                quarter = q,
+                                clock = clock,
+                                gameMinute = gMin,
+                                teamId = game.homeTeam.id,
+                                playerId = p?.playerId.orEmpty(),
+                                playerName = p?.playerName ?: game.homeTeam.code,
+                                jerseyNumber = p?.jerseyNumber,
+                                playType = cat.badgeLabel,
+                                category = cat,
+                                description = label,
+                                homeScore = runH,
+                                awayScore = runA,
+                                pointsScored = pts
+                            )
+                        )
+                    } else {
+                        val pts = when {
+                            remA >= 3 && (step + q) % 3 == 1 -> 3
+                            remA >= 2 -> 2
+                            else -> 1
+                        }
+                        remA -= pts
+                        runA += pts
+                        val p = awayPlayers.getOrNull((step - 1) % awayPlayers.size.coerceAtLeast(1))
+                        val cat = when (pts) {
+                            3 -> PlayEventCategory.THREE_PT
+                            2 -> if (step % 6 == 0) PlayEventCategory.DUNK else PlayEventCategory.TWO_PT
+                            else -> PlayEventCategory.FREE_THROW
+                        }
+                        val label = when (cat) {
+                            PlayEventCategory.THREE_PT -> "3PT Jump Shot Made"
+                            PlayEventCategory.DUNK -> "Fastbreak Dunk"
+                            PlayEventCategory.TWO_PT -> "2PT Field Goal Made"
+                            else -> "Free Throw Made"
+                        }
+                        events.add(
+                            PlayByPlayEvent(
+                                id = "${game.id}_fb_$seq",
+                                playNumber = seq++,
+                                quarter = q,
+                                clock = clock,
+                                gameMinute = gMin,
+                                teamId = game.awayTeam.id,
+                                playerId = p?.playerId.orEmpty(),
+                                playerName = p?.playerName ?: game.awayTeam.code,
+                                jerseyNumber = p?.jerseyNumber,
+                                playType = cat.badgeLabel,
+                                category = cat,
+                                description = label,
+                                homeScore = runH,
+                                awayScore = runA,
+                                pointsScored = pts
+                            )
+                        )
+                    }
+                }
+                if (remH > 0 || remA > 0) {
+                    runH += remH
+                    runA += remA
+                    val homeScoredLast = remH >= remA
+                    val p = if (homeScoredLast) homePlayers.firstOrNull() else awayPlayers.firstOrNull()
+                    events.add(
+                        PlayByPlayEvent(
+                            id = "${game.id}_fb_$seq",
+                            playNumber = seq++,
+                            quarter = q,
+                            clock = if (game.status == GameStatus.LIVE && q == maxQuarter) game.remainingClock else "00:04",
+                            gameMinute = qStartMin + qDuration - 0.1f,
+                            teamId = if (homeScoredLast) game.homeTeam.id else game.awayTeam.id,
+                            playerId = p?.playerId.orEmpty(),
+                            playerName = p?.playerName ?: "",
+                            jerseyNumber = p?.jerseyNumber,
+                            playType = "2PT",
+                            category = if (maxOf(remH, remA) >= 3) PlayEventCategory.THREE_PT else PlayEventCategory.TWO_PT,
+                            description = if (maxOf(remH, remA) >= 3) "Buzzer 3PT Made" else "End-of-Quarter Basket",
+                            homeScore = runH,
+                            awayScore = runA,
+                            pointsScored = maxOf(remH, remA)
+                        )
+                    )
+                }
+            }
+            return events
+        }
+
+        /**
+         * Berechnet die exakte Führungsverlaufs-Kurve (Momentum / Lead-Tracker) inklusive
+         * höchster Führung beider Teams und Anzahl der Führungswechsel.
+         */
+        fun computeLeadMomentumSummary(
+            game: EuroLeagueGame,
+            events: List<PlayByPlayEvent> = game.playByPlay
+        ): LeadMomentumSummary {
+            val resolvedEvents = events.ifEmpty { buildFallbackPlayByPlayForGame(game) }
+            val hasOt = game.currentQuarter >= 5 || (game.quarters.otHome ?: 0) > 0 || (game.quarters.otAway ?: 0) > 0 ||
+                resolvedEvents.any { it.quarter >= 5 }
+            val totalMins = if (hasOt) 45f else 40f
+
+            val points = mutableListOf(LeadMomentumPoint(0f, 0, 0))
+            resolvedEvents
+                .filter { it.homeScore > 0 || it.awayScore > 0 }
+                .sortedWith(compareBy<PlayByPlayEvent> { it.gameMinute }.thenBy { it.playNumber })
+                .forEach { ev ->
+                    val prev = points.last()
+                    if (ev.homeScore != prev.homeScore || ev.awayScore != prev.awayScore) {
+                        points.add(
+                            LeadMomentumPoint(
+                                gameMinute = ev.gameMinute.coerceIn(0f, totalMins),
+                                homeScore = ev.homeScore,
+                                awayScore = ev.awayScore
+                            )
+                        )
+                    }
+                }
+
+            if (game.status == GameStatus.FINAL && (game.homeScore > 0 || game.awayScore > 0)) {
+                val last = points.last()
+                if (last.homeScore != game.homeScore || last.awayScore != game.awayScore || last.gameMinute < totalMins) {
+                    points.add(LeadMomentumPoint(totalMins, game.homeScore, game.awayScore))
+                }
+            }
+
+            var maxHomeLead = 0
+            var maxAwayLead = 0
+            var leadChanges = 0
+            var prevLeaderSign = 0 // +1 home, -1 away
+
+            for (pt in points) {
+                val diff = pt.diff
+                if (diff > maxHomeLead) maxHomeLead = diff
+                if (-diff > maxAwayLead) maxAwayLead = -diff
+                val curSign = when {
+                    diff > 0 -> 1
+                    diff < 0 -> -1
+                    else -> 0
+                }
+                if (curSign != 0 && prevLeaderSign != 0 && curSign != prevLeaderSign) {
+                    leadChanges++
+                }
+                if (curSign != 0) {
+                    prevLeaderSign = curSign
+                }
+            }
+
+            return LeadMomentumSummary(
+                points = points,
+                totalMinutes = totalMins,
+                maxHomeLead = maxHomeLead,
+                maxAwayLead = maxAwayLead,
+                leadChanges = leadChanges
+            )
+        }
+
+        /**
+         * Aggregiert alle gespielten & laufenden EuroLeague-Partien eines Spielers zu einem
+         * Scouting-Profil inkl. exakter Wurfquoten (`2P%`, `3P%`, `FT%`), Spielminuten-Schnitt
+         * und chronologischem Spiel-Logbuch.
+         */
+        fun buildPlayerScoutingSummary(
+            player: PlayerProfile,
+            allGames: List<EuroLeagueGame>
+        ): PlayerScoutingSummary {
+            val playerClub = canonicalClubId(player.teamId)
+            val normTargetName = player.name.trim().lowercase()
+            val targetSurname = normTargetName.substringAfterLast(" ")
+
+            val logEntries = allGames
+                .filter { it.status == GameStatus.FINAL || it.status == GameStatus.LIVE }
+                .mapNotNull { g ->
+                    val homeCanonical = canonicalClubId(g.homeTeam.id)
+                    val awayCanonical = canonicalClubId(g.awayTeam.id)
+                    val isHome = homeCanonical == playerClub
+                    val isAway = awayCanonical == playerClub
+                    if (!isHome && !isAway) return@mapNotNull null
+
+                    val pool = if (isHome) g.boxscoreHome else g.boxscoreAway
+                    val matchedStat = pool.firstOrNull { st ->
+                        st.playerId.equals(player.id, ignoreCase = true) ||
+                            st.playerName.trim().equals(player.name.trim(), ignoreCase = true) ||
+                            (st.jerseyNumber == player.number && targetSurname.length >= 3 &&
+                                st.playerName.lowercase().contains(targetSurname))
+                    } ?: return@mapNotNull null
+
+                    val teamScore = if (isHome) g.homeScore else g.awayScore
+                    val oppScore = if (isHome) g.awayScore else g.homeScore
+                    val oppTeam = if (isHome) g.awayTeam else g.homeTeam
+
+                    PlayerGameLogEntry(
+                        gameId = g.id,
+                        round = g.round,
+                        opponentCode = oppTeam.code,
+                        opponentName = oppTeam.name,
+                        isHome = isHome,
+                        isWin = teamScore > oppScore,
+                        teamScore = teamScore,
+                        opponentScore = oppScore,
+                        isLive = g.status == GameStatus.LIVE,
+                        stat = matchedStat
+                    )
+                }
+                .sortedByDescending { it.round }
+
+            val twoM = logEntries.sumOf { it.stat.twoPtMade }
+            val twoA = logEntries.sumOf { it.stat.twoPtAttempted }
+            val threeM = logEntries.sumOf { it.stat.threePtMade }
+            val threeA = logEntries.sumOf { it.stat.threePtAttempted }
+            val ftM = logEntries.sumOf { it.stat.ftMade }
+            val ftA = logEntries.sumOf { it.stat.ftAttempted }
+
+            val totalSecs = logEntries.sumOf { entry ->
+                val parts = entry.stat.minutes.split(":")
+                val m = parts.getOrNull(0)?.trim()?.toIntOrNull() ?: 0
+                val s = parts.getOrNull(1)?.trim()?.toIntOrNull() ?: 0
+                m * 60 + s
+            }
+            val avgSecs = if (logEntries.isNotEmpty()) totalSecs / logEntries.size else 24 * 60
+            val avgMinFormatted = "%02d:%02d".format(avgSecs / 60, avgSecs % 60)
+
+            return PlayerScoutingSummary(
+                player = player,
+                gamesLogged = logEntries.size,
+                twoPtMade = twoM,
+                twoPtAttempted = twoA,
+                threePtMade = threeM,
+                threePtAttempted = threeA,
+                ftMade = ftM,
+                ftAttempted = ftA,
+                avgMinutes = avgMinFormatted,
+                gameLog = logEntries
+            )
+        }
 
         /**
          * Official EuroLeague Regular Season Bylaws rule:

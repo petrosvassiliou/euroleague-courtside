@@ -2,9 +2,10 @@ name: Android & Googlebook OS CI Build
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "master", "beta" ]
+    tags: [ "v*-beta*", "v*-rc*" ]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: [ "main", "master", "beta" ]
   schedule:
     - cron: '0 6 * * *'
   workflow_dispatch:
@@ -37,7 +38,6 @@ jobs:
           name: euroleague-live-snapshot-and-logos
           path: |
             app/src/main/assets/euroleague_live_snapshot.json
-            app/src/main/assets/euroleague_club_logos_b64.json
             app/src/main/res/drawable-nodpi/club_logo_*.png
 
       - name: Set up JDK 17
@@ -72,7 +72,7 @@ jobs:
           name: euroleague-courtside-debug-apk-v${{ steps.version.outputs.version_name }}
           path: app/build/outputs/apk/debug/EuroLeague-Courtside-v${{ steps.version.outputs.version_name }}-debug.apk
 
-      - name: Publish Versioned Signed Release APK to GitHub Releases
+      - name: Publish Versioned Signed Release / Beta Pre-Release APK to GitHub Releases
         if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -80,18 +80,23 @@ jobs:
           VER_NAME: ${{ steps.version.outputs.version_name }}
           VER_CODE: ${{ steps.version.outputs.version_code }}
         run: |
-          NOTES="Offizielle, kryptografisch signierte und R8-optimierte **Release-APK (\`EuroLeague-Courtside-${TAG}.apk\`, Build \`${VER_CODE}\`)** von **EuroLeague Courtside** mit Live-Anbindung an \`api-live.euroleague.net\` (v2/v3), allen 38 Spieltagen (380 Spiele), echten offiziellen Vereins-Logos (\`images.crest\`), vollständigen Spieler- & Team-Saisonstatistiken (\`seasonMode=Single\`), interaktivem Team-Vergleich sowie komplett lokalisierten Push-Benachrichtigungen & Kadern in allen 6 Sprachen (\`EN\`, \`DE\`, \`FR\`, \`IT\`, \`ES\`, \`EL\`)."
-          if gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release edit "${TAG}" \
-              --title "EuroLeague Courtside ${TAG} (Build ${VER_CODE} — Official Signed Release APK)" \
-              --notes "${NOTES}"
+          if [[ "${VER_NAME}" == *-* ]]; then
+            TITLE="EuroLeague Courtside ${TAG} (Build ${VER_CODE} — Beta Pre-Release Signed APK)"
+            NOTES="🧪 **Beta Pre-Release (\`EuroLeague-Courtside-${TAG}.apk\`, Build \`${VER_CODE}\`)** zum Vorab-Testen vor dem stabilen Rollout: Live Play-by-Play & Game-Flow Momentum-Chart (\`live.euroleague.net/api/PlaybyPlay\`), anklickbare Spieler-Scouting-Karten & EuroLeague Spiel-Logbücher, automatische Spieltags-Push-Alarme inkl. Deep-Link, neues Android Startbildschirm-Widget sowie optimierte APK-Größe in allen 6 Sprachen (\`EN\`, \`DE\`, \`FR\`, \`IT\`, \`ES\`, \`EL\`)."
+            if gh release view "${TAG}" >/dev/null 2>&1; then
+              gh release edit "${TAG}" --title "${TITLE}" --notes "${NOTES}" --prerelease
+            else
+              gh release create "${TAG}" --title "${TITLE}" --notes "${NOTES}" --prerelease
+            fi
           else
-            gh release create "${TAG}" \
-              --title "EuroLeague Courtside ${TAG} (Build ${VER_CODE} — Official Signed Release APK)" \
-              --notes "${NOTES}" \
-              --latest
+            TITLE="EuroLeague Courtside ${TAG} (Build ${VER_CODE} — Official Signed Release APK)"
+            NOTES="Offizielle, kryptografisch signierte und R8-optimierte **Release-APK (\`EuroLeague-Courtside-${TAG}.apk\`, Build \`${VER_CODE}\`)** von **EuroLeague Courtside** mit Live-Anbindung an \`api-live.euroleague.net\` (v2/v3), allen 38 Spieltagen (380 Spiele), echten offiziellen Vereins-Logos (\`images.crest\`), vollständigen Spieler- & Team-Saisonstatistiken (\`seasonMode=Single\`), interaktivem Team-Vergleich sowie komplett lokalisierten Push-Benachrichtigungen & Kadern in allen 6 Sprachen (\`EN\`, \`DE\`, \`FR\`, \`IT\`, \`ES\`, \`EL\`)."
+            if gh release view "${TAG}" >/dev/null 2>&1; then
+              gh release edit "${TAG}" --title "${TITLE}" --notes "${NOTES}"
+            else
+              gh release create "${TAG}" --title "${TITLE}" --notes "${NOTES}" --latest
+            fi
           fi
           gh release upload "${TAG}" "app/build/outputs/apk/release/EuroLeague-Courtside-${TAG}.apk" --clobber
           gh release upload "${TAG}" "app/build/outputs/apk/debug/EuroLeague-Courtside-${TAG}-debug.apk" --clobber
           gh release upload "${TAG}" app/src/main/assets/euroleague_live_snapshot.json --clobber
-          gh release upload "${TAG}" app/src/main/assets/euroleague_club_logos_b64.json --clobber

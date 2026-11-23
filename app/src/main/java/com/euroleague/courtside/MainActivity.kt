@@ -19,6 +19,7 @@ import com.euroleague.courtside.data.repository.EuroLeagueMockRepository
 import com.euroleague.courtside.notifications.EuroLeagueNotificationManager
 import com.euroleague.courtside.ui.navigation.MainAppScaffold
 import com.euroleague.courtside.ui.theme.EuroLeagueCourtsideTheme
+import com.euroleague.courtside.widget.CourtsideAppWidgetProvider
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.delay
@@ -51,8 +52,10 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
         )
 
-        // Beim Start der App immer ausnahmslos "My Team" anzeigen
-        repository.resetToStartDestination()
+        // Beim regulären Start immer "My Team" anzeigen; bei Klick auf eine Spiel-Notification direkt zum Spiel springen
+        if (!consumeDeepLinkIntentIfPresent(intent)) {
+            repository.resetToStartDestination()
+        }
         shouldResetToMyTeamOnNextStart = false
 
         // Stelle gespeichertes "My Team" & Sprache sofort synchron vor dem ersten UI-Frame wieder her
@@ -99,6 +102,7 @@ class MainActivity : ComponentActivity() {
                 offlineFirstRepository.loadBundledLiveSnapshotFromAssets(applicationContext)
                 offlineFirstRepository.refreshLiveMatchdayTick()
                 offlineFirstRepository.syncSeasonDataFromRemoteOrSeedCache()
+                evaluateAlertsAndSyncWidgets()
                 var tickCount = 0
                 while (true) {
                     delay(45_000L)
@@ -108,6 +112,7 @@ class MainActivity : ComponentActivity() {
                     } else {
                         offlineFirstRepository.refreshLiveMatchdayTick()
                     }
+                    evaluateAlertsAndSyncWidgets()
                 }
             }
 
@@ -122,11 +127,42 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun evaluateAlertsAndSyncWidgets() {
+        val primaryId = preferencesDataStore.getSavedPrimaryTeamImmediate() ?: repository.selectedTeamId.value
+        val favIds = (preferencesDataStore.getSavedFavoriteTeamsImmediate() ?: repository.favoriteTeamIds.value) + primaryId
+        val lang = preferencesDataStore.getSavedLanguageImmediate() ?: repository.appLanguageFlow.value
+        notificationManager.evaluateAutomaticGameNightAlerts(
+            games = repository.games.value,
+            favoriteTeamIds = favIds,
+            tipOffEnabled = preferencesDataStore.getSavedTipOffAlarmImmediate(),
+            halftimeFinalEnabled = preferencesDataStore.getSavedHalftimeFinalImmediate(),
+            closeGameEnabled = preferencesDataStore.getSavedCloseGameAlertImmediate(),
+            language = lang
+        )
+        CourtsideAppWidgetProvider.updateAllWidgets(applicationContext)
+    }
+
+    private fun consumeDeepLinkIntentIfPresent(incomingIntent: Intent?): Boolean {
+        val gameId = incomingIntent?.getStringExtra(EuroLeagueNotificationManager.EXTRA_DEEP_LINK_GAME_ID)
+            ?.takeIf { it.isNotBlank() }
+            ?: return false
+        val round = incomingIntent.getIntExtra(
+            EuroLeagueNotificationManager.EXTRA_DEEP_LINK_ROUND,
+            repository.activeRoundFlow.value
+        )
+        incomingIntent.removeExtra(EuroLeagueNotificationManager.EXTRA_DEEP_LINK_GAME_ID)
+        incomingIntent.removeExtra(EuroLeagueNotificationManager.EXTRA_DEEP_LINK_ROUND)
+        repository.openGameDeepLink(gameId, round)
+        return true
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         if (::repository.isInitialized) {
-            repository.resetToStartDestination()
+            if (!consumeDeepLinkIntentIfPresent(intent)) {
+                repository.resetToStartDestination()
+            }
         }
         shouldResetToMyTeamOnNextStart = false
     }

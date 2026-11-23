@@ -11,4 +11,6 @@
     <string name="filter_all_games">All Games</string>
     <string name="player_boxscore">Player boxscore</string>
     <string name="send_test_push">Send Test Push Notification</string>
+    <string name="widget_title">Courtside Live &amp; Tip-Off</string>
+    <string name="widget_description">EuroLeague Next Tip-Off Countdown &amp; Live Scoreboard for My Team</string>
 </resources>

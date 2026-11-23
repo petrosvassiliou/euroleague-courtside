@@ -100,10 +100,18 @@ object CourtsideAppUpdateManager {
     }
 
     /**
-     * Normalizes a version string such as "v1.5.0" or "1.5.0-release" to "1.5.0".
+     * Normalizes a version string such as "v1.8.0-beta.1" to "1.8.0-beta.1" (or "v1.5.0" to "1.5.0").
      */
     fun normalizeVersionName(raw: String): String =
-        raw.trim().removePrefix("v").removePrefix("V").substringBefore("-").trim()
+        raw.trim().removePrefix("v").removePrefix("V").trim()
+
+    private fun extractCoreSemVer(raw: String): String =
+        normalizeVersionName(raw).substringBefore("-").substringBefore("+").trim()
+
+    private fun extractPreReleaseSuffix(raw: String): String? {
+        val norm = normalizeVersionName(raw).substringBefore("+")
+        return if ("-" in norm) norm.substringAfter("-").trim().lowercase().takeIf { it.isNotEmpty() } else null
+    }
 
     /**
      * Parses a `Build <number>` integer from a GitHub Release title or body if present
@@ -116,14 +124,14 @@ object CourtsideAppUpdateManager {
     }
 
     /**
-     * Compares two semantic version strings (e.g., "1.5.0" vs "1.4.2").
-     * Returns > 0 if [candidateVersion] is newer than [currentVersion], 0 if equal, < 0 if older.
+     * Compares two semantic version strings including SemVer pre-release tags
+     * (e.g. `1.8.0` > `1.8.0-rc.1` > `1.8.0-beta.2` > `1.8.0-beta.1` > `1.7.0`).
      */
     fun compareSemanticVersions(candidateVersion: String, currentVersion: String): Int {
-        val candParts = normalizeVersionName(candidateVersion)
+        val candParts = extractCoreSemVer(candidateVersion)
             .split(".")
             .map { it.toIntOrNull() ?: 0 }
-        val currParts = normalizeVersionName(currentVersion)
+        val currParts = extractCoreSemVer(currentVersion)
             .split(".")
             .map { it.toIntOrNull() ?: 0 }
         val maxLen = maxOf(candParts.size, currParts.size)
@@ -131,6 +139,29 @@ object CourtsideAppUpdateManager {
             val c = candParts.getOrElse(i) { 0 }
             val k = currParts.getOrElse(i) { 0 }
             if (c != k) return c.compareTo(k)
+        }
+        val candPre = extractPreReleaseSuffix(candidateVersion)
+        val currPre = extractPreReleaseSuffix(currentVersion)
+        return when {
+            candPre == null && currPre == null -> 0
+            // Final release (no suffix) is newer than any pre-release of the same core version
+            candPre == null && currPre != null -> 1
+            candPre != null && currPre == null -> -1
+            else -> comparePreReleaseTokens(candPre!!, currPre!!)
+        }
+    }
+
+    private fun comparePreReleaseTokens(candPre: String, currPre: String): Int {
+        val cTokens = candPre.split(".", "-")
+        val kTokens = currPre.split(".", "-")
+        val len = maxOf(cTokens.size, kTokens.size)
+        for (i in 0 until len) {
+            val c = cTokens.getOrNull(i) ?: return -1
+            val k = kTokens.getOrNull(i) ?: return 1
+            val cNum = c.toIntOrNull()
+            val kNum = k.toIntOrNull()
+            val cmp = if (cNum != null && kNum != null) cNum.compareTo(kNum) else c.compareTo(k)
+            if (cmp != 0) return cmp
         }
         return 0
     }

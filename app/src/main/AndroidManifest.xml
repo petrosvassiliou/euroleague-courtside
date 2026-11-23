@@ -68,6 +68,20 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- Android Home-Screen Courtside Widget (Next Tip-Off & Live Scoreboard) -->
+        <receiver
+            android:name=".widget.CourtsideAppWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_title">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.euroleague.courtside.ACTION_REFRESH_WIDGET" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/courtside_widget_info" />
+        </receiver>
+
     </application>
 
 </manifest>

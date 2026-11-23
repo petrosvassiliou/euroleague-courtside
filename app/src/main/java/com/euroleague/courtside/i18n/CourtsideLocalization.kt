@@ -137,7 +137,32 @@ data class CourtsideStrings(
     val updateAvailablePrefix: String = "🚀 Update Available:",
     val downloadInstallUpdateButton: String = "⬇ Download & Install Update",
     val viewReleaseNotesButton: String = "Release Notes",
-    val laterButton: String = "Later"
+    val laterButton: String = "Later",
+    // v1.8.0: Live Play-by-Play & Lead-Tracker Chart
+    val courtViewShotChartTab: String = "🎯 Shot Chart",
+    val courtViewMomentumTab: String = "📈 Game Flow",
+    val playByPlayTabLabel: String = "⚡ Play-by-Play",
+    val clutchFilterLabel: String = "🔥 Clutch",
+    val allQuartersFilter: String = "ALL",
+    val leadTrackerTitle: String = "Lead Tracker & Momentum",
+    val biggestLeadLabel: String = "Max Lead",
+    val leadChangesLabel: String = "Lead Changes",
+    // v1.8.0: Clickable Player Profiles & Game Logs
+    val playerProfileTitle: String = "Player Scouting Card",
+    val seasonAveragesHeader: String = "Season Averages",
+    val shootingSplitsHeader: String = "Shooting Splits",
+    val gameLogHeader: String = "EuroLeague Game Log",
+    val opponentColumn: String = "OPP",
+    val resultColumn: String = "RES",
+    val minutesColumn: String = "MIN",
+    val pirTrendHeader: String = "PIR Form Trend",
+    val closeButtonLabel: String = "Close",
+    val tapPlayerHint: String = "Tap any player for scouting profile & game log",
+    // v1.8.0: Game-Night Alerts & Android Home-Screen Widget
+    val autoGameAlertsBadge: String = "⚡ Auto Game-Night Worker Active",
+    val widgetSectionTitle: String = "Android Home-Screen Widget",
+    val widgetSectionSubtitle: String = "Live Scoreboard & Next Tip-Off Countdown in Courtside Obsidian",
+    val widgetAddHint: String = "Pin to Home Screen"
 )
 
 object CourtsideTranslations {
@@ -228,7 +253,29 @@ object CourtsideTranslations {
         updateAvailablePrefix = "🚀 Update Available:",
         downloadInstallUpdateButton = "⬇ Download & Install Update",
         viewReleaseNotesButton = "Release Notes",
-        laterButton = "Later"
+        laterButton = "Later",
+        courtViewShotChartTab = "🎯 Shot Chart",
+        courtViewMomentumTab = "📈 Game Flow",
+        playByPlayTabLabel = "⚡ Play-by-Play",
+        clutchFilterLabel = "🔥 Clutch",
+        allQuartersFilter = "ALL",
+        leadTrackerTitle = "Lead Tracker & Momentum",
+        biggestLeadLabel = "Max Lead",
+        leadChangesLabel = "Lead Changes",
+        playerProfileTitle = "Player Scouting Card",
+        seasonAveragesHeader = "Season Averages",
+        shootingSplitsHeader = "Shooting Splits",
+        gameLogHeader = "EuroLeague Game Log",
+        opponentColumn = "OPP",
+        resultColumn = "RES",
+        minutesColumn = "MIN",
+        pirTrendHeader = "PIR Form Trend",
+        closeButtonLabel = "Close",
+        tapPlayerHint = "Tap any player for scouting profile & game log",
+        autoGameAlertsBadge = "⚡ Auto Game-Night Worker Active",
+        widgetSectionTitle = "Android Home-Screen Widget",
+        widgetSectionSubtitle = "Live Scoreboard & Next Tip-Off Countdown in Courtside Obsidian",
+        widgetAddHint = "Pin to Home Screen"
     )
 
     val DE = CourtsideStrings(
@@ -317,7 +364,29 @@ object CourtsideTranslations {
         updateAvailablePrefix = "🚀 Neues Update verfügbar:",
         downloadInstallUpdateButton = "⬇ Update herunterladen & installieren",
         viewReleaseNotesButton = "Release Notes",
-        laterButton = "Später"
+        laterButton = "Später",
+        courtViewShotChartTab = "🎯 Shot-Chart",
+        courtViewMomentumTab = "📈 Spielverlauf",
+        playByPlayTabLabel = "⚡ Play-by-Play",
+        clutchFilterLabel = "🔥 Crunch-Time",
+        allQuartersFilter = "ALLE",
+        leadTrackerTitle = "Führungsverlauf & Momentum",
+        biggestLeadLabel = "Höchste Führung",
+        leadChangesLabel = "Führungswechsel",
+        playerProfileTitle = "Spieler-Scouting-Profil",
+        seasonAveragesHeader = "Saison-Schnitt",
+        shootingSplitsHeader = "Wurfquoten",
+        gameLogHeader = "EuroLeague Spiel-Logbuch",
+        opponentColumn = "GEG",
+        resultColumn = "ERG",
+        minutesColumn = "MIN",
+        pirTrendHeader = "PIR-Formkurve",
+        closeButtonLabel = "Schließen",
+        tapPlayerHint = "Spieler antippen für Scouting-Profil & Spiel-Logbuch",
+        autoGameAlertsBadge = "⚡ Automatischer Spieltags-Worker aktiv",
+        widgetSectionTitle = "Android Startbildschirm-Widget",
+        widgetSectionSubtitle = "Live-Scoreboard & Tip-Off-Countdown im Courtside-Design",
+        widgetAddHint = "Zum Startbildschirm hinzufügen"
     )
 
     val FR = CourtsideStrings(
@@ -406,7 +475,29 @@ object CourtsideTranslations {
         updateAvailablePrefix = "🚀 Mise à jour disponible :",
         downloadInstallUpdateButton = "⬇ Télécharger et installer",
         viewReleaseNotesButton = "Notes de version",
-        laterButton = "Plus tard"
+        laterButton = "Plus tard",
+        courtViewShotChartTab = "🎯 Carte des tirs",
+        courtViewMomentumTab = "📈 Dynamique",
+        playByPlayTabLabel = "⚡ Action par action",
+        clutchFilterLabel = "🔥 Money-Time",
+        allQuartersFilter = "TOUS",
+        leadTrackerTitle = "Évolution de l'écart & Momentum",
+        biggestLeadLabel = "Écart max",
+        leadChangesLabel = "Changements de leader",
+        playerProfileTitle = "Fiche Joueur EuroLeague",
+        seasonAveragesHeader = "Moyennes Saison",
+        shootingSplitsHeader = "Pourcentages aux tirs",
+        gameLogHeader = "Journal des matchs EuroLeague",
+        opponentColumn = "ADV",
+        resultColumn = "RÉS",
+        minutesColumn = "MIN",
+        pirTrendHeader = "Tendance PIR",
+        closeButtonLabel = "Fermer",
+        tapPlayerHint = "Touchez un joueur pour voir son profil et ses matchs",
+        autoGameAlertsBadge = "⚡ Alertes automatiques de soirée actives",
+        widgetSectionTitle = "Widget Écran d'accueil Android",
+        widgetSectionSubtitle = "Score en direct & Compte à rebours sur votre écran d'accueil",
+        widgetAddHint = "Ajouter à l'écran d'accueil"
     )
 
     val IT = CourtsideStrings(
@@ -495,7 +586,29 @@ object CourtsideTranslations {
         updateAvailablePrefix = "🚀 Nuovo aggiornamento disponibile:",
         downloadInstallUpdateButton = "⬇ Scarica e installa aggiornamento",
         viewReleaseNotesButton = "Note di rilascio",
-        laterButton = "Più tardi"
+        laterButton = "Più tardi",
+        courtViewShotChartTab = "🎯 Mappa tiri",
+        courtViewMomentumTab = "📈 Andamento",
+        playByPlayTabLabel = "⚡ Azione per azione",
+        clutchFilterLabel = "🔥 Crunch-Time",
+        allQuartersFilter = "TUTTI",
+        leadTrackerTitle = "Andamento Vantaggio & Momentum",
+        biggestLeadLabel = "Max vantaggio",
+        leadChangesLabel = "Cambi guida",
+        playerProfileTitle = "Scheda Giocatore EuroLeague",
+        seasonAveragesHeader = "Medie Stagionali",
+        shootingSplitsHeader = "Percentuali al tiro",
+        gameLogHeader = "Registro Partite EuroLeague",
+        opponentColumn = "AVV",
+        resultColumn = "RIS",
+        minutesColumn = "MIN",
+        pirTrendHeader = "Trend PIR",
+        closeButtonLabel = "Chiudi",
+        tapPlayerHint = "Tocca un giocatore per profilo e registro partite",
+        autoGameAlertsBadge = "⚡ Avvisi automatici partita attivi",
+        widgetSectionTitle = "Widget Schermata Home Android",
+        widgetSectionSubtitle = "Risultato live e conto alla rovescia sulla schermata Home",
+        widgetAddHint = "Aggiungi alla schermata Home"
     )
 
     val ES = CourtsideStrings(
@@ -584,7 +697,29 @@ object CourtsideTranslations {
         updateAvailablePrefix = "🚀 Nueva actualización disponible:",
         downloadInstallUpdateButton = "⬇ Descargar e instalar actualización",
         viewReleaseNotesButton = "Notas de la versión",
-        laterButton = "Más tarde"
+        laterButton = "Más tarde",
+        courtViewShotChartTab = "🎯 Mapa de tiros",
+        courtViewMomentumTab = "📈 Flujo de partido",
+        playByPlayTabLabel = "⚡ Jugada a jugada",
+        clutchFilterLabel = "🔥 Clutch",
+        allQuartersFilter = "TODOS",
+        leadTrackerTitle = "Evolución del marcador y Momentum",
+        biggestLeadLabel = "Máx. ventaja",
+        leadChangesLabel = "Cambios de líder",
+        playerProfileTitle = "Ficha del Jugador EuroLeague",
+        seasonAveragesHeader = "Promedios de Temporada",
+        shootingSplitsHeader = "Porcentajes de tiro",
+        gameLogHeader = "Registro de Partidos EuroLeague",
+        opponentColumn = "RIV",
+        resultColumn = "RES",
+        minutesColumn = "MIN",
+        pirTrendHeader = "Tendencia PIR",
+        closeButtonLabel = "Cerrar",
+        tapPlayerHint = "Pulsa un jugador para ver su ficha y partidos",
+        autoGameAlertsBadge = "⚡ Alertas automáticas de jornada activas",
+        widgetSectionTitle = "Widget de Pantalla de Inicio Android",
+        widgetSectionSubtitle = "Marcador en vivo y cuenta atrás en tu pantalla de inicio",
+        widgetAddHint = "Añadir a pantalla de inicio"
     )
 
     val EL = CourtsideStrings(
@@ -673,7 +808,29 @@ object CourtsideTranslations {
         updateAvailablePrefix = "🚀 Νέα ενημέρωση διαθέσιμη:",
         downloadInstallUpdateButton = "⬇ Λήψη & Εγκατάσταση ενημέρωσης",
         viewReleaseNotesButton = "Σημειώσεις έκδοσης",
-        laterButton = "Αργότερα"
+        laterButton = "Αργότερα",
+        courtViewShotChartTab = "🎯 Γράφημα σουτ",
+        courtViewMomentumTab = "📈 Διακύμανση",
+        playByPlayTabLabel = "⚡ Φάση-Φάση",
+        clutchFilterLabel = "🔥 Φινάλε",
+        allQuartersFilter = "ΟΛΑ",
+        leadTrackerTitle = "Διακύμανση Σκορ & Momentum",
+        biggestLeadLabel = "Μεγ. διαφορά",
+        leadChangesLabel = "Εναλλαγές",
+        playerProfileTitle = "Κάρτα Παίκτη EuroLeague",
+        seasonAveragesHeader = "Μέσοι Όροι Σεζόν",
+        shootingSplitsHeader = "Ποσοστά Ευστοχίας",
+        gameLogHeader = "Αρχείο Αγώνων EuroLeague",
+        opponentColumn = "ΑΝΤ",
+        resultColumn = "ΑΠΟΤ",
+        minutesColumn = "ΛΕΠ",
+        pirTrendHeader = "Τάση PIR",
+        closeButtonLabel = "Κλείσιμο",
+        tapPlayerHint = "Πατήστε σε παίκτη για προφίλ & ιστορικό αγώνων",
+        autoGameAlertsBadge = "⚡ Αυτόματες ειδοποιήσεις αγώνων ενεργές",
+        widgetSectionTitle = "Widget Αρχικής Οθόνης Android",
+        widgetSectionSubtitle = "Ζωντανό σκορ & αντίστροφη μέτρηση στην αρχική οθόνη",
+        widgetAddHint = "Προσθήκη στην αρχική οθόνη"
     )
 
     fun forLanguage(language: AppLanguage): CourtsideStrings = when (language) {

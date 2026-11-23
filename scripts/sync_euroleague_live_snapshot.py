@@ -1225,11 +1225,6 @@ def main():
     snapshot_file.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[SUCCESS] Wrote {snapshot_file} ({len(teams_out)} teams, {len(rosters_out)} players, {len(games_out)} games)")
 
-    if logo_data_uris:
-        logos_file = ASSETS_DIR / "euroleague_club_logos_b64.json"
-        logos_file.write_text(json.dumps(logo_data_uris, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"[SUCCESS] Wrote {logos_file} ({len(logo_data_uris)} official club logos)")
-
 
 if __name__ == "__main__":
     main()

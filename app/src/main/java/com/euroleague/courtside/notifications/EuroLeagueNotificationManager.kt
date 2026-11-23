@@ -21,8 +21,12 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.euroleague.courtside.R
+import com.euroleague.courtside.data.local.CourtsidePreferencesDataStore
 import com.euroleague.courtside.data.remote.EuroLeagueOfflineFirstRepository
 import com.euroleague.courtside.data.repository.EuroLeagueGame
+import com.euroleague.courtside.data.repository.EuroLeagueMockRepository
+import com.euroleague.courtside.data.repository.GameStatus
 import com.euroleague.courtside.i18n.AppLanguage
 import com.euroleague.courtside.i18n.CourtsideTranslations
 import dagger.hilt.EntryPoint
@@ -59,13 +63,96 @@ class EuroLeagueNotificationManager @Inject constructor(
         const val CHANNEL_SCORES = "euroleague_scores_channel"
         const val CHANNEL_CLOSE_GAME = "euroleague_close_game_channel"
 
+        const val EXTRA_DEEP_LINK_GAME_ID = "extra_deep_link_game_id"
+        const val EXTRA_DEEP_LINK_ROUND = "extra_deep_link_round"
+
         private const val PREFS_NAME = "courtside_notification_prefs"
         private const val KEY_ACTIVE_LANGUAGE = "active_language_code"
+        private const val KEY_DISPATCHED_EVENTS = "dispatched_alert_event_keys"
 
         private const val NOTIFICATION_ID_TIP_OFF = 4101
         private const val NOTIFICATION_ID_SCORE = 4102
         private const val NOTIFICATION_ID_CLOSE_GAME = 4103
         private const val NOTIFICATION_ID_TEST_PUSH = 4199
+
+        enum class AutoAlertType {
+            SCHEDULE_TIP_OFF,
+            HALFTIME_SCORE,
+            FINAL_SCORE,
+            CRUNCH_TIME
+        }
+
+        data class AutoAlertAction(
+            val type: AutoAlertType,
+            val game: EuroLeagueGame,
+            val dedupeKey: String
+        )
+
+        /**
+         * Reine Entscheidungslogik für automatische Spieltags-Benachrichtigungen im Hintergrund:
+         * Filtert nach Favoriten-Clubs, prüft aktive Kanäle, vermeidet historische Duplikate
+         * (`alreadySentKeys`) und begrenzt `FINAL`-Alarme auf aktuelle Spiele (letzte 12 Std.).
+         */
+        fun selectAutoAlertActions(
+            games: List<EuroLeagueGame>,
+            favoriteTeamIds: Set<String>,
+            tipOffEnabled: Boolean,
+            halftimeFinalEnabled: Boolean,
+            closeGameEnabled: Boolean,
+            alreadySentKeys: Set<String>,
+            nowMillis: Long = System.currentTimeMillis()
+        ): List<AutoAlertAction> {
+            val favCanon = favoriteTeamIds.map { EuroLeagueMockRepository.canonicalClubId(it) }.toSet()
+            val actions = mutableListOf<AutoAlertAction>()
+
+            for (game in games) {
+                val homeCanon = EuroLeagueMockRepository.canonicalClubId(game.homeTeam.id)
+                val awayCanon = EuroLeagueMockRepository.canonicalClubId(game.awayTeam.id)
+                val involvesFavorite = favCanon.isEmpty() || homeCanon in favCanon || awayCanon in favCanon
+
+                // 1. Geplante Tip-Off-Alarme (15 Min. vorher) für Favoriten innerhalb der nächsten 48 Std.
+                if (tipOffEnabled && involvesFavorite && game.status == GameStatus.UPCOMING) {
+                    val timeUntilTipOff = game.tipOffEpochMillis - nowMillis
+                    val key = "tipoff_${game.id}"
+                    if (timeUntilTipOff in (16 * 60_000L)..(48 * 3_600_000L) && key !in alreadySentKeys) {
+                        actions.add(AutoAlertAction(AutoAlertType.SCHEDULE_TIP_OFF, game, key))
+                    }
+                }
+
+                // 2. Halbzeit-Stand für Favoriten
+                val clockTrimmed = game.remainingClock.trim()
+                val isHalftimeMoment = game.status == GameStatus.LIVE &&
+                    game.currentQuarter == 2 &&
+                    (clockTrimmed == "00:00" || clockTrimmed == "0:00") &&
+                    (game.homeScore > 0 || game.awayScore > 0)
+                if (halftimeFinalEnabled && involvesFavorite && isHalftimeMoment) {
+                    val key = "ht_${game.id}"
+                    if (key !in alreadySentKeys) {
+                        actions.add(AutoAlertAction(AutoAlertType.HALFTIME_SCORE, game, key))
+                    }
+                }
+
+                // 3. Offizielles Endergebnis für Favoriten (nur Spiele aus dem aktuellen 12-Std.-Fenster)
+                val finishedRecently = game.status == GameStatus.FINAL &&
+                    (game.homeScore > 0 || game.awayScore > 0) &&
+                    (nowMillis - game.tipOffEpochMillis) in (-2 * 3_600_000L)..(12 * 3_600_000L)
+                if (halftimeFinalEnabled && involvesFavorite && finishedRecently) {
+                    val key = "final_${game.id}"
+                    if (key !in alreadySentKeys) {
+                        actions.add(AutoAlertAction(AutoAlertType.FINAL_SCORE, game, key))
+                    }
+                }
+
+                // 4. Crunch-Time Thriller (Q4 < 3:00, <= 5 Pkt. Differenz) für Favoriten
+                if (closeGameEnabled && involvesFavorite && game.isCloseGameFourthQuarter) {
+                    val key = "crunch_${game.id}"
+                    if (key !in alreadySentKeys) {
+                        actions.add(AutoAlertAction(AutoAlertType.CRUNCH_TIME, game, key))
+                    }
+                }
+            }
+            return actions
+        }
 
         fun formatTipOffAlarm(
             matchup: String,
@@ -206,9 +293,20 @@ class EuroLeagueNotificationManager @Inject constructor(
             shortText = payload.shortText,
             bigText = payload.bigText,
             summaryText = payload.summaryText,
-            priority = NotificationCompat.PRIORITY_HIGH
+            priority = NotificationCompat.PRIORITY_HIGH,
+            deepLinkGameId = game.id,
+            deepLinkRound = game.round
         )
 
+        enqueueSilentTipOffWorker(game, language)
+    }
+
+    private fun enqueueSilentTipOffWorker(
+        game: EuroLeagueGame,
+        language: AppLanguage
+    ) {
+        val matchupTitle = "${game.homeTeam.name} vs. ${game.awayTeam.name}"
+        val arenaLabel = "${game.homeTeam.arena} (${game.homeTeam.city})"
         val triggerAtMillis = game.tipOffEpochMillis - TimeUnit.MINUTES.toMillis(15)
         val delayMillis = (triggerAtMillis - System.currentTimeMillis()).coerceAtLeast(1_000L)
 
@@ -246,12 +344,14 @@ class EuroLeagueNotificationManager @Inject constructor(
 
         dispatchNotification(
             channelId = CHANNEL_CLOSE_GAME,
-            notificationId = NOTIFICATION_ID_CLOSE_GAME,
+            notificationId = NOTIFICATION_ID_CLOSE_GAME + (game.gameCode % 50),
             title = payload.title,
             shortText = payload.shortText,
             bigText = payload.bigText,
             summaryText = payload.summaryText,
-            priority = NotificationCompat.PRIORITY_HIGH
+            priority = NotificationCompat.PRIORITY_HIGH,
+            deepLinkGameId = game.id,
+            deepLinkRound = game.round
         )
     }
 
@@ -267,12 +367,14 @@ class EuroLeagueNotificationManager @Inject constructor(
 
         dispatchNotification(
             channelId = CHANNEL_SCORES,
-            notificationId = NOTIFICATION_ID_SCORE,
+            notificationId = NOTIFICATION_ID_SCORE + (game.gameCode % 50),
             title = payload.title,
             shortText = payload.shortText,
             bigText = payload.bigText,
             summaryText = payload.summaryText,
-            priority = NotificationCompat.PRIORITY_DEFAULT
+            priority = NotificationCompat.PRIORITY_DEFAULT,
+            deepLinkGameId = game.id,
+            deepLinkRound = game.round
         )
     }
 
@@ -294,7 +396,75 @@ class EuroLeagueNotificationManager @Inject constructor(
             shortText = payload.shortText,
             bigText = payload.bigText,
             summaryText = payload.summaryText,
-            priority = NotificationCompat.PRIORITY_MAX
+            priority = NotificationCompat.PRIORITY_MAX,
+            deepLinkGameId = game.id,
+            deepLinkRound = game.round
+        )
+    }
+
+    /**
+     * Wertet bei Hintergrund-Syncs und Live-Ticks alle Spiele für die Favoriten-Teams aus,
+     * plant automatisch anstehende Tip-Off-Alarme, versendet deduplizierte Halbzeit-/End-/Crunch-Time-Pushes
+     * und aktiviert während laufender Spieltage einen 15-Minuten-Folge-Check.
+     */
+    fun evaluateAutomaticGameNightAlerts(
+        games: List<EuroLeagueGame>,
+        favoriteTeamIds: Set<String>,
+        tipOffEnabled: Boolean,
+        halftimeFinalEnabled: Boolean,
+        closeGameEnabled: Boolean,
+        language: AppLanguage = resolveActiveLanguage()
+    ) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val sentSet = prefs.getStringSet(KEY_DISPATCHED_EVENTS, emptySet())?.toMutableSet() ?: mutableSetOf()
+        val nowMillis = System.currentTimeMillis()
+
+        val actions = selectAutoAlertActions(
+            games = games,
+            favoriteTeamIds = favoriteTeamIds,
+            tipOffEnabled = tipOffEnabled,
+            halftimeFinalEnabled = halftimeFinalEnabled,
+            closeGameEnabled = closeGameEnabled,
+            alreadySentKeys = sentSet,
+            nowMillis = nowMillis
+        )
+
+        if (actions.isNotEmpty()) {
+            for (action in actions) {
+                when (action.type) {
+                    AutoAlertType.SCHEDULE_TIP_OFF -> enqueueSilentTipOffWorker(action.game, language)
+                    AutoAlertType.HALFTIME_SCORE -> sendHalftimeOrFinalNotification(action.game, isFinal = false, language = language)
+                    AutoAlertType.FINAL_SCORE -> sendHalftimeOrFinalNotification(action.game, isFinal = true, language = language)
+                    AutoAlertType.CRUNCH_TIME -> evaluateAndSendCloseGameAlert(action.game, language = language)
+                }
+                sentSet.add(action.dedupeKey)
+            }
+            val trimmed = if (sentSet.size > 300) sentSet.toList().takeLast(300).toSet() else sentSet
+            prefs.edit().putStringSet(KEY_DISPATCHED_EVENTS, trimmed).apply()
+        }
+
+        val hasImminentOrLiveGame = games.any { g ->
+            g.status == GameStatus.LIVE ||
+                (g.status == GameStatus.UPCOMING && (g.tipOffEpochMillis - nowMillis) in 0L..(90 * 60_000L))
+        }
+        if (hasImminentOrLiveGame && (tipOffEnabled || halftimeFinalEnabled || closeGameEnabled)) {
+            scheduleGameWindowFollowUpCheck()
+        }
+    }
+
+    private fun scheduleGameWindowFollowUpCheck() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+        val request = OneTimeWorkRequestBuilder<DailyEuroLeagueSyncWorker>()
+            .setConstraints(constraints)
+            .setInitialDelay(15, TimeUnit.MINUTES)
+            .addTag("euroleague_gamenight_live_window")
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "euroleague_gamenight_live_window",
+            ExistingWorkPolicy.KEEP,
+            request
         )
     }
 
@@ -607,7 +777,9 @@ class EuroLeagueNotificationManager @Inject constructor(
         shortText: String,
         bigText: String,
         summaryText: String = "Live Match Center",
-        priority: Int
+        priority: Int,
+        deepLinkGameId: String? = null,
+        deepLinkRound: Int? = null
     ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = ActivityCompat.checkSelfPermission(
@@ -619,6 +791,12 @@ class EuroLeagueNotificationManager @Inject constructor(
 
         val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            if (!deepLinkGameId.isNullOrBlank()) {
+                putExtra(EXTRA_DEEP_LINK_GAME_ID, deepLinkGameId)
+                if (deepLinkRound != null) {
+                    putExtra(EXTRA_DEEP_LINK_ROUND, deepLinkRound)
+                }
+            }
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -628,7 +806,8 @@ class EuroLeagueNotificationManager @Inject constructor(
         )
 
         val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_stat_courtside_ball)
+            .setColor(0xFFFF6600.toInt())
             .setContentTitle(title)
             .setContentText(shortText)
             .setSubText("EuroLeague Courtside")
@@ -673,12 +852,16 @@ class EuroLeagueNotificationManager @Inject constructor(
 @InstallIn(SingletonComponent::class)
 interface DailySyncWorkerEntryPoint {
     fun offlineFirstRepository(): EuroLeagueOfflineFirstRepository
+    fun mockRepository(): EuroLeagueMockRepository
+    fun preferencesDataStore(): CourtsidePreferencesDataStore
+    fun notificationManager(): EuroLeagueNotificationManager
 }
 
 /**
- * Periodischer WorkManager-Worker für den täglichen Einsatz:
+ * Periodischer & Spieltags-WorkManager-Worker:
  * Synchronisiert im Hintergrund alle EuroLeague-Clubs, aktuelle Kader (`people`), Verletzten-Reports,
- * Tabellenstände und Spieltage.
+ * Tabellenstände und Spieltage, wertet automatische Spieltags-Pushes (Tip-Off, Halbzeit/Ende, Crunch-Time) aus
+ * und aktualisiert das Android Startbildschirm-Widget.
  */
 class DailyEuroLeagueSyncWorker(
     appContext: Context,
@@ -691,8 +874,29 @@ class DailyEuroLeagueSyncWorker(
                 applicationContext,
                 DailySyncWorkerEntryPoint::class.java
             )
-            entryPoint.offlineFirstRepository().loadBundledLiveSnapshotFromAssets(applicationContext)
-            entryPoint.offlineFirstRepository().syncSeasonDataFromRemoteOrSeedCache()
+            val offlineRepo = entryPoint.offlineFirstRepository()
+            val mockRepo = entryPoint.mockRepository()
+            val prefs = entryPoint.preferencesDataStore()
+            val notifManager = entryPoint.notificationManager()
+
+            offlineRepo.loadBundledLiveSnapshotFromAssets(applicationContext)
+            offlineRepo.refreshLiveMatchdayTick()
+            offlineRepo.syncSeasonDataFromRemoteOrSeedCache()
+
+            val primaryId = prefs.getSavedPrimaryTeamImmediate() ?: "MUN"
+            val favIds = (prefs.getSavedFavoriteTeamsImmediate() ?: setOf(primaryId)) + primaryId
+            val lang = prefs.getSavedLanguageImmediate() ?: notifManager.resolveActiveLanguage()
+
+            notifManager.evaluateAutomaticGameNightAlerts(
+                games = mockRepo.games.value,
+                favoriteTeamIds = favIds,
+                tipOffEnabled = prefs.getSavedTipOffAlarmImmediate(),
+                halftimeFinalEnabled = prefs.getSavedHalftimeFinalImmediate(),
+                closeGameEnabled = prefs.getSavedCloseGameAlertImmediate(),
+                language = lang
+            )
+
+            com.euroleague.courtside.widget.CourtsideAppWidgetProvider.updateAllWidgets(applicationContext)
             Result.success()
         }.getOrDefault(Result.retry())
     }
@@ -707,6 +911,7 @@ class TipOffNotificationWorker(
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
+        val gameId = inputData.getString("GAME_ID")
         val matchup = inputData.getString("MATCHUP_TITLE") ?: "EuroLeague Matchup"
         val arena = inputData.getString("ARENA") ?: "EuroLeague Arena"
         val round = inputData.getInt("ROUND", 1)
@@ -732,7 +937,9 @@ class TipOffNotificationWorker(
             shortText = payload.shortText,
             bigText = payload.bigText,
             summaryText = payload.summaryText,
-            priority = NotificationCompat.PRIORITY_HIGH
+            priority = NotificationCompat.PRIORITY_HIGH,
+            deepLinkGameId = gameId,
+            deepLinkRound = round
         )
         return Result.success()
     }

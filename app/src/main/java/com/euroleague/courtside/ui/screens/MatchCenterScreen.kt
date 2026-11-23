@@ -80,6 +80,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.euroleague.courtside.data.repository.EuroLeagueGame
+import com.euroleague.courtside.data.repository.EuroLeagueMockRepository
 import com.euroleague.courtside.data.repository.EuroLeagueTeam
 import com.euroleague.courtside.data.repository.GameStatus
 import com.euroleague.courtside.data.repository.PlayerBoxscoreStat
@@ -119,7 +120,10 @@ fun MatchCenterScreen(
     onTriggerLiveRefresh: () -> Unit,
     onLiveScoreTick: () -> Unit = onTriggerLiveRefresh,
     onRefreshSelectedGameStats: (EuroLeagueGame) -> Unit = {},
-    onOpenTeamStats: (String) -> Unit
+    onOpenTeamStats: (String) -> Unit,
+    deepLinkGameId: String? = null,
+    onConsumeDeepLinkGame: () -> Unit = {},
+    onClickPlayerRef: (playerId: String, playerName: String, teamId: String) -> Unit = { _, _, _ -> }
 ) {
     val context = LocalContext.current
     val strings = LocalCourtsideStrings.current
@@ -230,9 +234,23 @@ fun MatchCenterScreen(
         ?: filteredGames.firstOrNull()
         ?: games.firstOrNull()
 
-    androidx.compose.runtime.LaunchedEffect(selectedGame?.id, selectedGame?.boxscoreHome?.isEmpty()) {
+    androidx.compose.runtime.LaunchedEffect(deepLinkGameId) {
+        if (!deepLinkGameId.isNullOrBlank()) {
+            activeGameId = deepLinkGameId
+            if (isCompact) {
+                navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, deepLinkGameId)
+            }
+            onConsumeDeepLinkGame()
+        }
+    }
+
+    androidx.compose.runtime.LaunchedEffect(selectedGame?.id, selectedGame?.boxscoreHome?.isEmpty(), selectedGame?.status) {
         if (selectedGame != null) {
             onRefreshSelectedGameStats(selectedGame)
+            while (selectedGame.status == GameStatus.LIVE) {
+                kotlinx.coroutines.delay(15_000L)
+                onRefreshSelectedGameStats(selectedGame)
+            }
         }
     }
 
@@ -652,7 +670,8 @@ fun MatchCenterScreen(
                                 }
                             }
                         },
-                        onOpenTeamStats = onOpenTeamStats
+                        onOpenTeamStats = onOpenTeamStats,
+                        onClickPlayerRef = onClickPlayerRef
                     )
                 }
             }
@@ -1259,11 +1278,31 @@ private fun MatchDetailPane(
     onBackToGames: () -> Unit = {},
     onExportCalendar: () -> Unit,
     onTriggerCloseGameAlert: () -> Unit,
-    onOpenTeamStats: (String) -> Unit = {}
+    onOpenTeamStats: (String) -> Unit = {},
+    onClickPlayerRef: (String, String, String) -> Unit = { _, _, _ -> }
 ) {
     val strings = LocalCourtsideStrings.current
     var sortColumn by rememberSaveable { mutableStateOf(BoxscoreSortColumn.PIR) }
     var sortAscending by rememberSaveable { mutableStateOf(false) }
+    var showMomentumChart by rememberSaveable { mutableStateOf(false) }
+    var showPlayByPlay by rememberSaveable { mutableStateOf(false) }
+    var pbpQuarterFilter by rememberSaveable(game.id) { mutableStateOf(0) }
+    var pbpClutchOnly by rememberSaveable(game.id) { mutableStateOf(false) }
+
+    val allPlayByPlay = remember(game.id, game.playByPlay.size, game.homeScore, game.awayScore, game.status) {
+        game.playByPlay.ifEmpty { EuroLeagueMockRepository.buildFallbackPlayByPlayForGame(game) }
+    }
+    val hasOvertimePlays = remember(game, allPlayByPlay) {
+        game.currentQuarter >= 5 || (game.quarters.otHome ?: 0) > 0 || allPlayByPlay.any { it.quarter >= 5 }
+    }
+    val filteredPlayByPlay = remember(allPlayByPlay, pbpQuarterFilter, pbpClutchOnly) {
+        val base = when {
+            pbpClutchOnly -> allPlayByPlay.filter { it.isClutchPlay }
+            pbpQuarterFilter in 1..5 -> allPlayByPlay.filter { it.quarter == pbpQuarterFilter }
+            else -> allPlayByPlay
+        }
+        base.asReversed()
+    }
 
     val combinedPlayers = remember(game.boxscoreHome, game.boxscoreAway, sortColumn, sortAscending) {
         val all = game.boxscoreHome + game.boxscoreAway
@@ -1381,101 +1420,136 @@ private fun MatchDetailPane(
                 }
             } else {
                 item {
-                    InteractiveCourtShotChart(
-                        shots = game.shots,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(216.dp)
+                    CourtVisualModeToggle(
+                        showMomentum = showMomentumChart,
+                        onSelectMomentum = { showMomentumChart = it },
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
 
                 item {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(bottom = 6.dp)
-                        ) {
-                            Text(
-                                text = strings.playerBoxscoreHeader,
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp
-                            )
-                            Icon(
-                                Icons.Default.KeyboardArrowDown,
-                                contentDescription = null,
-                                tint = Color(0xFF8E8E93),
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        Row(
+                    if (showMomentumChart) {
+                        GameFlowMomentumCard(
+                            game = game,
+                            events = allPlayByPlay,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = strings.playerColumn,
-                                modifier = Modifier.weight(2.7f),
-                                color = Color(0xFF8E8E93),
-                                fontSize = 11.sp
-                            )
-                            BoxscoreSortColumn.entries.forEach { col ->
-                                val isPir = col == BoxscoreSortColumn.PIR
-                                Text(
-                                    text = if (isPir) "PIR ⌄" else col.name,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable {
-                                            if (sortColumn == col) sortAscending = !sortAscending
-                                            else {
-                                                sortColumn = col
-                                                sortAscending = false
-                                            }
-                                        },
-                                    textAlign = if (isPir) TextAlign.End else TextAlign.Center,
-                                    color = if (isPir || sortColumn == col) Color(0xFFFF6600) else Color(0xFF8E8E93),
-                                    fontWeight = if (isPir || sortColumn == col) FontWeight.Bold else FontWeight.Medium,
-                                    fontSize = 11.sp
-                                )
-                            }
-                        }
-                        HorizontalDivider(color = Color(0x1AFFFFFF))
+                                .height(216.dp)
+                        )
+                    } else {
+                        InteractiveCourtShotChart(
+                            shots = game.shots,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(216.dp)
+                        )
                     }
                 }
 
-                itemsIndexed(combinedPlayers, key = { index, item -> "m_${item.teamId}_${item.playerId}_$index" }) { index, row ->
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "${index + 1}. #${row.jerseyNumber} ${row.playerName}",
-                                modifier = Modifier.weight(2.7f),
-                                color = Color(0xFFE5E5EA),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            StatValueCell(row.points.toString(), Modifier.weight(1f))
-                            StatValueCell(row.totalRebounds.toString(), Modifier.weight(1f))
-                            StatValueCell(row.assists.toString(), Modifier.weight(1f))
-                            StatValueCell(row.steals.toString(), Modifier.weight(1f))
-                            StatValueCell(row.blocks.toString(), Modifier.weight(1f))
-                            Text(
-                                text = row.pir.toString(),
-                                modifier = Modifier.weight(1f),
-                                textAlign = TextAlign.End,
-                                color = Color(0xFFFF6600),
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 12.sp
-                            )
+                item {
+                    BoxscorePlayByPlayModeToggle(
+                        showPlayByPlay = showPlayByPlay,
+                        playCount = allPlayByPlay.size,
+                        onSelectPlayByPlay = { showPlayByPlay = it },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                if (showPlayByPlay) {
+                    item {
+                        PlayByPlayFilterBar(
+                            selectedQuarter = pbpQuarterFilter,
+                            hasOvertime = hasOvertimePlays,
+                            clutchOnly = pbpClutchOnly,
+                            onSelectQuarter = { q ->
+                                pbpClutchOnly = false
+                                pbpQuarterFilter = q
+                            },
+                            onToggleClutchOnly = { pbpClutchOnly = !pbpClutchOnly }
+                        )
+                    }
+
+                    itemsIndexed(filteredPlayByPlay, key = { index, ev -> "m_pbp_${ev.id}_$index" }) { _, ev ->
+                        PlayByPlayEventRow(
+                            event = ev,
+                            game = game,
+                            onClickPlayer = onClickPlayerRef
+                        )
+                    }
+                } else {
+                    item {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = strings.playerColumn,
+                                    modifier = Modifier.weight(2.7f),
+                                    color = Color(0xFF8E8E93),
+                                    fontSize = 11.sp
+                                )
+                                BoxscoreSortColumn.entries.forEach { col ->
+                                    val isPir = col == BoxscoreSortColumn.PIR
+                                    Text(
+                                        text = if (isPir) "PIR ⌄" else col.name,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable {
+                                                if (sortColumn == col) sortAscending = !sortAscending
+                                                else {
+                                                    sortColumn = col
+                                                    sortAscending = false
+                                                }
+                                            },
+                                        textAlign = if (isPir) TextAlign.End else TextAlign.Center,
+                                        color = if (isPir || sortColumn == col) Color(0xFFFF6600) else Color(0xFF8E8E93),
+                                        fontWeight = if (isPir || sortColumn == col) FontWeight.Bold else FontWeight.Medium,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                            HorizontalDivider(color = Color(0x1AFFFFFF))
                         }
-                        HorizontalDivider(color = Color(0x0DFFFFFF))
+                    }
+
+                    itemsIndexed(combinedPlayers, key = { index, item -> "m_${item.teamId}_${item.playerId}_$index" }) { index, row ->
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onClickPlayerRef(row.playerId, row.playerName, row.teamId) }
+                                    .pointerHoverIcon(PointerIcon.Hand)
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "${index + 1}. #${row.jerseyNumber} ${row.playerName}",
+                                    modifier = Modifier.weight(2.7f),
+                                    color = Color(0xFFE5E5EA),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                StatValueCell(row.points.toString(), Modifier.weight(1f))
+                                StatValueCell(row.totalRebounds.toString(), Modifier.weight(1f))
+                                StatValueCell(row.assists.toString(), Modifier.weight(1f))
+                                StatValueCell(row.steals.toString(), Modifier.weight(1f))
+                                StatValueCell(row.blocks.toString(), Modifier.weight(1f))
+                                Text(
+                                    text = row.pir.toString(),
+                                    modifier = Modifier.weight(1f),
+                                    textAlign = TextAlign.End,
+                                    color = Color(0xFFFF6600),
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 12.sp
+                                )
+                            }
+                            HorizontalDivider(color = Color(0x0DFFFFFF))
+                        }
                     }
                 }
             }
@@ -1503,50 +1577,88 @@ private fun MatchDetailPane(
                         .weight(1f)
                 )
             } else {
-                // 2. Glowing Half-Court Shot-Chart Card
-                InteractiveCourtShotChart(
-                    shots = game.shots,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1.05f)
-                )
-
-                // 3. Sleek Player Boxscore Table
+                // 2. Visual Mode Switcher + Shot Chart / Game Flow Momentum Curve
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
+                        .weight(1.08f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(bottom = 6.dp)
-                    ) {
-                        Text(
-                            text = strings.playerBoxscoreHeader,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
+                    CourtVisualModeToggle(
+                        showMomentum = showMomentumChart,
+                        onSelectMomentum = { showMomentumChart = it },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (showMomentumChart) {
+                        GameFlowMomentumCard(
+                            game = game,
+                            events = allPlayByPlay,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
                         )
-                        Icon(
-                            Icons.Default.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = Color(0xFF8E8E93),
-                            modifier = Modifier.size(18.dp)
+                    } else {
+                        InteractiveCourtShotChart(
+                            shots = game.shots,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
                         )
                     }
+                }
 
-                    SortableBoxscoreTable(
-                        stats = combinedPlayers,
-                        sortColumn = sortColumn,
-                        sortAscending = sortAscending,
-                        onSortChange = { col ->
-                            if (sortColumn == col) sortAscending = !sortAscending
-                            else {
-                                sortColumn = col
-                                sortAscending = false
+                // 3. Sleek Player Boxscore / Live Play-by-Play Feed
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1.05f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    BoxscorePlayByPlayModeToggle(
+                        showPlayByPlay = showPlayByPlay,
+                        playCount = allPlayByPlay.size,
+                        onSelectPlayByPlay = { showPlayByPlay = it },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (showPlayByPlay) {
+                        PlayByPlayFilterBar(
+                            selectedQuarter = pbpQuarterFilter,
+                            hasOvertime = hasOvertimePlays,
+                            clutchOnly = pbpClutchOnly,
+                            onSelectQuarter = { q ->
+                                pbpClutchOnly = false
+                                pbpQuarterFilter = q
+                            },
+                            onToggleClutchOnly = { pbpClutchOnly = !pbpClutchOnly }
+                        )
+
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            itemsIndexed(filteredPlayByPlay, key = { idx, ev -> "d_pbp_${ev.id}_$idx" }) { _, ev ->
+                                PlayByPlayEventRow(
+                                    event = ev,
+                                    game = game,
+                                    onClickPlayer = onClickPlayerRef
+                                )
                             }
                         }
-                    )
+                    } else {
+                        SortableBoxscoreTable(
+                            stats = combinedPlayers,
+                            sortColumn = sortColumn,
+                            sortAscending = sortAscending,
+                            onSortChange = { col ->
+                                if (sortColumn == col) sortAscending = !sortAscending
+                                else {
+                                    sortColumn = col
+                                    sortAscending = false
+                                }
+                            },
+                            onClickPlayer = { row ->
+                                onClickPlayerRef(row.playerId, row.playerName, row.teamId)
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -1988,7 +2100,8 @@ private fun SortableBoxscoreTable(
     stats: List<PlayerBoxscoreStat>,
     sortColumn: BoxscoreSortColumn,
     sortAscending: Boolean,
-    onSortChange: (BoxscoreSortColumn) -> Unit
+    onSortChange: (BoxscoreSortColumn) -> Unit,
+    onClickPlayer: (PlayerBoxscoreStat) -> Unit = {}
 ) {
     val strings = LocalCourtsideStrings.current
     Column(modifier = Modifier.fillMaxSize()) {
@@ -2027,6 +2140,8 @@ private fun SortableBoxscoreTable(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clickable { onClickPlayer(row) }
+                        .pointerHoverIcon(PointerIcon.Hand)
                         .padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {

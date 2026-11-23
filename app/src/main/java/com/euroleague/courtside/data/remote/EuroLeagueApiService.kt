@@ -9,6 +9,8 @@ import com.euroleague.courtside.data.repository.EuroLeagueMockRepository
 import com.euroleague.courtside.data.repository.EuroLeagueTeam
 import com.euroleague.courtside.data.repository.GameStatus
 import com.euroleague.courtside.data.repository.InjuryStatus
+import com.euroleague.courtside.data.repository.PlayByPlayEvent
+import com.euroleague.courtside.data.repository.PlayEventCategory
 import com.euroleague.courtside.data.repository.PlayerBoxscoreStat
 import com.euroleague.courtside.data.repository.PlayerProfile
 import com.euroleague.courtside.data.repository.QuarterScores
@@ -328,6 +330,35 @@ data class EuroLeagueLiveHeaderDto(
     @SerialName("ScoreExtraTimeB") val scoreExtraTimeB: Int = 0
 )
 
+@Serializable
+data class EuroLeagueLivePlayByPlayDto(
+    @SerialName("Live") val live: Boolean = false,
+    @SerialName("CodeTeamA") val codeTeamA: String = "",
+    @SerialName("CodeTeamB") val codeTeamB: String = "",
+    @SerialName("ActualQuarter") val actualQuarter: Int = 4,
+    @SerialName("FirstQuarter") val firstQuarter: List<EuroLeaguePlayByPlayRowDto>? = null,
+    @SerialName("SecondQuarter") val secondQuarter: List<EuroLeaguePlayByPlayRowDto>? = null,
+    @SerialName("ThirdQuarter") val thirdQuarter: List<EuroLeaguePlayByPlayRowDto>? = null,
+    @SerialName("ForthQuarter") val forthQuarter: List<EuroLeaguePlayByPlayRowDto>? = null,
+    @SerialName("FourthQuarter") val fourthQuarterAlt: List<EuroLeaguePlayByPlayRowDto>? = null,
+    @SerialName("ExtraTime") val extraTime: List<EuroLeaguePlayByPlayRowDto>? = null
+)
+
+@Serializable
+data class EuroLeaguePlayByPlayRowDto(
+    @SerialName("NUMBEROFPLAY") val numberOfPlay: Int = 0,
+    @SerialName("CODETEAM") val codeTeam: String? = null,
+    @SerialName("PLAYER_ID") val playerId: String? = null,
+    @SerialName("PLAYTYPE") val playType: String? = null,
+    @SerialName("PLAYER") val player: String? = null,
+    @SerialName("DORSAL") val dorsal: String? = null,
+    @SerialName("MINUTE") val minute: Int = 1,
+    @SerialName("MARKERTIME") val markerTime: String? = null,
+    @SerialName("POINTS_A") val pointsA: Int? = null,
+    @SerialName("POINTS_B") val pointsB: Int? = null,
+    @SerialName("PLAYINFO") val playInfo: String? = null
+)
+
 // --- BUNDLED SNAPSHOT DTOs (assets/euroleague_live_snapshot.json) ---
 
 @Serializable
@@ -528,6 +559,11 @@ interface EuroLeagueApiService {
     suspend fun fetchLiveGameHeader(
         @Url fullUrl: String
     ): EuroLeagueLiveHeaderDto
+
+    @GET
+    suspend fun fetchLiveGamePlayByPlay(
+        @Url fullUrl: String
+    ): EuroLeagueLivePlayByPlayDto
 }
 
 /**
@@ -1315,6 +1351,12 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                     homeTeamId = game.homeTeam.id,
                     awayTeamId = game.awayTeam.id
                 )
+                val pbpEvents = fetchGamePlayByPlay(
+                    seasonCode = game.seasonCode,
+                    gameCode = game.gameCode,
+                    homeTeamId = game.homeTeam.id,
+                    awayTeamId = game.awayTeam.id
+                )
                 val resolvedHome = boxHome.ifEmpty {
                     game.boxscoreHome.ifEmpty {
                         buildFallbackBoxscoreFromRoster(game.homeTeam.id, fallbackMockRepository.players)
@@ -1339,12 +1381,20 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                 val baseUpdated = game.copy(
                     boxscoreHome = resolvedHome,
                     boxscoreAway = resolvedAway,
-                    shots = resolvedShots
+                    shots = resolvedShots,
+                    playByPlay = pbpEvents.ifEmpty { game.playByPlay }
                 )
-                val updated = if (liveHeader != null && (liveHeader.live || headerHasScore)) {
+                val headerMerged = if (liveHeader != null && (liveHeader.live || headerHasScore)) {
                     applyLiveHeaderToGame(baseUpdated, liveHeader)
                 } else {
                     baseUpdated
+                }
+                val updated = if (headerMerged.playByPlay.isEmpty()) {
+                    headerMerged.copy(
+                        playByPlay = EuroLeagueMockRepository.buildFallbackPlayByPlayForGame(headerMerged)
+                    )
+                } else {
+                    headerMerged
                 }
                 fallbackMockRepository.updateSingleGameDetails(updated)
                 updated
@@ -1358,6 +1408,23 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
         val url = "https://live.euroleague.net/api/Header?gamecode=$gameCode&seasoncode=$seasonCode"
         apiService.fetchLiveGameHeader(url)
     }.getOrNull()
+
+    private suspend fun fetchGamePlayByPlay(
+        seasonCode: String,
+        gameCode: Int,
+        homeTeamId: String,
+        awayTeamId: String
+    ): List<PlayByPlayEvent> = runCatching {
+        if (gameCode <= 0) return@runCatching emptyList()
+        val url = "https://live.euroleague.net/api/PlaybyPlay?gamecode=$gameCode&seasoncode=$seasonCode"
+        val dto = apiService.fetchLiveGamePlayByPlay(url)
+        parseLivePlayByPlayStatic(
+            dto = dto,
+            gameCode = gameCode,
+            homeTeamId = homeTeamId,
+            awayTeamId = awayTeamId
+        )
+    }.getOrDefault(emptyList())
 
     internal fun shouldQueryLiveHeader(
         g: EuroLeagueRemoteGameDto,
@@ -2050,6 +2117,123 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                 awayScore = parsedScoreB ?: game.awayScore,
                 quarters = updatedQuarters
             )
+        }
+
+        internal fun parseLivePlayByPlayStatic(
+            dto: EuroLeagueLivePlayByPlayDto,
+            gameCode: Int,
+            homeTeamId: String,
+            awayTeamId: String
+        ): List<PlayByPlayEvent> {
+            val quarterBuckets: List<Pair<Int, List<EuroLeaguePlayByPlayRowDto>>> = listOf(
+                1 to dto.firstQuarter.orEmpty(),
+                2 to dto.secondQuarter.orEmpty(),
+                3 to dto.thirdQuarter.orEmpty(),
+                4 to (dto.forthQuarter ?: dto.fourthQuarterAlt).orEmpty(),
+                5 to dto.extraTime.orEmpty()
+            )
+            val codeHomeCanon = EuroLeagueMockRepository.canonicalClubId(
+                dto.codeTeamA.trim().ifEmpty { homeTeamId }
+            )
+            var runningHome = 0
+            var runningAway = 0
+            val out = mutableListOf<PlayByPlayEvent>()
+
+            for ((q, rows) in quarterBuckets) {
+                val qDuration = if (q >= 5) 5f else 10f
+                val qStart = if (q <= 4) (q - 1) * 10f else 40f
+
+                for ((idx, row) in rows.withIndex()) {
+                    val playType = row.playType?.trim()?.uppercase().orEmpty()
+                    // Skip silent substitution IN/OUT rows to keep the broadcast feed crisp
+                    if (playType == "IN" || playType == "OUT" || playType.isEmpty()) continue
+
+                    val prevH = runningHome
+                    val prevA = runningAway
+                    if (row.pointsA != null) runningHome = row.pointsA
+                    if (row.pointsB != null) runningAway = row.pointsB
+                    val ptsAdded = ((runningHome - prevH) + (runningAway - prevA)).coerceAtLeast(0)
+
+                    val rawTeam = row.codeTeam?.trim().orEmpty()
+                    val resolvedTeamId = when {
+                        rawTeam.isEmpty() -> ""
+                        EuroLeagueMockRepository.canonicalClubId(rawTeam) == codeHomeCanon ||
+                            EuroLeagueMockRepository.canonicalClubId(rawTeam) == EuroLeagueMockRepository.canonicalClubId(homeTeamId) -> homeTeamId
+                        else -> awayTeamId
+                    }
+
+                    val clockRaw = row.markerTime?.trim().orEmpty()
+                    val clock = if (clockRaw.contains(":")) {
+                        clockRaw
+                    } else {
+                        val minInQ = (row.minute - (q - 1) * 10).coerceIn(0, qDuration.toInt())
+                        "%02d:00".format((qDuration.toInt() - minInQ).coerceAtLeast(0))
+                    }
+                    val cParts = clock.split(":")
+                    val remMins = cParts.getOrNull(0)?.toFloatOrNull() ?: 0f
+                    val remSecs = cParts.getOrNull(1)?.toFloatOrNull() ?: 0f
+                    val elapsedInQ = (qDuration - (remMins + remSecs / 60f)).coerceIn(0f, qDuration)
+                    val gameMin = qStart + elapsedInQ
+
+                    val formattedPlayer = formatPlayByPlayPlayerName(row.player)
+                    val rawPlayerCode = row.playerId?.trim()?.removePrefix("P").orEmpty()
+                    val fullPlayerId = if (resolvedTeamId.isNotEmpty() && rawPlayerCode.isNotEmpty()) {
+                        "${resolvedTeamId}_$rawPlayerCode"
+                    } else ""
+
+                    val category = when (playType) {
+                        "3FGM" -> PlayEventCategory.THREE_PT
+                        "DUNK" -> PlayEventCategory.DUNK
+                        "2FGM", "LAYUPMD" -> PlayEventCategory.TWO_PT
+                        "FTM" -> PlayEventCategory.FREE_THROW
+                        "2FGA", "3FGA", "FTA", "LAYUPATT" -> PlayEventCategory.MISS
+                        "AS", "D", "O" -> PlayEventCategory.ASSIST_REB
+                        "ST", "FV", "AG" -> PlayEventCategory.STEAL_BLK
+                        "TO" -> PlayEventCategory.TURNOVER
+                        "CM", "CMU", "CMT", "CMD", "OF", "RV" -> PlayEventCategory.FOUL
+                        "TVO", "TOUT", "TOUT_TV" -> PlayEventCategory.TIMEOUT
+                        else -> PlayEventCategory.PERIOD
+                    }
+
+                    val desc = row.playInfo?.trim()?.takeIf { it.isNotEmpty() } ?: category.badgeLabel
+
+                    out.add(
+                        PlayByPlayEvent(
+                            id = "pbp_${gameCode}_${q}_${row.numberOfPlay}_$idx",
+                            playNumber = if (row.numberOfPlay > 0) row.numberOfPlay else idx + 1,
+                            quarter = q,
+                            clock = clock,
+                            gameMinute = gameMin,
+                            teamId = resolvedTeamId,
+                            playerId = fullPlayerId,
+                            playerName = formattedPlayer,
+                            jerseyNumber = row.dorsal?.trim()?.toIntOrNull(),
+                            playType = playType,
+                            category = category,
+                            description = desc,
+                            homeScore = runningHome,
+                            awayScore = runningAway,
+                            pointsScored = ptsAdded
+                        )
+                    )
+                }
+            }
+            return out
+        }
+
+        private fun formatPlayByPlayPlayerName(raw: String?): String {
+            val trimmed = raw?.trim().orEmpty()
+            if (trimmed.isEmpty()) return ""
+            return if ("," in trimmed) {
+                val parts = trimmed.split(",", limit = 2).map { it.trim() }
+                "${parts[1]} ${parts[0]}".lowercase().split(" ")
+                    .filter { it.isNotBlank() }
+                    .joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
+            } else {
+                trimmed.lowercase().split(" ")
+                    .filter { it.isNotBlank() }
+                    .joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
+            }
         }
     }
 }
