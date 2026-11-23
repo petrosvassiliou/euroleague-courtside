@@ -331,6 +331,12 @@ fun MainAppScaffold(
     var autoUpdateCheckEnabled by rememberSaveable {
         mutableStateOf(preferencesDataStore?.getSavedAutoUpdateEnabledImmediate() ?: true)
     }
+    var betaUpdateChannelEnabled by rememberSaveable {
+        mutableStateOf(
+            preferencesDataStore?.getSavedBetaUpdatesEnabledImmediate()
+                ?: CourtsideAppUpdateManager.isPreReleaseVersion(BuildConfig.VERSION_NAME)
+        )
+    }
 
     val onToggleAutoUpdateCheck: (Boolean) -> Unit = { enabled ->
         autoUpdateCheckEnabled = enabled
@@ -338,8 +344,23 @@ fun MainAppScaffold(
         scope.launch {
             preferencesDataStore?.setAutoUpdateCheckEnabled(enabled)
             if (enabled) {
-                CourtsideAppUpdateManager.checkForUpdates(isManual = false)
+                CourtsideAppUpdateManager.checkForUpdates(
+                    isManual = false,
+                    includePrereleases = betaUpdateChannelEnabled
+                )
             }
+        }
+    }
+
+    val onToggleBetaUpdateChannel: (Boolean) -> Unit = { enabled ->
+        betaUpdateChannelEnabled = enabled
+        preferencesDataStore?.saveBetaUpdatesEnabledImmediate(enabled)
+        scope.launch {
+            preferencesDataStore?.setBetaUpdatesEnabled(enabled)
+            CourtsideAppUpdateManager.checkForUpdates(
+                isManual = true,
+                includePrereleases = enabled
+            )
         }
     }
 
@@ -351,7 +372,10 @@ fun MainAppScaffold(
                 title = strings.checkingUpdatesLabel,
                 detail = "${strings.playProtectBadge} • v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})"
             )
-            val info = CourtsideAppUpdateManager.checkForUpdates(isManual = true)
+            val info = CourtsideAppUpdateManager.checkForUpdates(
+                isManual = true,
+                includePrereleases = betaUpdateChannelEnabled
+            )
             syncFeedbackBanner = when (info.status) {
                 UpdateStatus.UPDATE_AVAILABLE -> LiveSyncFeedbackState(
                     isRunning = false,
@@ -380,10 +404,13 @@ fun MainAppScaffold(
     }
 
     // Automatischer Google Play Protect-konformer Update-Check beim App-Start & alle 6 Stunden
-    LaunchedEffect(autoUpdateCheckEnabled) {
+    LaunchedEffect(autoUpdateCheckEnabled, betaUpdateChannelEnabled) {
         if (autoUpdateCheckEnabled) {
             while (true) {
-                CourtsideAppUpdateManager.checkForUpdates(isManual = false)
+                CourtsideAppUpdateManager.checkForUpdates(
+                    isManual = false,
+                    includePrereleases = betaUpdateChannelEnabled
+                )
                 delay(6 * 60 * 60 * 1_000L)
             }
         }
@@ -737,6 +764,8 @@ fun MainAppScaffold(
                             updateInfo = updateInfo,
                             autoUpdateCheckEnabled = autoUpdateCheckEnabled,
                             onToggleAutoUpdateCheck = onToggleAutoUpdateCheck,
+                            betaUpdateChannelEnabled = betaUpdateChannelEnabled,
+                            onToggleBetaUpdateChannel = onToggleBetaUpdateChannel,
                             onCheckForUpdatesManual = triggerManualUpdateCheck,
                             onInstallUpdate = {
                                 CourtsideAppUpdateManager.launchPlayProtectCompliantUpdate(context, updateInfo)

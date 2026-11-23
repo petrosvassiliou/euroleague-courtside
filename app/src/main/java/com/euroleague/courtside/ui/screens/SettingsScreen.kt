@@ -167,6 +167,8 @@ internal fun SettingsAndNotificationTestScreen(
     updateInfo: AppUpdateInfo = AppUpdateInfo(),
     autoUpdateCheckEnabled: Boolean = true,
     onToggleAutoUpdateCheck: (Boolean) -> Unit = {},
+    betaUpdateChannelEnabled: Boolean = CourtsideAppUpdateManager.isPreReleaseVersion(BuildConfig.VERSION_NAME),
+    onToggleBetaUpdateChannel: (Boolean) -> Unit = {},
     onCheckForUpdatesManual: () -> Unit = {},
     onInstallUpdate: () -> Unit = {},
     onOpenReleaseNotes: () -> Unit = {}
@@ -308,7 +310,8 @@ internal fun SettingsAndNotificationTestScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Color(0xFF15151B))
+                            .background(CourtsideDesignTokens.PillSurface)
+                            .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(10.dp))
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
@@ -332,6 +335,39 @@ internal fun SettingsAndNotificationTestScreen(
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = CourtsideDesignTokens.OnAccentText,
                                 checkedTrackColor = CourtsideDesignTokens.NeonMadeGreen
+                            )
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(CourtsideDesignTokens.PillSurface)
+                            .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(10.dp))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text(
+                                text = strings.betaUpdateChannelTitle,
+                                color = CourtsideDesignTokens.PrimaryText,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                text = strings.betaUpdateChannelSubtitle,
+                                color = CourtsideDesignTokens.MutedText,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = betaUpdateChannelEnabled,
+                            onCheckedChange = onToggleBetaUpdateChannel,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = CourtsideDesignTokens.OnAccentText,
+                                checkedTrackColor = CourtsideDesignTokens.EuroLeagueOrange
                             )
                         )
                     }
@@ -790,7 +826,8 @@ internal fun SettingsAndNotificationTestScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
-                            .background(Color(0xFF15151B))
+                            .background(CourtsideDesignTokens.PillSurface)
+                            .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(10.dp))
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
@@ -814,6 +851,41 @@ internal fun SettingsAndNotificationTestScreen(
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = CourtsideDesignTokens.OnAccentText,
                                 checkedTrackColor = CourtsideDesignTokens.NeonMadeGreen
+                            ),
+                            modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
+                        )
+                    }
+
+                    // Beta / Pre-Release Update Channel Switch
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(CourtsideDesignTokens.PillSurface)
+                            .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(10.dp))
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text(
+                                text = strings.betaUpdateChannelTitle,
+                                color = CourtsideDesignTokens.PrimaryText,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                text = strings.betaUpdateChannelSubtitle,
+                                color = CourtsideDesignTokens.MutedText,
+                                fontSize = 11.sp
+                            )
+                        }
+                        Switch(
+                            checked = betaUpdateChannelEnabled,
+                            onCheckedChange = onToggleBetaUpdateChannel,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = CourtsideDesignTokens.OnAccentText,
+                                checkedTrackColor = CourtsideDesignTokens.EuroLeagueOrange
                             ),
                             modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
                         )

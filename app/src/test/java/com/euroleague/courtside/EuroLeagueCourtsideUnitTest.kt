@@ -410,6 +410,77 @@ class EuroLeagueCourtsideUnitTest {
         )
         assertEquals(com.euroleague.courtside.update.UpdateStatus.UP_TO_DATE, upToDateInfo.status)
 
+        // Verify GitHub `/releases?per_page=15` JSON array with beta pre-releases:
+        val sampleReleasesListJson = """
+            [
+              {
+                "tag_name": "v1.8.0-beta.3",
+                "name": "EuroLeague Courtside v1.8.0-beta.3 (Build 19 — Beta Pre-Release Signed APK)",
+                "html_url": "https://github.com/petrosvassiliou/euroleague-courtside/releases/tag/v1.8.0-beta.3",
+                "body": "Beta 3 headshot fix",
+                "draft": false,
+                "prerelease": true,
+                "assets": [
+                  {
+                    "name": "EuroLeague-Courtside-v1.8.0-beta.3.apk",
+                    "browser_download_url": "https://github.com/petrosvassiliou/euroleague-courtside/releases/download/v1.8.0-beta.3/EuroLeague-Courtside-v1.8.0-beta.3.apk",
+                    "size": 5240000,
+                    "digest": "sha256:aaa111222333444555666777888999000aaabbbcccdddeeefff0001112223334"
+                  }
+                ]
+              },
+              {
+                "tag_name": "v1.7.0",
+                "name": "EuroLeague Courtside v1.7.0 (Build 16 — Official Signed Release APK)",
+                "html_url": "https://github.com/petrosvassiliou/euroleague-courtside/releases/tag/v1.7.0",
+                "body": "Official stable v1.7.0",
+                "draft": false,
+                "prerelease": false,
+                "assets": [
+                  {
+                    "name": "EuroLeague-Courtside-v1.7.0.apk",
+                    "browser_download_url": "https://github.com/petrosvassiliou/euroleague-courtside/releases/download/v1.7.0/EuroLeague-Courtside-v1.7.0.apk",
+                    "size": 5100000
+                  }
+                ]
+              }
+            ]
+        """.trimIndent()
+
+        // Installed beta build (1.8.0-beta.2) automatically detects newer beta (1.8.0-beta.3)
+        val betaUpgrade = manager.evaluateReleasePayload(
+            rawJson = sampleReleasesListJson,
+            currentVersionName = "1.8.0-beta.2",
+            currentVersionCode = 18,
+            checkedAtTime = "20:42:30",
+            isManual = true
+        )
+        assertEquals(com.euroleague.courtside.update.UpdateStatus.UPDATE_AVAILABLE, betaUpgrade.status)
+        assertEquals("1.8.0-beta.3", betaUpgrade.latestVersionName)
+        assertEquals(19, betaUpgrade.latestVersionCode)
+        assertTrue(betaUpgrade.isPreRelease)
+        assertTrue(betaUpgrade.apkDownloadUrl.endsWith("EuroLeague-Courtside-v1.8.0-beta.3.apk"))
+
+        // Stable build (1.7.0) ignores beta pre-releases by default unless beta channel is opted in
+        val stableDefault = manager.evaluateReleasePayload(
+            rawJson = sampleReleasesListJson,
+            currentVersionName = "1.7.0",
+            currentVersionCode = 16,
+            isManual = true,
+            includePrereleases = false
+        )
+        assertEquals(com.euroleague.courtside.update.UpdateStatus.UP_TO_DATE, stableDefault.status)
+
+        val stableOptInBeta = manager.evaluateReleasePayload(
+            rawJson = sampleReleasesListJson,
+            currentVersionName = "1.7.0",
+            currentVersionCode = 16,
+            isManual = true,
+            includePrereleases = true
+        )
+        assertEquals(com.euroleague.courtside.update.UpdateStatus.UPDATE_AVAILABLE, stableOptInBeta.status)
+        assertEquals("1.8.0-beta.3", stableOptInBeta.latestVersionName)
+
         AppLanguage.entries.forEach { lang ->
             val strings = CourtsideTranslations.forLanguage(lang)
             assertTrue(strings.updateSectionTitle.isNotBlank())

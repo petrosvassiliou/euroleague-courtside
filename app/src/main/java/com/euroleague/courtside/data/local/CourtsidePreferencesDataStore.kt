@@ -8,8 +8,10 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.euroleague.courtside.BuildConfig
 import com.euroleague.courtside.i18n.AppLanguage
 import com.euroleague.courtside.ui.theme.AppThemeMode
+import com.euroleague.courtside.update.CourtsideAppUpdateManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -27,6 +29,7 @@ data class UserPreferencesState(
     val halftimeFinalScoreEnabled: Boolean = true,
     val closeGameAlertEnabled: Boolean = true,
     val autoUpdateCheckEnabled: Boolean = true,
+    val betaUpdateChannelEnabled: Boolean = CourtsideAppUpdateManager.isPreReleaseVersion(BuildConfig.VERSION_NAME),
     val language: AppLanguage = AppLanguage.DE,
     val themeMode: AppThemeMode = AppThemeMode.LIGHT
 )
@@ -47,6 +50,7 @@ class CourtsidePreferencesDataStore @Inject constructor(
         private const val KEY_QUICK_FAV_IDS = "favorite_team_ids"
         private const val KEY_QUICK_LANG = "app_language_code"
         private const val KEY_QUICK_AUTO_UPDATE = "auto_update_check_enabled"
+        private const val KEY_QUICK_BETA_UPDATES = "beta_update_channel_enabled"
         private const val KEY_QUICK_TIP_OFF = "tip_off_alarm_enabled"
         private const val KEY_QUICK_HT_FINAL = "halftime_final_score_enabled"
         private const val KEY_QUICK_CLOSE_GAME = "close_game_alert_enabled"
@@ -64,6 +68,7 @@ class CourtsidePreferencesDataStore @Inject constructor(
         val HALFTIME_FINAL_SCORE = booleanPreferencesKey("halftime_final_score_enabled")
         val CLOSE_GAME_ALERT = booleanPreferencesKey("close_game_alert_enabled")
         val AUTO_UPDATE_CHECK = booleanPreferencesKey("auto_update_check_enabled")
+        val BETA_UPDATE_CHANNEL = booleanPreferencesKey("beta_update_channel_enabled")
         val APP_LANGUAGE = stringPreferencesKey("app_language_code")
         val APP_THEME_MODE = stringPreferencesKey("app_theme_mode")
     }
@@ -91,6 +96,13 @@ class CourtsidePreferencesDataStore @Inject constructor(
     fun getSavedAutoUpdateEnabledImmediate(): Boolean =
         quickBootPrefs.getBoolean(KEY_QUICK_AUTO_UPDATE, true)
 
+    fun getSavedBetaUpdatesEnabledImmediate(): Boolean =
+        if (quickBootPrefs.contains(KEY_QUICK_BETA_UPDATES)) {
+            quickBootPrefs.getBoolean(KEY_QUICK_BETA_UPDATES, true)
+        } else {
+            CourtsideAppUpdateManager.isPreReleaseVersion(BuildConfig.VERSION_NAME)
+        }
+
     fun getSavedTipOffAlarmImmediate(): Boolean =
         quickBootPrefs.getBoolean(KEY_QUICK_TIP_OFF, true)
 
@@ -115,6 +127,12 @@ class CourtsidePreferencesDataStore @Inject constructor(
     fun saveAutoUpdateEnabledImmediate(enabled: Boolean) {
         quickBootPrefs.edit()
             .putBoolean(KEY_QUICK_AUTO_UPDATE, enabled)
+            .commit()
+    }
+
+    fun saveBetaUpdatesEnabledImmediate(enabled: Boolean) {
+        quickBootPrefs.edit()
+            .putBoolean(KEY_QUICK_BETA_UPDATES, enabled)
             .commit()
     }
 
@@ -149,6 +167,8 @@ class CourtsidePreferencesDataStore @Inject constructor(
             ?: quickBootPrefs.getString(KEY_QUICK_LANG, null)
         val resolvedAutoUpdate = prefs[Keys.AUTO_UPDATE_CHECK]
             ?: getSavedAutoUpdateEnabledImmediate()
+        val resolvedBetaUpdates = prefs[Keys.BETA_UPDATE_CHANNEL]
+            ?: getSavedBetaUpdatesEnabledImmediate()
 
         // Synchronisiere DataStore-Werte in den Quick-Boot-Speicher für den nächsten Kaltstart
         if (prefs[Keys.PRIMARY_TEAM_ID] != null && getSavedPrimaryTeamImmediate() == null) {
@@ -168,6 +188,7 @@ class CourtsidePreferencesDataStore @Inject constructor(
             halftimeFinalScoreEnabled = prefs[Keys.HALFTIME_FINAL_SCORE] ?: getSavedHalftimeFinalImmediate(),
             closeGameAlertEnabled = prefs[Keys.CLOSE_GAME_ALERT] ?: getSavedCloseGameAlertImmediate(),
             autoUpdateCheckEnabled = resolvedAutoUpdate,
+            betaUpdateChannelEnabled = resolvedBetaUpdates,
             language = AppLanguage.fromCode(resolvedLangCode),
             themeMode = AppThemeMode.fromCode(resolvedThemeCode)
         )
@@ -191,6 +212,13 @@ class CourtsidePreferencesDataStore @Inject constructor(
         saveAutoUpdateEnabledImmediate(enabled)
         context.dataStore.edit { prefs ->
             prefs[Keys.AUTO_UPDATE_CHECK] = enabled
+        }
+    }
+
+    suspend fun setBetaUpdatesEnabled(enabled: Boolean) {
+        saveBetaUpdatesEnabledImmediate(enabled)
+        context.dataStore.edit { prefs ->
+            prefs[Keys.BETA_UPDATE_CHANNEL] = enabled
         }
     }
 

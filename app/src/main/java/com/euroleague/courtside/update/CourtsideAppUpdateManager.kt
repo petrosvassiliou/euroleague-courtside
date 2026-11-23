@@ -61,6 +61,7 @@ data class AppUpdateInfo(
     val apkSizeBytes: Long = 0L,
     val lastCheckedTime: String = "",
     val isManualCheck: Boolean = false,
+    val isPreRelease: Boolean = false,
     val errorMessage: String? = null
 ) {
     companion object {
@@ -68,8 +69,12 @@ data class AppUpdateInfo(
         const val GITHUB_REPO = "euroleague-courtside"
         const val LATEST_RELEASE_API_URL =
             "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"
+        const val RELEASES_LIST_API_URL =
+            "https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases?per_page=15"
         const val LATEST_RELEASE_HTML_URL =
             "https://github.com/$GITHUB_OWNER/$GITHUB_REPO/releases/latest"
+        const val RELEASES_HTML_URL =
+            "https://github.com/$GITHUB_OWNER/$GITHUB_REPO/releases"
         const val PLAY_STORE_PACKAGE = "com.android.vending"
     }
 }
@@ -112,6 +117,11 @@ object CourtsideAppUpdateManager {
         val norm = normalizeVersionName(raw).substringBefore("+")
         return if ("-" in norm) norm.substringAfter("-").trim().lowercase().takeIf { it.isNotEmpty() } else null
     }
+
+    /**
+     * Returns true when a version string carries a SemVer pre-release tag (e.g. "1.8.0-beta.4" or "v1.8.0-rc.1").
+     */
+    fun isPreReleaseVersion(raw: String): Boolean = extractPreReleaseSuffix(raw) != null
 
     /**
      * Parses a `Build <number>` integer from a GitHub Release title or body if present
@@ -182,16 +192,61 @@ object CourtsideAppUpdateManager {
     }
 
     /**
-     * Parses a GitHub Release JSON payload into an [AppUpdateInfo] state.
+     * Parses either a single GitHub Release JSON object (`/releases/latest`) or a JSON array of
+     * releases (`/releases?per_page=15`) into an [AppUpdateInfo] state, automatically including
+     * beta/RC pre-releases when the installed build is on a pre-release track or [includePrereleases] is enabled.
      */
     fun evaluateReleasePayload(
         rawJson: String,
         currentVersionName: String = BuildConfig.VERSION_NAME,
         currentVersionCode: Int = BuildConfig.VERSION_CODE,
         checkedAtTime: String = "",
-        isManual: Boolean = false
+        isManual: Boolean = false,
+        includePrereleases: Boolean = isPreReleaseVersion(currentVersionName)
     ): AppUpdateInfo {
-        val dto = jsonParser.decodeFromString<GitHubReleaseDto>(rawJson)
+        val allowPrereleases = includePrereleases || isPreReleaseVersion(currentVersionName)
+        val trimmed = rawJson.trimStart()
+        val candidates: List<GitHubReleaseDto> = if (trimmed.startsWith("[")) {
+            jsonParser.decodeFromString<List<GitHubReleaseDto>>(rawJson)
+        } else {
+            listOf(jsonParser.decodeFromString<GitHubReleaseDto>(rawJson))
+        }
+
+        val eligible = candidates
+            .filter { dto ->
+                !dto.draft &&
+                    normalizeVersionName(dto.tagName.ifBlank { dto.name }).isNotBlank() &&
+                    (allowPrereleases || !dto.prerelease)
+            }
+            .sortedWith { a, b ->
+                val verA = normalizeVersionName(a.tagName.ifBlank { a.name })
+                val verB = normalizeVersionName(b.tagName.ifBlank { b.name })
+                val semCmp = compareSemanticVersions(verB, verA)
+                if (semCmp != 0) {
+                    semCmp
+                } else {
+                    val buildA = extractBuildNumber(a.name, a.body) ?: 0
+                    val buildB = extractBuildNumber(b.name, b.body) ?: 0
+                    buildB.compareTo(buildA)
+                }
+            }
+
+        val dto = eligible.firstOrNull()
+        if (dto == null) {
+            return AppUpdateInfo(
+                status = UpdateStatus.UP_TO_DATE,
+                currentVersionName = currentVersionName,
+                currentVersionCode = currentVersionCode,
+                latestVersionName = currentVersionName,
+                latestVersionCode = currentVersionCode,
+                releaseTitle = "EuroLeague Courtside v$currentVersionName (Build $currentVersionCode)",
+                releasePageUrl = if (allowPrereleases) AppUpdateInfo.RELEASES_HTML_URL else AppUpdateInfo.LATEST_RELEASE_HTML_URL,
+                lastCheckedTime = checkedAtTime,
+                isManualCheck = isManual,
+                isPreRelease = isPreReleaseVersion(currentVersionName)
+            )
+        }
+
         val remoteVer = normalizeVersionName(dto.tagName.ifBlank { dto.name })
         val remoteBuild = extractBuildNumber(dto.name, dto.body)
 
@@ -205,7 +260,7 @@ object CourtsideAppUpdateManager {
                 asset.browserDownloadUrl.startsWith("https://github.com/${AppUpdateInfo.GITHUB_OWNER}/${AppUpdateInfo.GITHUB_REPO}/")
         }
 
-        val isNewer = !dto.draft && !dto.prerelease && remoteVer.isNotBlank() &&
+        val isNewer = remoteVer.isNotBlank() &&
             isRemoteReleaseNewer(
                 remoteVersionName = remoteVer,
                 remoteBuildCode = remoteBuild,
@@ -213,36 +268,55 @@ object CourtsideAppUpdateManager {
                 currentBuildCode = currentVersionCode
             )
 
+        val fallbackHtmlUrl = if (allowPrereleases) AppUpdateInfo.RELEASES_HTML_URL else AppUpdateInfo.LATEST_RELEASE_HTML_URL
         val safeReleaseUrl = dto.htmlUrl
             .takeIf { it.startsWith("https://github.com/${AppUpdateInfo.GITHUB_OWNER}/${AppUpdateInfo.GITHUB_REPO}/") }
-            ?: AppUpdateInfo.LATEST_RELEASE_HTML_URL
+            ?: fallbackHtmlUrl
 
         val safeApkUrl = signedReleaseAsset?.browserDownloadUrl
             ?.takeIf { it.startsWith("https://github.com/${AppUpdateInfo.GITHUB_OWNER}/${AppUpdateInfo.GITHUB_REPO}/") }
             ?: safeReleaseUrl
 
+        val installedAheadOfRemote = !isNewer && compareSemanticVersions(remoteVer, currentVersionName) < 0
+
         return AppUpdateInfo(
             status = if (isNewer) UpdateStatus.UPDATE_AVAILABLE else UpdateStatus.UP_TO_DATE,
             currentVersionName = currentVersionName,
             currentVersionCode = currentVersionCode,
-            latestVersionName = remoteVer.ifBlank { currentVersionName },
-            latestVersionCode = remoteBuild,
-            releaseTitle = dto.name.ifBlank { "v$remoteVer" },
+            latestVersionName = if (installedAheadOfRemote) currentVersionName else remoteVer.ifBlank { currentVersionName },
+            latestVersionCode = if (installedAheadOfRemote) currentVersionCode else remoteBuild,
+            releaseTitle = if (installedAheadOfRemote) {
+                "EuroLeague Courtside v$currentVersionName (Build $currentVersionCode)"
+            } else {
+                dto.name.ifBlank { "v$remoteVer" }
+            },
             releaseNotes = dto.body.trim(),
             apkDownloadUrl = safeApkUrl,
             releasePageUrl = safeReleaseUrl,
-            sha256Digest = signedReleaseAsset?.digest?.removePrefix("sha256:"),
-            apkSizeBytes = signedReleaseAsset?.size ?: 0L,
+            sha256Digest = if (installedAheadOfRemote) null else signedReleaseAsset?.digest?.removePrefix("sha256:"),
+            apkSizeBytes = if (installedAheadOfRemote) 0L else (signedReleaseAsset?.size ?: 0L),
             lastCheckedTime = checkedAtTime,
             isManualCheck = isManual,
+            isPreRelease = dto.prerelease || isPreReleaseVersion(remoteVer),
             errorMessage = null
         )
     }
 
     /**
-     * Queries the official GitHub Releases endpoint over HTTPS to check for a newer signed APK release.
+     * Queries the official GitHub Releases endpoint over HTTPS to check for a newer signed APK release
+     * (automatically checking pre-releases when running a beta/RC build or when [includePrereleases] is enabled).
      */
-    suspend fun checkForUpdates(isManual: Boolean = false): AppUpdateInfo = withContext(Dispatchers.IO) {
+    suspend fun checkForUpdates(
+        isManual: Boolean = false,
+        includePrereleases: Boolean = isPreReleaseVersion(BuildConfig.VERSION_NAME)
+    ): AppUpdateInfo = withContext(Dispatchers.IO) {
+        val allowPrereleases = includePrereleases || isPreReleaseVersion(BuildConfig.VERSION_NAME)
+        val endpointUrl = if (allowPrereleases) {
+            AppUpdateInfo.RELEASES_LIST_API_URL
+        } else {
+            AppUpdateInfo.LATEST_RELEASE_API_URL
+        }
+
         val prev = _updateState.value
         _updateState.value = prev.copy(
             status = UpdateStatus.CHECKING,
@@ -255,7 +329,7 @@ object CourtsideAppUpdateManager {
         }.getOrDefault("")
 
         val result = runCatching {
-            val connection = (URL(AppUpdateInfo.LATEST_RELEASE_API_URL).openConnection() as HttpURLConnection).apply {
+            val connection = (URL(endpointUrl).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 8_000
                 readTimeout = 8_000
@@ -273,7 +347,8 @@ object CourtsideAppUpdateManager {
                     currentVersionName = BuildConfig.VERSION_NAME,
                     currentVersionCode = BuildConfig.VERSION_CODE,
                     checkedAtTime = timeStr,
-                    isManual = isManual
+                    isManual = isManual,
+                    includePrereleases = allowPrereleases
                 )
             } finally {
                 connection.disconnect()
