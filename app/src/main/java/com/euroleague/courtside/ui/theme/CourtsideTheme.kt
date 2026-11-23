@@ -4,6 +4,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,14 +12,12 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -26,7 +25,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -38,42 +40,162 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.Image
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.euroleague.courtside.data.repository.EuroLeagueTeam
 
 /**
- * Einheitliche "Courtside UI" Design-Sprache für die gesamte App:
- * - Tiefes Obsidian-Shell-Layout (#0B0B0E Sidebar, #111115 Center-Pane, #0E0E12 Detail-Pane)
- * - Dunkle Broadcast-Karten (#17171C) mit feinen Glas-Rändern und warmem #FF6600 Radial-Glow bei Auswahl/Hover
- * - Dual-Tone-Verlaufs-Header (Vereinsfarbe Links -> #17171C -> Vereinsfarbe Rechts)
- * - Neon-Akzente (#00E676 Made/Playoffs, #FF3B5C Missed/Crunch, #FF6600 PIR & Primary)
+ * Unterstützte Erscheinungsbilder für EuroLeague Courtside.
+ * Standardmäßig startet die App im hellen Daylight-Design (`LIGHT`).
+ */
+enum class AppThemeMode(val code: String) {
+    LIGHT("light"),
+    DARK("dark");
+
+    val isLight: Boolean get() = this == LIGHT
+
+    fun toggled(): AppThemeMode = if (this == LIGHT) DARK else LIGHT
+
+    companion object {
+        val DEFAULT: AppThemeMode = LIGHT
+
+        fun fromCode(code: String?): AppThemeMode =
+            if (code?.trim()?.equals("dark", ignoreCase = true) == true) DARK else LIGHT
+    }
+}
+
+data class CourtsidePalette(
+    val mode: AppThemeMode,
+    val shellBackground: Color,
+    val sidebarSurface: Color,
+    val centerPaneSurface: Color,
+    val detailPaneSurface: Color,
+    val cardSurface: Color,
+    val cardSelectedBase: Color,
+    val elevatedSurface: Color,
+    val pillSurface: Color,
+    val subtleGlassBorder: Color,
+    val dividerSubtle: Color,
+    val zebraRowSurface: Color,
+    val chartGridStrong: Color,
+    val chartGridSubtle: Color,
+    val euroLeagueOrange: Color,
+    val liveBadgeOrangeRed: Color,
+    val neonMadeGreen: Color,
+    val neonMissedRed: Color,
+    val primaryText: Color,
+    val secondaryText: Color,
+    val mutedText: Color,
+    val onAccentText: Color,
+    val bannerCenterSurface: Color,
+    val bannerClubAlpha: Float
+)
+
+val LightCourtsidePalette = CourtsidePalette(
+    mode = AppThemeMode.LIGHT,
+    shellBackground = Color(0xFFF4F6FA),
+    sidebarSurface = Color(0xFFFFFFFF),
+    centerPaneSurface = Color(0xFFF8F9FC),
+    detailPaneSurface = Color(0xFFF4F6FA),
+    cardSurface = Color(0xFFFFFFFF),
+    cardSelectedBase = Color(0xFFFFF5EE),
+    elevatedSurface = Color(0xFFF0F3F9),
+    pillSurface = Color(0xFFE8ECF4),
+    subtleGlassBorder = Color(0xFFDCE2EE),
+    dividerSubtle = Color(0xFFE5E9F2),
+    zebraRowSurface = Color(0x090F172A),
+    chartGridStrong = Color(0xFF94A3B8),
+    chartGridSubtle = Color(0xFFCBD5E1),
+    euroLeagueOrange = Color(0xFFEA580C),
+    liveBadgeOrangeRed = Color(0xFFE03E00),
+    neonMadeGreen = Color(0xFF059669),
+    neonMissedRed = Color(0xFFE11D48),
+    primaryText = Color(0xFF0F172A),
+    secondaryText = Color(0xFF334155),
+    mutedText = Color(0xFF64748B),
+    onAccentText = Color(0xFFFFFFFF),
+    bannerCenterSurface = Color(0xFFFFFFFF),
+    bannerClubAlpha = 0.16f
+)
+
+val DarkCourtsidePalette = CourtsidePalette(
+    mode = AppThemeMode.DARK,
+    shellBackground = Color(0xFF0E0E11),
+    sidebarSurface = Color(0xFF0B0B0E),
+    centerPaneSurface = Color(0xFF111115),
+    detailPaneSurface = Color(0xFF0E0E12),
+    cardSurface = Color(0xFF17171C),
+    cardSelectedBase = Color(0xFF1D1716),
+    elevatedSurface = Color(0xFF151519),
+    pillSurface = Color(0xFF1B1B21),
+    subtleGlassBorder = Color(0xFF26262F),
+    dividerSubtle = Color(0x14FFFFFF),
+    zebraRowSurface = Color(0x06FFFFFF),
+    chartGridStrong = Color(0x55FFFFFF),
+    chartGridSubtle = Color(0x28FFFFFF),
+    euroLeagueOrange = Color(0xFFFF6600),
+    liveBadgeOrangeRed = Color(0xFFFF4500),
+    neonMadeGreen = Color(0xFF00E676),
+    neonMissedRed = Color(0xFFFF3B5C),
+    primaryText = Color(0xFFFFFFFF),
+    secondaryText = Color(0xFFD1D5DB),
+    mutedText = Color(0xFF8E8E93),
+    onAccentText = Color(0xFF000000),
+    bannerCenterSurface = Color(0xFF17171C),
+    bannerClubAlpha = 0.46f
+)
+
+fun paletteForThemeMode(mode: AppThemeMode): CourtsidePalette =
+    if (mode == AppThemeMode.DARK) DarkCourtsidePalette else LightCourtsidePalette
+
+val LocalAppThemeMode = compositionLocalOf { AppThemeMode.LIGHT }
+val LocalCourtsidePalette = compositionLocalOf { LightCourtsidePalette }
+
+/**
+ * Einheitliche "Courtside UI" Design-Tokens für Light Mode (Standard) & Dark Mode (Obsidian).
  */
 object CourtsideDesignTokens {
-    val ShellObsidian = Color(0xFF0E0E11)
-    val SidebarObsidian = Color(0xFF0B0B0E)
-    val CenterPaneSurface = Color(0xFF111115)
-    val DetailPaneSurface = Color(0xFF0E0E12)
-    val CardSurface = Color(0xFF17171C)
-    val CardSelectedBase = Color(0xFF1D1716)
-    val PillSurface = Color(0xFF1B1B21)
-    val SubtleGlassBorder = Color(0xFF26262F)
-    val EuroLeagueOrange = Color(0xFFFF6600)
-    val LiveBadgeOrangeRed = Color(0xFFFF4500)
-    val NeonMadeGreen = Color(0xFF00E676)
-    val NeonMissedRed = Color(0xFFFF3B5C)
-    val MutedText = Color(0xFF8E8E93)
-    val PrimaryText = Color(0xFFF2F2F7)
+    @Volatile
+    var activeMode: AppThemeMode = AppThemeMode.DEFAULT
+
+    val currentPalette: CourtsidePalette
+        get() = paletteForThemeMode(activeMode)
+
+    val isLightMode: Boolean
+        get() = activeMode == AppThemeMode.LIGHT
+
+    val ShellObsidian: Color get() = currentPalette.shellBackground
+    val SidebarObsidian: Color get() = currentPalette.sidebarSurface
+    val CenterPaneSurface: Color get() = currentPalette.centerPaneSurface
+    val DetailPaneSurface: Color get() = currentPalette.detailPaneSurface
+    val CardSurface: Color get() = currentPalette.cardSurface
+    val CardSelectedBase: Color get() = currentPalette.cardSelectedBase
+    val ElevatedSurface: Color get() = currentPalette.elevatedSurface
+    val PillSurface: Color get() = currentPalette.pillSurface
+    val SubtleGlassBorder: Color get() = currentPalette.subtleGlassBorder
+    val DividerSubtle: Color get() = currentPalette.dividerSubtle
+    val ZebraRowSurface: Color get() = currentPalette.zebraRowSurface
+    val ChartGridStrong: Color get() = currentPalette.chartGridStrong
+    val ChartGridSubtle: Color get() = currentPalette.chartGridSubtle
+    val EuroLeagueOrange: Color get() = currentPalette.euroLeagueOrange
+    val LiveBadgeOrangeRed: Color get() = currentPalette.liveBadgeOrangeRed
+    val NeonMadeGreen: Color get() = currentPalette.neonMadeGreen
+    val NeonMissedRed: Color get() = currentPalette.neonMissedRed
+    val PrimaryText: Color get() = currentPalette.primaryText
+    val SecondaryText: Color get() = currentPalette.secondaryText
+    val MutedText: Color get() = currentPalette.mutedText
+    val OnAccentText: Color get() = currentPalette.onAccentText
+    val BannerCenterSurface: Color get() = currentPalette.bannerCenterSurface
+    val BannerClubAlpha: Float get() = currentPalette.bannerClubAlpha
 
     val MinTouchTargetSize: Dp = 48.dp
     val CardCornerRadius: Dp = 18.dp
@@ -114,8 +236,12 @@ val CourtsideTypography = Typography(
 @Composable
 fun EuroLeagueCourtsideTheme(
     activeTeam: EuroLeagueTeam,
+    themeMode: AppThemeMode = AppThemeMode.DEFAULT,
     content: @Composable () -> Unit
 ) {
+    CourtsideDesignTokens.activeMode = themeMode
+    val palette = paletteForThemeMode(themeMode)
+
     val animatedClubPrimary by animateColorAsState(
         targetValue = activeTeam.primaryColor,
         animationSpec = spring(stiffness = Spring.StiffnessLow),
@@ -127,28 +253,46 @@ fun EuroLeagueCourtsideTheme(
         label = "clubSecondaryColor"
     )
 
-    val colorScheme = darkColorScheme(
-        primary = CourtsideDesignTokens.EuroLeagueOrange,
-        onPrimary = Color.Black,
-        secondary = animatedClubSecondary,
-        tertiary = animatedClubPrimary,
-        background = CourtsideDesignTokens.ShellObsidian,
-        surface = CourtsideDesignTokens.CardSurface,
-        onBackground = Color.White,
-        onSurface = Color.White
-    )
+    val colorScheme = if (themeMode == AppThemeMode.LIGHT) {
+        lightColorScheme(
+            primary = palette.euroLeagueOrange,
+            onPrimary = Color.White,
+            secondary = animatedClubSecondary,
+            tertiary = animatedClubPrimary,
+            background = palette.shellBackground,
+            surface = palette.cardSurface,
+            onBackground = palette.primaryText,
+            onSurface = palette.primaryText
+        )
+    } else {
+        darkColorScheme(
+            primary = palette.euroLeagueOrange,
+            onPrimary = Color.Black,
+            secondary = animatedClubSecondary,
+            tertiary = animatedClubPrimary,
+            background = palette.shellBackground,
+            surface = palette.cardSurface,
+            onBackground = palette.primaryText,
+            onSurface = palette.primaryText
+        )
+    }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        shapes = CourtsideShapes,
-        typography = CourtsideTypography,
-        content = content
-    )
+    CompositionLocalProvider(
+        LocalAppThemeMode provides themeMode,
+        LocalCourtsidePalette provides palette
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            shapes = CourtsideShapes,
+            typography = CourtsideTypography,
+            content = content
+        )
+    }
 }
 
 /**
  * Wiederverwendbare Broadcast-Karte im Courtside UI Design mit Radial-Glow oben links,
- * 48.dp Touch-Komfort und animiertem Desktop-Maus-Hover.
+ * 48.dp Touch-Komfort und animiertem Desktop-Maus-Hover (adaptiv für Light & Dark Mode).
  */
 @Composable
 fun CourtsideGlassCard(
@@ -158,6 +302,7 @@ fun CourtsideGlassCard(
     onClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val palette = LocalCourtsidePalette.current
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
 
@@ -165,23 +310,26 @@ fun CourtsideGlassCard(
         targetValue = when {
             isSelected -> glowColor
             isHovered -> glowColor.copy(alpha = 0.65f)
-            else -> CourtsideDesignTokens.SubtleGlassBorder
+            else -> palette.subtleGlassBorder
         },
         label = "cardBorder"
     )
 
+    val selectedAlpha = if (palette.mode.isLight) 0.12f else 0.20f
+    val hoverAlpha = if (palette.mode.isLight) 0.06f else 0.10f
+
     val bgBrush = if (isSelected || isHovered) {
         Brush.radialGradient(
             colors = listOf(
-                glowColor.copy(alpha = if (isSelected) 0.20f else 0.10f),
-                CourtsideDesignTokens.CardSurface
+                glowColor.copy(alpha = if (isSelected) selectedAlpha else hoverAlpha),
+                palette.cardSurface
             ),
             center = Offset(90f, 50f),
             radius = 420f
         )
     } else {
         Brush.linearGradient(
-            colors = listOf(CourtsideDesignTokens.CardSurface, CourtsideDesignTokens.CardSurface)
+            colors = listOf(palette.cardSurface, palette.cardSurface)
         )
     }
 
@@ -217,10 +365,11 @@ fun CourtsideLivePill(
     detailText: String,
     badgeColor: Color = CourtsideDesignTokens.LiveBadgeOrangeRed
 ) {
+    val palette = LocalCourtsidePalette.current
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
-            .background(Color(0xFF121216), RoundedCornerShape(8.dp))
+            .background(palette.elevatedSurface, RoundedCornerShape(8.dp))
             .border(1.dp, badgeColor.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
             .padding(2.dp)
     ) {
@@ -241,7 +390,7 @@ fun CourtsideLivePill(
         }
         Text(
             text = detailText,
-            color = Color(0xFFE5E5EA),
+            color = palette.primaryText,
             fontWeight = FontWeight.SemiBold,
             fontSize = 11.sp,
             maxLines = 1,
@@ -253,7 +402,7 @@ fun CourtsideLivePill(
 }
 
 /**
- * Dual-Tone-Verlaufs-Banner (Links Farbe A -> Mitte #17171C -> Rechts Farbe B) wie im Scoreboard-Design.
+ * Dual-Tone-Verlaufs-Banner (adaptiv für Light & Dark Mode).
  */
 @Composable
 fun CourtsideDualToneBanner(
@@ -262,32 +411,25 @@ fun CourtsideDualToneBanner(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val palette = LocalCourtsidePalette.current
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
             .background(
                 Brush.horizontalGradient(
                     colors = listOf(
-                        leftColor.copy(alpha = 0.46f),
-                        Color(0xFF17171C),
-                        rightColor.copy(alpha = 0.46f)
+                        leftColor.copy(alpha = palette.bannerClubAlpha),
+                        palette.bannerCenterSurface,
+                        rightColor.copy(alpha = palette.bannerClubAlpha)
                     )
                 )
             )
-            .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(18.dp))
+            .border(1.dp, palette.subtleGlassBorder, RoundedCornerShape(18.dp))
             .padding(horizontal = 16.dp, vertical = 14.dp),
         content = content
     )
 }
 
-/**
- * Rendert das echte, offizielle Vereins-Logo (`images.crest` PNG der EuroLeague) jedes Clubs:
- * 1. Löst sofort das lokal gebündelte offizielle Wappen (`res/drawable-nodpi/club_logo_<code>.png`) auf,
- *    sodass alle 20 EuroLeague-Logos im selben Frame (und 100 % offline) gestochen scharf erscheinen.
- * 2. Lädt parallel via Coil `AsyncImage` die aktuelle Live-CDN-URL (`team.logoUrl` von `media-cdn.cortextech.io` /
- *    `media-cdn.incrowdsports.com`), falls ein Verein unter der Saison sein Wappen aktualisiert.
- * 3. Fällt nur bei unbekannten Test-IDs auf das Vektor-Wappen in den Vereinsfarben zurück.
- */
 @Composable
 fun CourtsideClubCrest(
     team: EuroLeagueTeam,
@@ -355,21 +497,19 @@ fun CourtsideClubCrest(
     }
 }
 
-/**
- * Dunkles `Ctrl+1`..`Ctrl+5` Shortcut-Pill-Badge für die Desktop-Sidebar.
- */
 @Composable
 fun CourtsideShortcutPill(shortcut: String) {
+    val palette = LocalCourtsidePalette.current
     Box(
         modifier = Modifier
-            .background(CourtsideDesignTokens.PillSurface, RoundedCornerShape(7.dp))
-            .border(1.dp, Color(0x18FFFFFF), RoundedCornerShape(7.dp))
+            .background(palette.pillSurface, RoundedCornerShape(7.dp))
+            .border(1.dp, palette.subtleGlassBorder, RoundedCornerShape(7.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
             text = shortcut,
-            color = CourtsideDesignTokens.MutedText,
+            color = palette.mutedText,
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium
         )
@@ -381,6 +521,7 @@ fun Modifier.courtsideTouchAndDesktopInteractive(
     accentColor: Color = CourtsideDesignTokens.EuroLeagueOrange,
     cornerRadius: Dp = CourtsideDesignTokens.CardCornerRadius
 ): Modifier = composed {
+    val palette = LocalCourtsidePalette.current
     val interactionSource = remember { MutableInteractionSource() }
     val isHovered by interactionSource.collectIsHoveredAsState()
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -391,10 +532,10 @@ fun Modifier.courtsideTouchAndDesktopInteractive(
     )
     val borderColor by animateColorAsState(
         targetValue = when {
-            isSelected -> CourtsideDesignTokens.EuroLeagueOrange
+            isSelected -> palette.euroLeagueOrange
             isPressed -> accentColor
             isHovered -> accentColor.copy(alpha = 0.85f)
-            else -> CourtsideDesignTokens.SubtleGlassBorder
+            else -> palette.subtleGlassBorder
         },
         label = "borderColor"
     )

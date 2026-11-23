@@ -1009,6 +1009,48 @@ class EuroLeagueCourtsideUnitTest {
             assertTrue(s.playerProfileTitle.isNotBlank())
             assertTrue(s.gameLogHeader.isNotBlank())
             assertTrue(s.widgetSectionTitle.isNotBlank())
+            assertTrue(s.themeSectionTitle.isNotBlank())
+            assertTrue(s.lightModeLabel.isNotBlank())
+            assertTrue(s.darkModeLabel.isNotBlank())
         }
+    }
+
+    @Test
+    fun `Light Mode is the default AppThemeMode on startup and toggles cleanly with Dark Mode`() {
+        assertEquals(
+            com.euroleague.courtside.ui.theme.AppThemeMode.LIGHT,
+            com.euroleague.courtside.ui.theme.AppThemeMode.DEFAULT
+        )
+        assertEquals(
+            com.euroleague.courtside.ui.theme.AppThemeMode.LIGHT,
+            com.euroleague.courtside.ui.theme.AppThemeMode.fromCode(null)
+        )
+        assertEquals(
+            com.euroleague.courtside.ui.theme.AppThemeMode.LIGHT,
+            com.euroleague.courtside.ui.theme.AppThemeMode.fromCode("light")
+        )
+        assertEquals(
+            com.euroleague.courtside.ui.theme.AppThemeMode.DARK,
+            com.euroleague.courtside.ui.theme.AppThemeMode.fromCode("dark")
+        )
+
+        val freshRepo = EuroLeagueMockRepository()
+        assertEquals(
+            com.euroleague.courtside.ui.theme.AppThemeMode.LIGHT,
+            freshRepo.themeModeFlow.value
+        )
+
+        freshRepo.selectThemeMode(freshRepo.themeModeFlow.value.toggled())
+        assertEquals(
+            com.euroleague.courtside.ui.theme.AppThemeMode.DARK,
+            freshRepo.themeModeFlow.value
+        )
+
+        val lightPalette = com.euroleague.courtside.ui.theme.paletteForThemeMode(com.euroleague.courtside.ui.theme.AppThemeMode.LIGHT)
+        val darkPalette = com.euroleague.courtside.ui.theme.paletteForThemeMode(com.euroleague.courtside.ui.theme.AppThemeMode.DARK)
+        assertTrue(lightPalette.mode.isLight)
+        assertFalse(darkPalette.mode.isLight)
+        assertTrue(lightPalette.cardSurface != darkPalette.cardSurface)
+        assertTrue(lightPalette.primaryText != darkPalette.primaryText)
     }
 }

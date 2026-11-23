@@ -59,8 +59,8 @@ internal fun CourtVisualModeToggle(
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xFF141419))
-            .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(10.dp))
+            .background(CourtsideDesignTokens.ElevatedSurface)
+            .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(10.dp))
             .padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -91,8 +91,8 @@ internal fun BoxscorePlayByPlayModeToggle(
     Row(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(Color(0xFF141419))
-            .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(10.dp))
+            .background(CourtsideDesignTokens.ElevatedSurface)
+            .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(10.dp))
             .padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -136,7 +136,7 @@ private fun SegmentedPillButton(
     ) {
         Text(
             text = label,
-            color = if (selected) Color.White else Color(0xFF9CA3AF),
+            color = if (selected) CourtsideDesignTokens.PrimaryText else CourtsideDesignTokens.MutedText,
             fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
             fontSize = 11.sp,
             maxLines = 1,
@@ -166,8 +166,8 @@ internal fun GameFlowMomentumCard(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFF151519))
-            .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(18.dp))
+            .background(CourtsideDesignTokens.ElevatedSurface)
+            .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(18.dp))
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -178,7 +178,7 @@ internal fun GameFlowMomentumCard(
         ) {
             Text(
                 text = strings.leadTrackerTitle,
-                color = Color.White,
+                color = CourtsideDesignTokens.PrimaryText,
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 12.sp,
                 maxLines = 1,
@@ -192,12 +192,12 @@ internal fun GameFlowMomentumCard(
                 MomentumLegendPill(code = game.homeTeam.code, maxLead = summary.maxHomeLead, color = homeColor)
                 MomentumLegendPill(code = game.awayTeam.code, maxLead = summary.maxAwayLead, color = awayColor)
                 Surface(
-                    color = Color(0xFF202028),
+                    color = CourtsideDesignTokens.PillSurface,
                     shape = RoundedCornerShape(6.dp)
                 ) {
                     Text(
                         text = "⇄ ${summary.leadChanges}",
-                        color = Color(0xFFD1D5DB),
+                        color = CourtsideDesignTokens.SecondaryText,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -211,7 +211,7 @@ internal fun GameFlowMomentumCard(
                 .fillMaxWidth()
                 .weight(1f)
                 .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFF101014))
+                .background(CourtsideDesignTokens.ElevatedSurface)
                 .padding(horizontal = 10.dp, vertical = 8.dp)
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
@@ -226,7 +226,7 @@ internal fun GameFlowMomentumCard(
                 qMarks.forEach { qm ->
                     val qx = (qm / summary.totalMinutes) * w
                     drawLine(
-                        color = Color(0x22FFFFFF),
+                        color = CourtsideDesignTokens.SubtleGlassBorder,
                         start = Offset(qx, 0f),
                         end = Offset(qx, h),
                         strokeWidth = 1.2f,
@@ -236,7 +236,7 @@ internal fun GameFlowMomentumCard(
 
                 // Zero (tie) baseline
                 drawLine(
-                    color = Color(0x55FFFFFF),
+                    color = CourtsideDesignTokens.ChartGridStrong,
                     start = Offset(0f, midY),
                     end = Offset(w, midY),
                     strokeWidth = 1.6f
@@ -307,7 +307,7 @@ internal fun GameFlowMomentumCard(
             labels.forEach { qLabel ->
                 Text(
                     text = qLabel,
-                    color = Color(0xFF8E8E93),
+                    color = CourtsideDesignTokens.MutedText,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -373,12 +373,12 @@ internal fun PlayByPlayFilterBar(
         quarters.forEach { (qVal, label) ->
             val active = !clutchOnly && selectedQuarter == qVal
             Surface(
-                color = if (active) Color(0x33FF6600) else Color(0xFF1A1A20),
+                color = if (active) Color(0x33FF6600) else CourtsideDesignTokens.PillSurface,
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier
                     .border(
                         1.dp,
-                        if (active) CourtsideDesignTokens.EuroLeagueOrange else Color(0x22FFFFFF),
+                        if (active) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.SubtleGlassBorder,
                         RoundedCornerShape(8.dp)
                     )
                     .clickable { onSelectQuarter(qVal) }
@@ -386,7 +386,7 @@ internal fun PlayByPlayFilterBar(
             ) {
                 Text(
                     text = label,
-                    color = if (active) Color.White else Color(0xFF9CA3AF),
+                    color = if (active) CourtsideDesignTokens.PrimaryText else CourtsideDesignTokens.MutedText,
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
@@ -395,12 +395,12 @@ internal fun PlayByPlayFilterBar(
         }
 
         Surface(
-            color = if (clutchOnly) Color(0x33FF3B5C) else Color(0xFF1A1A20),
+            color = if (clutchOnly) Color(0x33FF3B5C) else CourtsideDesignTokens.PillSurface,
             shape = RoundedCornerShape(8.dp),
             modifier = Modifier
                 .border(
                     1.dp,
-                    if (clutchOnly) CourtsideDesignTokens.NeonMissedRed else Color(0x22FFFFFF),
+                    if (clutchOnly) CourtsideDesignTokens.NeonMissedRed else CourtsideDesignTokens.SubtleGlassBorder,
                     RoundedCornerShape(8.dp)
                 )
                 .clickable { onToggleClutchOnly() }
@@ -408,7 +408,7 @@ internal fun PlayByPlayFilterBar(
         ) {
             Text(
                 text = strings.clutchFilterLabel,
-                color = if (clutchOnly) CourtsideDesignTokens.NeonMissedRed else Color(0xFFD1D5DB),
+                color = if (clutchOnly) CourtsideDesignTokens.NeonMissedRed else CourtsideDesignTokens.SecondaryText,
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 11.sp,
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
@@ -436,7 +436,7 @@ internal fun PlayByPlayEventRow(
         PlayEventCategory.FOUL, PlayEventCategory.TURNOVER, PlayEventCategory.MISS -> CourtsideDesignTokens.NeonMissedRed
         PlayEventCategory.TIMEOUT -> Color(0xFFFBBF24)
         PlayEventCategory.STEAL_BLK -> Color(0xFF38BDF8)
-        else -> Color(0xFF9CA3AF)
+        else -> CourtsideDesignTokens.MutedText
     }
 
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -460,7 +460,7 @@ internal fun PlayByPlayEventRow(
             val qTag = if (event.quarter >= 5) "OT" else "Q${event.quarter}"
             Text(
                 text = "$qTag ${event.clock}",
-                color = Color(0xFF9CA3AF),
+                color = CourtsideDesignTokens.MutedText,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.width(54.dp)
@@ -494,7 +494,7 @@ internal fun PlayByPlayEventRow(
                     val numPrefix = event.jerseyNumber?.let { "#$it " }.orEmpty()
                     Text(
                         text = "$numPrefix${event.playerName}",
-                        color = Color.White,
+                        color = CourtsideDesignTokens.PrimaryText,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -503,7 +503,7 @@ internal fun PlayByPlayEventRow(
                 }
                 Text(
                     text = event.description,
-                    color = Color(0xFFB0B5C0),
+                    color = CourtsideDesignTokens.SecondaryText,
                     fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -512,18 +512,18 @@ internal fun PlayByPlayEventRow(
 
             // Running Score pill
             Surface(
-                color = if (event.isScoringPlay) Color(0x28FF6600) else Color(0xFF19191F),
+                color = if (event.isScoringPlay) Color(0x28FF6600) else CourtsideDesignTokens.ElevatedSurface,
                 shape = RoundedCornerShape(7.dp)
             ) {
                 Text(
                     text = "${event.homeScore}:${event.awayScore}",
-                    color = if (event.isScoringPlay) CourtsideDesignTokens.EuroLeagueOrange else Color(0xFFD1D5DB),
+                    color = if (event.isScoringPlay) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.SecondaryText,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 11.sp,
                     modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                 )
             }
         }
-        HorizontalDivider(color = Color(0x0DFFFFFF))
+        HorizontalDivider(color = CourtsideDesignTokens.DividerSubtle)
     }
 }

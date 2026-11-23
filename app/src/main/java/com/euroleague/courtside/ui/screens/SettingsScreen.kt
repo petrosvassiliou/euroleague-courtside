@@ -130,6 +130,7 @@ import com.euroleague.courtside.i18n.formatTipOffCountdown
 import com.euroleague.courtside.i18n.localizedLabel
 import com.euroleague.courtside.notifications.EuroLeagueNotificationManager
 import com.euroleague.courtside.ui.screens.MatchCenterScreen
+import com.euroleague.courtside.ui.theme.AppThemeMode
 import com.euroleague.courtside.ui.theme.CourtsideClubCrest
 import com.euroleague.courtside.ui.theme.CourtsideDesignTokens
 import com.euroleague.courtside.ui.theme.CourtsideDualToneBanner
@@ -154,6 +155,8 @@ internal fun SettingsAndNotificationTestScreen(
     primaryTeam: EuroLeagueTeam,
     games: List<EuroLeagueGame>,
     activeLanguage: AppLanguage,
+    activeThemeMode: AppThemeMode = AppThemeMode.DEFAULT,
+    onSelectThemeMode: (AppThemeMode) -> Unit = {},
     isCompact: Boolean = false,
     onSelectLanguage: (AppLanguage) -> Unit,
     notificationManager: EuroLeagueNotificationManager,
@@ -199,7 +202,7 @@ internal fun SettingsAndNotificationTestScreen(
                     ) {
                         Text(
                             text = strings.languageSectionTitle,
-                            color = Color.White,
+                            color = CourtsideDesignTokens.PrimaryText,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 15.sp
                         )
@@ -230,12 +233,12 @@ internal fun SettingsAndNotificationTestScreen(
                         AppLanguage.entries.forEach { lang ->
                             val isSelected = lang == activeLanguage
                             Surface(
-                                color = if (isSelected) Color(0x33FF6600) else Color(0xFF1B1B21),
+                                color = if (isSelected) Color(0x33FF6600) else CourtsideDesignTokens.PillSurface,
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier
                                     .border(
                                         width = if (isSelected) 1.5.dp else 1.dp,
-                                        color = if (isSelected) Color(0xFFFF6600) else Color(0xFF2C2C34),
+                                        color = if (isSelected) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.SubtleGlassBorder,
                                         shape = RoundedCornerShape(10.dp)
                                     )
                                     .clickable { onSelectLanguage(lang) }
@@ -248,7 +251,7 @@ internal fun SettingsAndNotificationTestScreen(
                                     Text(text = lang.flagEmoji, fontSize = 14.sp)
                                     Text(
                                         text = lang.nativeName,
-                                        color = if (isSelected) Color.White else Color(0xFFD1D5DB),
+                                        color = if (isSelected) CourtsideDesignTokens.PrimaryText else CourtsideDesignTokens.SecondaryText,
                                         fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
                                         fontSize = 12.sp
                                     )
@@ -258,6 +261,12 @@ internal fun SettingsAndNotificationTestScreen(
                     }
                 }
             }
+
+            // 1b. Light (Default) & Dark Theme Selector Card
+            ThemeModeSelectorCard(
+                activeThemeMode = activeThemeMode,
+                onSelectThemeMode = onSelectThemeMode
+            )
 
             // 2. Google Play Protect-Compliant App Updates Card
             CourtsideGlassCard(
@@ -276,7 +285,7 @@ internal fun SettingsAndNotificationTestScreen(
                     ) {
                         Text(
                             text = strings.updateSectionTitle,
-                            color = Color.White,
+                            color = CourtsideDesignTokens.PrimaryText,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 15.sp
                         )
@@ -307,7 +316,7 @@ internal fun SettingsAndNotificationTestScreen(
                         Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                             Text(
                                 text = strings.autoUpdateToggleTitle,
-                                color = Color.White,
+                                color = CourtsideDesignTokens.PrimaryText,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp
                             )
@@ -321,7 +330,7 @@ internal fun SettingsAndNotificationTestScreen(
                             checked = autoUpdateCheckEnabled,
                             onCheckedChange = onToggleAutoUpdateCheck,
                             colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.Black,
+                                checkedThumbColor = CourtsideDesignTokens.OnAccentText,
                                 checkedTrackColor = CourtsideDesignTokens.NeonMadeGreen
                             )
                         )
@@ -342,7 +351,7 @@ internal fun SettingsAndNotificationTestScreen(
                     }
 
                     Surface(
-                        color = Color(0xFF141419),
+                        color = CourtsideDesignTokens.ElevatedSurface,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -385,7 +394,7 @@ internal fun SettingsAndNotificationTestScreen(
                             }
                             Text(
                                 text = subText,
-                                color = Color(0xFFD1D5DB),
+                                color = CourtsideDesignTokens.SecondaryText,
                                 fontSize = 11.sp
                             )
                         }
@@ -405,7 +414,7 @@ internal fun SettingsAndNotificationTestScreen(
                         ) {
                             Text(
                                 text = strings.checkForUpdatesButton,
-                                color = Color.Black,
+                                color = CourtsideDesignTokens.OnAccentText,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 11.sp,
                                 maxLines = 1,
@@ -422,7 +431,7 @@ internal fun SettingsAndNotificationTestScreen(
                         ) {
                             Text(
                                 text = strings.viewReleaseNotesButton,
-                                color = Color.White,
+                                color = CourtsideDesignTokens.PrimaryText,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp,
                                 maxLines = 1,
@@ -440,7 +449,7 @@ internal fun SettingsAndNotificationTestScreen(
                         ) {
                             Text(
                                 text = "${strings.downloadInstallUpdateButton} (v${updateInfo.latestVersionName})",
-                                color = Color.Black,
+                                color = CourtsideDesignTokens.OnAccentText,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 12.sp,
                                 maxLines = 1,
@@ -457,7 +466,7 @@ internal fun SettingsAndNotificationTestScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(strings.notificationChannelsTitle, style = MaterialTheme.typography.titleLarge, color = Color.White, modifier = Modifier.weight(1f))
+                Text(strings.notificationChannelsTitle, style = MaterialTheme.typography.titleLarge, color = CourtsideDesignTokens.PrimaryText, modifier = Modifier.weight(1f))
                 Text(
                     text = strings.autoGameAlertsBadge,
                     color = CourtsideDesignTokens.NeonMadeGreen,
@@ -522,7 +531,7 @@ internal fun SettingsAndNotificationTestScreen(
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = previewPayload.title,
-                        color = Color.White,
+                        color = CourtsideDesignTokens.PrimaryText,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 15.sp
                     )
@@ -546,11 +555,11 @@ internal fun SettingsAndNotificationTestScreen(
                     .fillMaxWidth()
                     .height(52.dp)
             ) {
-                Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = Color.Black)
+                Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = CourtsideDesignTokens.OnAccentText)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = strings.sendTestPushButton,
-                    color = Color.Black,
+                    color = CourtsideDesignTokens.OnAccentText,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 13.sp,
                     maxLines = 1,
@@ -601,7 +610,7 @@ internal fun SettingsAndNotificationTestScreen(
                     ) {
                         Text(
                             text = strings.languageSectionTitle,
-                            color = Color.White,
+                            color = CourtsideDesignTokens.PrimaryText,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 15.sp,
                             modifier = Modifier.weight(1f)
@@ -641,12 +650,12 @@ internal fun SettingsAndNotificationTestScreen(
                         AppLanguage.entries.forEach { lang ->
                             val isSelected = lang == activeLanguage
                             Surface(
-                                color = if (isSelected) Color(0x33FF6600) else Color(0xFF1B1B21),
+                                color = if (isSelected) Color(0x33FF6600) else CourtsideDesignTokens.PillSurface,
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier
                                     .border(
                                         width = if (isSelected) 1.5.dp else 1.dp,
-                                        color = if (isSelected) Color(0xFFFF6600) else Color(0xFF2C2C34),
+                                        color = if (isSelected) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.SubtleGlassBorder,
                                         shape = RoundedCornerShape(10.dp)
                                     )
                                     .clickable { onSelectLanguage(lang) }
@@ -660,7 +669,7 @@ internal fun SettingsAndNotificationTestScreen(
                                     Text(text = lang.flagEmoji, fontSize = 14.sp)
                                     Text(
                                         text = lang.nativeName,
-                                        color = if (isSelected) Color.White else Color(0xFFD1D5DB),
+                                        color = if (isSelected) CourtsideDesignTokens.PrimaryText else CourtsideDesignTokens.SecondaryText,
                                         fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
                                         fontSize = 12.sp
                                     )
@@ -671,12 +680,17 @@ internal fun SettingsAndNotificationTestScreen(
                 }
             }
 
+            ThemeModeSelectorCard(
+                activeThemeMode = activeThemeMode,
+                onSelectThemeMode = onSelectThemeMode
+            )
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(strings.notificationChannelsTitle, style = MaterialTheme.typography.titleLarge, color = Color.White)
+                Text(strings.notificationChannelsTitle, style = MaterialTheme.typography.titleLarge, color = CourtsideDesignTokens.PrimaryText)
                 Text(
                     text = strings.autoGameAlertsBadge,
                     color = CourtsideDesignTokens.NeonMadeGreen,
@@ -751,7 +765,7 @@ internal fun SettingsAndNotificationTestScreen(
                     ) {
                         Text(
                             text = strings.updateSectionTitle,
-                            color = Color.White,
+                            color = CourtsideDesignTokens.PrimaryText,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 15.sp,
                             modifier = Modifier.weight(1f)
@@ -784,7 +798,7 @@ internal fun SettingsAndNotificationTestScreen(
                         Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                             Text(
                                 text = strings.autoUpdateToggleTitle,
-                                color = Color.White,
+                                color = CourtsideDesignTokens.PrimaryText,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp
                             )
@@ -798,7 +812,7 @@ internal fun SettingsAndNotificationTestScreen(
                             checked = autoUpdateCheckEnabled,
                             onCheckedChange = onToggleAutoUpdateCheck,
                             colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.Black,
+                                checkedThumbColor = CourtsideDesignTokens.OnAccentText,
                                 checkedTrackColor = CourtsideDesignTokens.NeonMadeGreen
                             ),
                             modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
@@ -821,7 +835,7 @@ internal fun SettingsAndNotificationTestScreen(
                     }
 
                     Surface(
-                        color = Color(0xFF141419),
+                        color = CourtsideDesignTokens.ElevatedSurface,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -864,7 +878,7 @@ internal fun SettingsAndNotificationTestScreen(
                             }
                             Text(
                                 text = subText,
-                                color = Color(0xFFD1D5DB),
+                                color = CourtsideDesignTokens.SecondaryText,
                                 fontSize = 11.sp
                             )
                         }
@@ -886,7 +900,7 @@ internal fun SettingsAndNotificationTestScreen(
                         ) {
                             Text(
                                 text = strings.checkForUpdatesButton,
-                                color = Color.Black,
+                                color = CourtsideDesignTokens.OnAccentText,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 12.sp
                             )
@@ -902,7 +916,7 @@ internal fun SettingsAndNotificationTestScreen(
                         ) {
                             Text(
                                 text = strings.viewReleaseNotesButton,
-                                color = Color.White,
+                                color = CourtsideDesignTokens.PrimaryText,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp
                             )
@@ -920,7 +934,7 @@ internal fun SettingsAndNotificationTestScreen(
                         ) {
                             Text(
                                 text = "${strings.downloadInstallUpdateButton} (v${updateInfo.latestVersionName})",
-                                color = Color.Black,
+                                color = CourtsideDesignTokens.OnAccentText,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 12.sp
                             )
@@ -942,7 +956,7 @@ internal fun SettingsAndNotificationTestScreen(
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = previewPayload.title,
-                        color = Color.White,
+                        color = CourtsideDesignTokens.PrimaryText,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 16.sp
                     )
@@ -967,11 +981,11 @@ internal fun SettingsAndNotificationTestScreen(
                     .height(54.dp)
                     .pointerHoverIcon(PointerIcon.Hand)
             ) {
-                Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = Color.Black)
+                Icon(Icons.Default.NotificationsActive, contentDescription = null, tint = CourtsideDesignTokens.OnAccentText)
                 Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = strings.sendTestPushButton,
-                    color = Color.Black,
+                    color = CourtsideDesignTokens.OnAccentText,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 14.sp
                 )
@@ -1012,18 +1026,79 @@ private fun ChannelToggleRow(
         Column(modifier = Modifier.weight(1f)) {
             CourtsideLivePill(badgeText = badge, detailText = if (checked) "ACTIVE" else "MUTED")
             Spacer(modifier = Modifier.height(8.dp))
-            Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(title, color = CourtsideDesignTokens.PrimaryText, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Text(subtitle, color = CourtsideDesignTokens.MutedText, fontSize = 12.sp)
         }
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.Black,
+                checkedThumbColor = CourtsideDesignTokens.OnAccentText,
                 checkedTrackColor = CourtsideDesignTokens.EuroLeagueOrange
             ),
             modifier = Modifier.pointerHoverIcon(PointerIcon.Hand)
         )
+    }
+}
+
+@Composable
+private fun ThemeModeSelectorCard(
+    activeThemeMode: AppThemeMode,
+    onSelectThemeMode: (AppThemeMode) -> Unit
+) {
+    val strings = LocalCourtsideStrings.current
+    CourtsideGlassCard(isSelected = true, modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = strings.themeSectionTitle,
+                color = CourtsideDesignTokens.PrimaryText,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 15.sp
+            )
+            Text(
+                text = strings.themeSectionSubtitle,
+                color = CourtsideDesignTokens.MutedText,
+                fontSize = 11.sp
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(
+                    AppThemeMode.LIGHT to strings.lightModeLabel,
+                    AppThemeMode.DARK to strings.darkModeLabel
+                ).forEach { (mode, label) ->
+                    val selected = activeThemeMode == mode
+                    Surface(
+                        color = if (selected) Color(0x28FF6600) else CourtsideDesignTokens.PillSurface,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .border(
+                                width = if (selected) 1.5.dp else 1.dp,
+                                color = if (selected) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.SubtleGlassBorder,
+                                shape = RoundedCornerShape(10.dp)
+                            )
+                            .clickable { onSelectThemeMode(mode) }
+                            .pointerHoverIcon(PointerIcon.Hand)
+                    ) {
+                        Text(
+                            text = label,
+                            color = if (selected) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.SecondaryText,
+                            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1050,7 +1125,7 @@ private fun HomeScreenWidgetPromoCard(
                 Column {
                     Text(
                         text = strings.widgetSectionTitle,
-                        color = Color.White,
+                        color = CourtsideDesignTokens.PrimaryText,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 14.sp
                     )

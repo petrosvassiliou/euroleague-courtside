@@ -251,7 +251,7 @@ internal fun MyTeamDashboardScreen(
                             Column {
                                 Text(
                                     text = primaryTeam.name,
-                                    color = Color.White,
+                                    color = CourtsideDesignTokens.PrimaryText,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 16.sp,
                                     lineHeight = 19.sp,
@@ -260,7 +260,7 @@ internal fun MyTeamDashboardScreen(
                                 )
                                 Text(
                                     text = "${primaryTeam.arena} • ${primaryTeam.city}",
-                                    color = Color(0xFFD1D5DB),
+                                    color = CourtsideDesignTokens.SecondaryText,
                                     fontSize = 11.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -271,7 +271,7 @@ internal fun MyTeamDashboardScreen(
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
                                 text = "${primaryTeam.wins}${strings.winLetter} - ${primaryTeam.losses}${strings.lossLetter}",
-                                color = Color.White,
+                                color = CourtsideDesignTokens.PrimaryText,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 18.sp,
                                 maxLines = 1
@@ -289,7 +289,7 @@ internal fun MyTeamDashboardScreen(
                                     ) {
                                         Text(
                                             text = if (isWin) strings.winLetter else strings.lossLetter,
-                                            color = Color.Black,
+                                            color = CourtsideDesignTokens.OnAccentText,
                                             fontWeight = FontWeight.ExtraBold,
                                             fontSize = 9.sp
                                         )
@@ -313,16 +313,16 @@ internal fun MyTeamDashboardScreen(
                             text = strings.myTeamHubTitle,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
+                            color = CourtsideDesignTokens.PrimaryText
                         )
                         Surface(
-                            color = Color(0xFF1B1B21),
+                            color = CourtsideDesignTokens.PillSurface,
                             shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.border(1.dp, Color(0xFF2C2C34), RoundedCornerShape(8.dp))
+                            modifier = Modifier.border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(8.dp))
                         ) {
                             Text(
                                 text = "${allTeams.size} ${strings.clubsSuffix}",
-                                color = Color(0xFFD1D5DB),
+                                color = CourtsideDesignTokens.SecondaryText,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp,
                                 maxLines = 1,
@@ -351,7 +351,7 @@ internal fun MyTeamDashboardScreen(
                                     CourtsideClubCrest(team = team, size = 22.dp)
                                     Text(
                                         text = team.code,
-                                        color = if (isSelected) Color.White else CourtsideDesignTokens.MutedText,
+                                        color = if (isSelected) CourtsideDesignTokens.PrimaryText else CourtsideDesignTokens.MutedText,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp,
                                         maxLines = 1
@@ -402,7 +402,7 @@ internal fun MyTeamDashboardScreen(
                                 Column {
                                     Text(
                                         text = nextGame.homeTeam.name,
-                                        color = Color.White,
+                                        color = CourtsideDesignTokens.PrimaryText,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp,
                                         lineHeight = 15.sp,
@@ -437,7 +437,7 @@ internal fun MyTeamDashboardScreen(
                                 ) {
                                     Text(
                                         text = nextGame.awayTeam.name,
-                                        color = Color.White,
+                                        color = CourtsideDesignTokens.PrimaryText,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp,
                                         lineHeight = 15.sp,
@@ -466,11 +466,11 @@ internal fun MyTeamDashboardScreen(
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 9.dp),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = Color.Black, modifier = Modifier.size(15.dp))
+                                Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = CourtsideDesignTokens.OnAccentText, modifier = Modifier.size(15.dp))
                                 Spacer(modifier = Modifier.width(5.dp))
                                 Text(
                                     text = strings.googleCalendarButton,
-                                    color = Color.Black,
+                                    color = CourtsideDesignTokens.OnAccentText,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 11.sp,
                                     maxLines = 1,
@@ -483,11 +483,11 @@ internal fun MyTeamDashboardScreen(
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 9.dp),
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Icon(Icons.Default.Share, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
+                                Icon(Icons.Default.Share, contentDescription = null, tint = CourtsideDesignTokens.PrimaryText, modifier = Modifier.size(15.dp))
                                 Spacer(modifier = Modifier.width(5.dp))
                                 Text(
                                     text = strings.seasonIcsButton,
-                                    color = Color.White,
+                                    color = CourtsideDesignTokens.PrimaryText,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 11.sp,
                                     maxLines = 1,
@@ -508,7 +508,7 @@ internal fun MyTeamDashboardScreen(
                 ) {
                     Text(
                         text = "${strings.activeRosterHeader} (${roster.size} ${strings.playersWord})",
-                        color = Color.White,
+                        color = CourtsideDesignTokens.PrimaryText,
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp,
                         maxLines = 1,
@@ -546,7 +546,7 @@ internal fun MyTeamDashboardScreen(
                             Text("APG", Modifier.weight(0.95f), color = CourtsideDesignTokens.MutedText, fontSize = 11.sp, textAlign = TextAlign.Center)
                             Text("PIR ⌄", Modifier.weight(1f), color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.Bold, fontSize = 11.sp, textAlign = TextAlign.End)
                         }
-                        HorizontalDivider(color = Color(0x1AFFFFFF))
+                        HorizontalDivider(color = CourtsideDesignTokens.SubtleGlassBorder)
                         roster.forEachIndexed { idx, p ->
                             Row(
                                 modifier = Modifier
@@ -559,7 +559,7 @@ internal fun MyTeamDashboardScreen(
                                 Column(modifier = Modifier.weight(2.6f).padding(end = 4.dp)) {
                                     Text(
                                         text = "${idx + 1}. #${p.number} ${p.name}",
-                                        color = Color.White,
+                                        color = CourtsideDesignTokens.PrimaryText,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium,
                                         maxLines = 1,
@@ -584,14 +584,14 @@ internal fun MyTeamDashboardScreen(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
-                                Text(p.position, Modifier.weight(0.75f), color = Color(0xFFD1D5DB), fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
-                                Text(p.ppg.toString(), Modifier.weight(0.95f), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
-                                Text(p.rpg.toString(), Modifier.weight(0.95f), color = Color(0xFFD1D5DB), fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
-                                Text(p.apg.toString(), Modifier.weight(0.95f), color = Color(0xFFD1D5DB), fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
+                                Text(p.position, Modifier.weight(0.75f), color = CourtsideDesignTokens.SecondaryText, fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
+                                Text(p.ppg.toString(), Modifier.weight(0.95f), color = CourtsideDesignTokens.PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
+                                Text(p.rpg.toString(), Modifier.weight(0.95f), color = CourtsideDesignTokens.SecondaryText, fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
+                                Text(p.apg.toString(), Modifier.weight(0.95f), color = CourtsideDesignTokens.SecondaryText, fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
                                 Text(p.pir.toString(), Modifier.weight(1f), color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, textAlign = TextAlign.End, maxLines = 1)
                             }
                             if (idx < roster.lastIndex) {
-                                HorizontalDivider(color = Color(0x0DFFFFFF))
+                                HorizontalDivider(color = CourtsideDesignTokens.DividerSubtle)
                             }
                         }
                     }
@@ -623,16 +623,16 @@ internal fun MyTeamDashboardScreen(
                 Text(
                     text = strings.myTeamHubTitle,
                     style = MaterialTheme.typography.titleLarge,
-                    color = Color.White
+                    color = CourtsideDesignTokens.PrimaryText
                 )
                 Surface(
-                    color = Color(0xFF1B1B21),
+                    color = CourtsideDesignTokens.PillSurface,
                     shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.border(1.dp, Color(0xFF2C2C34), RoundedCornerShape(8.dp))
+                    modifier = Modifier.border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(8.dp))
                 ) {
                     Text(
                         text = "${allTeams.size} ${strings.clubsSuffix}",
-                        color = Color(0xFFD1D5DB),
+                        color = CourtsideDesignTokens.SecondaryText,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
@@ -660,7 +660,7 @@ internal fun MyTeamDashboardScreen(
                             CourtsideClubCrest(team = team, size = 22.dp)
                             Text(
                                 text = team.code,
-                                color = if (isSelected) Color.White else CourtsideDesignTokens.MutedText,
+                                color = if (isSelected) CourtsideDesignTokens.PrimaryText else CourtsideDesignTokens.MutedText,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp
                             )
@@ -703,7 +703,7 @@ internal fun MyTeamDashboardScreen(
                             Column {
                                 Text(
                                     text = nextGame.homeTeam.name,
-                                    color = Color.White,
+                                    color = CourtsideDesignTokens.PrimaryText,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     lineHeight = 16.sp
@@ -732,7 +732,7 @@ internal fun MyTeamDashboardScreen(
                             ) {
                                 Text(
                                     text = nextGame.awayTeam.name,
-                                    color = Color.White,
+                                    color = CourtsideDesignTokens.PrimaryText,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     lineHeight = 16.sp,
@@ -756,18 +756,18 @@ internal fun MyTeamDashboardScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = CourtsideDesignTokens.EuroLeagueOrange),
                             modifier = Modifier.weight(1f).pointerHoverIcon(PointerIcon.Hand)
                         ) {
-                            Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = CourtsideDesignTokens.OnAccentText, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(strings.googleCalendarButton, color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
+                            Text(strings.googleCalendarButton, color = CourtsideDesignTokens.OnAccentText, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
                         }
                         Button(
                             onClick = { CalendarExportHelper.exportTeamSeasonToIcsFile(context, primaryTeam, games) },
                             colors = ButtonDefaults.buttonColors(containerColor = CourtsideDesignTokens.PillSurface),
                             modifier = Modifier.weight(1f).pointerHoverIcon(PointerIcon.Hand)
                         ) {
-                            Icon(Icons.Default.Share, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Share, contentDescription = null, tint = CourtsideDesignTokens.PrimaryText, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(strings.seasonIcsButton, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text(strings.seasonIcsButton, color = CourtsideDesignTokens.PrimaryText, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                     }
                 }
@@ -794,14 +794,14 @@ internal fun MyTeamDashboardScreen(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         CourtsideClubCrest(primaryTeam, size = 48.dp)
                         Column {
-                            Text(primaryTeam.name, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
-                            Text("${primaryTeam.arena} • ${primaryTeam.city}", color = Color(0xFFD1D5DB), fontSize = 12.sp)
+                            Text(primaryTeam.name, color = CourtsideDesignTokens.PrimaryText, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                            Text("${primaryTeam.arena} • ${primaryTeam.city}", color = CourtsideDesignTokens.SecondaryText, fontSize = 12.sp)
                         }
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
                             text = "${primaryTeam.wins}${strings.winLetter} - ${primaryTeam.losses}${strings.lossLetter}",
-                            color = Color.White,
+                            color = CourtsideDesignTokens.PrimaryText,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 22.sp
                         )
@@ -817,7 +817,7 @@ internal fun MyTeamDashboardScreen(
                                 ) {
                                     Text(
                                         text = if (isWin) strings.winLetter else strings.lossLetter,
-                                        color = Color.Black,
+                                        color = CourtsideDesignTokens.OnAccentText,
                                         fontWeight = FontWeight.ExtraBold,
                                         fontSize = 10.sp
                                     )
@@ -837,7 +837,7 @@ internal fun MyTeamDashboardScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "${strings.activeRosterHeader} (${roster.size} ${strings.playersWord})",
-                        color = Color.White,
+                        color = CourtsideDesignTokens.PrimaryText,
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp
                     )
@@ -871,7 +871,7 @@ internal fun MyTeamDashboardScreen(
                         Text("APG", Modifier.weight(1f), color = CourtsideDesignTokens.MutedText, fontSize = 12.sp, textAlign = TextAlign.Center)
                         Text("PIR ⌄", Modifier.weight(1f), color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.Bold, fontSize = 12.sp, textAlign = TextAlign.End)
                     }
-                    HorizontalDivider(color = Color(0x1AFFFFFF))
+                    HorizontalDivider(color = CourtsideDesignTokens.SubtleGlassBorder)
                 }
                 itemsIndexed(roster, key = { _, p -> p.id }) { idx, p ->
                     Row(
@@ -883,7 +883,7 @@ internal fun MyTeamDashboardScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(2.6f)) {
-                            Text("${idx + 1}. #${p.number} ${p.name}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            Text("${idx + 1}. #${p.number} ${p.name}", color = CourtsideDesignTokens.PrimaryText, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                             val injColor = when (p.injuryStatus) {
                                 InjuryStatus.FIT -> CourtsideDesignTokens.NeonMadeGreen
                                 InjuryStatus.GAME_TIME_DECISION, InjuryStatus.QUESTIONABLE -> CourtsideDesignTokens.EuroLeagueOrange
@@ -897,13 +897,13 @@ internal fun MyTeamDashboardScreen(
                             }
                             Text(injText, color = injColor, fontSize = 10.sp)
                         }
-                        Text(p.position, Modifier.weight(0.8f), color = Color(0xFFD1D5DB), fontSize = 12.sp, textAlign = TextAlign.Center)
-                        Text(p.ppg.toString(), Modifier.weight(1f), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, textAlign = TextAlign.Center)
-                        Text(p.rpg.toString(), Modifier.weight(1f), color = Color(0xFFD1D5DB), fontSize = 12.sp, textAlign = TextAlign.Center)
-                        Text(p.apg.toString(), Modifier.weight(1f), color = Color(0xFFD1D5DB), fontSize = 12.sp, textAlign = TextAlign.Center)
+                        Text(p.position, Modifier.weight(0.8f), color = CourtsideDesignTokens.SecondaryText, fontSize = 12.sp, textAlign = TextAlign.Center)
+                        Text(p.ppg.toString(), Modifier.weight(1f), color = CourtsideDesignTokens.PrimaryText, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, textAlign = TextAlign.Center)
+                        Text(p.rpg.toString(), Modifier.weight(1f), color = CourtsideDesignTokens.SecondaryText, fontSize = 12.sp, textAlign = TextAlign.Center)
+                        Text(p.apg.toString(), Modifier.weight(1f), color = CourtsideDesignTokens.SecondaryText, fontSize = 12.sp, textAlign = TextAlign.Center)
                         Text(p.pir.toString(), Modifier.weight(1f), color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, textAlign = TextAlign.End)
                     }
-                    HorizontalDivider(color = Color(0x0DFFFFFF))
+                    HorizontalDivider(color = CourtsideDesignTokens.DividerSubtle)
                 }
             }
         }

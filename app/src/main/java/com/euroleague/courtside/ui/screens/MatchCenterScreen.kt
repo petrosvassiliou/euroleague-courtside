@@ -86,6 +86,7 @@ import com.euroleague.courtside.data.repository.GameStatus
 import com.euroleague.courtside.data.repository.PlayerBoxscoreStat
 import com.euroleague.courtside.data.repository.ShotAttempt
 import com.euroleague.courtside.i18n.LocalCourtsideStrings
+import com.euroleague.courtside.ui.theme.CourtsideDesignTokens
 import com.euroleague.courtside.notifications.EuroLeagueNotificationManager
 import com.euroleague.courtside.util.CalendarExportHelper
 import kotlinx.coroutines.launch
@@ -259,7 +260,7 @@ fun MatchCenterScreen(
         value = navigator.scaffoldValue,
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF0E0E11))
+            .background(CourtsideDesignTokens.ShellObsidian)
             .padding(if (isCompact) 12.dp else 16.dp),
         listPane = {
             AnimatedPane {
@@ -280,7 +281,7 @@ fun MatchCenterScreen(
                                 text = strings.matchCenterTitle,
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color.White
+                                color = CourtsideDesignTokens.PrimaryText
                             )
                             OutlinedTextField(
                                 value = searchQuery,
@@ -289,7 +290,7 @@ fun MatchCenterScreen(
                                     Text(
                                         text = "${strings.searchPlaceholder} (Team, Code, City)...",
                                         fontSize = 13.sp,
-                                        color = Color(0xFF8E8E93),
+                                        color = CourtsideDesignTokens.MutedText,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -298,7 +299,7 @@ fun MatchCenterScreen(
                                     Icon(
                                         Icons.Default.Search,
                                         contentDescription = strings.searchPlaceholder,
-                                        tint = Color(0xFFFF6600),
+                                        tint = CourtsideDesignTokens.EuroLeagueOrange,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 },
@@ -306,7 +307,7 @@ fun MatchCenterScreen(
                                     {
                                         Text(
                                             text = "✕",
-                                            color = Color(0xFF9CA3AF),
+                                            color = CourtsideDesignTokens.MutedText,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 14.sp,
                                             modifier = Modifier
@@ -317,17 +318,17 @@ fun MatchCenterScreen(
                                 } else null,
                                 singleLine = true,
                                 textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                    color = Color.White,
+                                    color = CourtsideDesignTokens.PrimaryText,
                                     fontSize = 13.sp
                                 ),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = Color(0xFF1B1B21),
-                                    unfocusedContainerColor = Color(0xFF1B1B21),
-                                    focusedBorderColor = Color(0xFFFF6600),
-                                    unfocusedBorderColor = Color(0xFF2C2C34),
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
+                                    focusedContainerColor = CourtsideDesignTokens.PillSurface,
+                                    unfocusedContainerColor = CourtsideDesignTokens.PillSurface,
+                                    focusedBorderColor = CourtsideDesignTokens.EuroLeagueOrange,
+                                    unfocusedBorderColor = CourtsideDesignTokens.SubtleGlassBorder,
+                                    focusedTextColor = CourtsideDesignTokens.PrimaryText,
+                                    unfocusedTextColor = CourtsideDesignTokens.PrimaryText
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -346,7 +347,7 @@ fun MatchCenterScreen(
                                 text = strings.matchCenterTitle,
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color.White
+                                color = CourtsideDesignTokens.PrimaryText
                             )
 
                             OutlinedTextField(
@@ -356,7 +357,7 @@ fun MatchCenterScreen(
                                     Text(
                                         text = "${strings.searchPlaceholder} (Team, Code, City)...",
                                         fontSize = 13.sp,
-                                        color = Color(0xFF8E8E93),
+                                        color = CourtsideDesignTokens.MutedText,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -365,7 +366,7 @@ fun MatchCenterScreen(
                                     Icon(
                                         Icons.Default.Search,
                                         contentDescription = strings.searchPlaceholder,
-                                        tint = Color(0xFFFF6600),
+                                        tint = CourtsideDesignTokens.EuroLeagueOrange,
                                         modifier = Modifier.size(18.dp)
                                     )
                                 },
@@ -373,7 +374,7 @@ fun MatchCenterScreen(
                                     {
                                         Text(
                                             text = "✕",
-                                            color = Color(0xFF9CA3AF),
+                                            color = CourtsideDesignTokens.MutedText,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 14.sp,
                                             modifier = Modifier
@@ -384,17 +385,17 @@ fun MatchCenterScreen(
                                 } else null,
                                 singleLine = true,
                                 textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                    color = Color.White,
+                                    color = CourtsideDesignTokens.PrimaryText,
                                     fontSize = 13.sp
                                 ),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = Color(0xFF1B1B21),
-                                    unfocusedContainerColor = Color(0xFF1B1B21),
-                                    focusedBorderColor = Color(0xFFFF6600),
-                                    unfocusedBorderColor = Color(0xFF2C2C34),
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
+                                    focusedContainerColor = CourtsideDesignTokens.PillSurface,
+                                    unfocusedContainerColor = CourtsideDesignTokens.PillSurface,
+                                    focusedBorderColor = CourtsideDesignTokens.EuroLeagueOrange,
+                                    unfocusedBorderColor = CourtsideDesignTokens.SubtleGlassBorder,
+                                    focusedTextColor = CourtsideDesignTokens.PrimaryText,
+                                    unfocusedTextColor = CourtsideDesignTokens.PrimaryText
                                 ),
                                 modifier = Modifier
                                     .weight(1f)
@@ -416,10 +417,10 @@ fun MatchCenterScreen(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Surface(
-                                color = Color(0xFF1B1B21),
+                                color = CourtsideDesignTokens.PillSurface,
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier
-                                    .border(1.dp, Color(0xFF2C2C34), RoundedCornerShape(8.dp))
+                                    .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(8.dp))
                                     .clickable {
                                         filterOnlyLive = false
                                         onPreviousRound()
@@ -428,7 +429,7 @@ fun MatchCenterScreen(
                             ) {
                                 Text(
                                     text = "◀",
-                                    color = Color.White,
+                                    color = CourtsideDesignTokens.PrimaryText,
                                     fontSize = 12.sp,
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                 )
@@ -449,7 +450,7 @@ fun MatchCenterScreen(
                                     ) {
                                         Text(
                                             text = "${strings.roundPrefix} $selectedRound",
-                                            color = Color(0xFFFF6600),
+                                            color = CourtsideDesignTokens.EuroLeagueOrange,
                                             fontWeight = FontWeight.ExtraBold,
                                             fontSize = 13.sp
                                         )
@@ -457,7 +458,7 @@ fun MatchCenterScreen(
                                         Icon(
                                             Icons.Default.KeyboardArrowDown,
                                             contentDescription = null,
-                                            tint = Color(0xFFFF6600),
+                                            tint = CourtsideDesignTokens.EuroLeagueOrange,
                                             modifier = Modifier.size(16.dp)
                                         )
                                     }
@@ -467,7 +468,7 @@ fun MatchCenterScreen(
                                     expanded = showRoundDropdown,
                                     onDismissRequest = { showRoundDropdown = false },
                                     modifier = Modifier
-                                        .background(Color(0xFF1B1B21))
+                                        .background(CourtsideDesignTokens.PillSurface)
                                         .height(360.dp)
                                 ) {
                                     availableRounds.forEach { rnd ->
@@ -483,7 +484,7 @@ fun MatchCenterScreen(
                                                 ) {
                                                     Text(
                                                         text = "${strings.roundPrefix} $rnd",
-                                                        color = if (rnd == selectedRound) Color(0xFFFF6600) else Color.White,
+                                                        color = if (rnd == selectedRound) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.PrimaryText,
                                                         fontWeight = if (rnd == selectedRound) FontWeight.ExtraBold else FontWeight.Medium,
                                                         fontSize = 13.sp
                                                     )
@@ -496,8 +497,8 @@ fun MatchCenterScreen(
                                                         },
                                                         color = when {
                                                             hasLiveInRound -> Color(0xFFFF4500)
-                                                            isPlayedRound -> Color(0xFF00E676)
-                                                            else -> Color(0xFF8E8E93)
+                                                            isPlayedRound -> CourtsideDesignTokens.NeonMadeGreen
+                                                            else -> CourtsideDesignTokens.MutedText
                                                         },
                                                         fontSize = 10.sp,
                                                         fontWeight = FontWeight.Bold
@@ -515,10 +516,10 @@ fun MatchCenterScreen(
                             }
 
                             Surface(
-                                color = Color(0xFF1B1B21),
+                                color = CourtsideDesignTokens.PillSurface,
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier
-                                    .border(1.dp, Color(0xFF2C2C34), RoundedCornerShape(8.dp))
+                                    .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(8.dp))
                                     .clickable {
                                         filterOnlyLive = false
                                         onNextRound()
@@ -527,7 +528,7 @@ fun MatchCenterScreen(
                             ) {
                                 Text(
                                     text = "▶",
-                                    color = Color.White,
+                                    color = CourtsideDesignTokens.PrimaryText,
                                     fontSize = 12.sp,
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                 )
@@ -540,7 +541,7 @@ fun MatchCenterScreen(
                         ) {
                             if (liveGames.isNotEmpty()) {
                                 Surface(
-                                    color = if (filterOnlyLive) Color(0x38FF4500) else Color(0xFF1B1B21),
+                                    color = if (filterOnlyLive) Color(0x38FF4500) else CourtsideDesignTokens.PillSurface,
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier
                                         .border(
@@ -562,12 +563,12 @@ fun MatchCenterScreen(
                             }
 
                             Surface(
-                                color = if (filterOnlyFavorites) Color(0x33FF6600) else Color(0xFF1B1B21),
+                                color = if (filterOnlyFavorites) Color(0x33FF6600) else CourtsideDesignTokens.PillSurface,
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier
                                     .border(
                                         1.dp,
-                                        if (filterOnlyFavorites) Color(0xFFFF6600) else Color(0xFF2C2C34),
+                                        if (filterOnlyFavorites) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.SubtleGlassBorder,
                                         RoundedCornerShape(8.dp)
                                     )
                                     .clickable { onToggleFavoriteFilter() }
@@ -575,7 +576,7 @@ fun MatchCenterScreen(
                             ) {
                                 Text(
                                     text = if (filterOnlyFavorites) strings.filterFavorites else strings.filterAllGames,
-                                    color = if (filterOnlyFavorites) Color(0xFFFF6600) else Color(0xFFD1D5DB),
+                                    color = if (filterOnlyFavorites) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.SecondaryText,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp)
@@ -699,7 +700,7 @@ private fun LiveScoresTickerStrip(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(Color(0xFF141419))
+            .background(CourtsideDesignTokens.ElevatedSurface)
             .border(
                 1.dp,
                 if (hasActiveLive) Color(0x55FF4500) else Color(0x4400E676),
@@ -721,11 +722,11 @@ private fun LiveScoresTickerStrip(
                     modifier = Modifier
                         .size(8.dp)
                         .clip(CircleShape)
-                        .background(if (hasActiveLive) Color(0xFFFF4500) else Color(0xFF00E676))
+                        .background(if (hasActiveLive) Color(0xFFFF4500) else CourtsideDesignTokens.NeonMadeGreen)
                 )
                 Text(
                     text = strings.liveScoresHeader,
-                    color = Color.White,
+                    color = CourtsideDesignTokens.PrimaryText,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 11.sp
                 )
@@ -736,7 +737,7 @@ private fun LiveScoresTickerStrip(
                     ) {
                         Text(
                             text = "$activeLiveCount ${strings.statusLive}",
-                            color = Color(0xFFFF6600),
+                            color = CourtsideDesignTokens.EuroLeagueOrange,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 10.sp,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -750,7 +751,7 @@ private fun LiveScoresTickerStrip(
                     ) {
                         Text(
                             text = "$finalCount ${strings.statusFinal}",
-                            color = Color(0xFF00E676),
+                            color = CourtsideDesignTokens.NeonMadeGreen,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 10.sp,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -769,7 +770,7 @@ private fun LiveScoresTickerStrip(
             ) {
                 Text(
                     text = strings.liveTickButton,
-                    color = Color(0xFFFF6600),
+                    color = CourtsideDesignTokens.EuroLeagueOrange,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 10.sp,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -785,16 +786,16 @@ private fun LiveScoresTickerStrip(
                 val isSelected = game.id == selectedGameId
                 val isLive = game.status == GameStatus.LIVE
                 Surface(
-                    color = if (isSelected) Color(0xFF221A18) else Color(0xFF1B1B22),
+                    color = if (isSelected) CourtsideDesignTokens.CardSelectedBase else CourtsideDesignTokens.CardSurface,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .width(156.dp)
                         .border(
                             width = if (isSelected) 1.5.dp else 1.dp,
                             color = when {
-                                isSelected -> Color(0xFFFF6600)
+                                isSelected -> CourtsideDesignTokens.EuroLeagueOrange
                                 isLive -> Color(0x66FF4500)
-                                else -> Color(0xFF2E2E38)
+                                else -> CourtsideDesignTokens.SubtleGlassBorder
                             },
                             shape = RoundedCornerShape(10.dp)
                         )
@@ -821,8 +822,8 @@ private fun LiveScoresTickerStrip(
                             }
                             val statusColor = when (game.status) {
                                 GameStatus.LIVE -> Color(0xFFFF5E00)
-                                GameStatus.FINAL -> Color(0xFF00E676)
-                                GameStatus.UPCOMING -> Color(0xFF9CA3AF)
+                                GameStatus.FINAL -> CourtsideDesignTokens.NeonMadeGreen
+                                GameStatus.UPCOMING -> CourtsideDesignTokens.MutedText
                             }
                             Text(
                                 text = statusLabel,
@@ -832,7 +833,7 @@ private fun LiveScoresTickerStrip(
                             )
                             Text(
                                 text = if (game.isCloseGameFourthQuarter) "🔥 Q4" else "R${game.round}",
-                                color = if (game.isCloseGameFourthQuarter) Color(0xFFFFB300) else Color(0xFF9CA3AF),
+                                color = if (game.isCloseGameFourthQuarter) Color(0xFFFFB300) else CourtsideDesignTokens.MutedText,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 9.sp
                             )
@@ -853,14 +854,14 @@ private fun LiveScoresTickerStrip(
                                 )
                                 Text(
                                     text = game.homeTeam.code,
-                                    color = Color.White,
+                                    color = CourtsideDesignTokens.PrimaryText,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 11.sp
                                 )
                             }
                             Text(
                                 text = game.homeScore.toString(),
-                                color = if (game.homeScore >= game.awayScore) Color.White else Color(0xFF9CA3AF),
+                                color = if (game.homeScore >= game.awayScore) CourtsideDesignTokens.PrimaryText else CourtsideDesignTokens.MutedText,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 12.sp
                             )
@@ -881,14 +882,14 @@ private fun LiveScoresTickerStrip(
                                 )
                                 Text(
                                     text = game.awayTeam.code,
-                                    color = Color.White,
+                                    color = CourtsideDesignTokens.PrimaryText,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 11.sp
                                 )
                             }
                             Text(
                                 text = game.awayScore.toString(),
-                                color = if (game.awayScore >= game.homeScore) Color.White else Color(0xFF9CA3AF),
+                                color = if (game.awayScore >= game.homeScore) CourtsideDesignTokens.PrimaryText else CourtsideDesignTokens.MutedText,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 12.sp
                             )
@@ -931,10 +932,10 @@ private fun MatchSummaryCard(
     var showContextMenu by remember { mutableStateOf(false) }
 
     val borderColor = when {
-        isSelected -> Color(0xFFFF6600)
+        isSelected -> CourtsideDesignTokens.EuroLeagueOrange
         isHovered -> Color(0xFFFF9E40)
         game.status == GameStatus.LIVE -> Color(0x88FF4500)
-        else -> Color(0xFF26262E)
+        else -> CourtsideDesignTokens.SubtleGlassBorder
     }
 
     val formattedDate = remember(game.tipOffEpochMillis) { formatTipOffDateTime(game.tipOffEpochMillis) }
@@ -942,7 +943,7 @@ private fun MatchSummaryCard(
     Box {
         Card(
             colors = CardDefaults.cardColors(
-                containerColor = if (isSelected) Color(0xFF1C1716) else Color(0xFF17171C)
+                containerColor = if (isSelected) CourtsideDesignTokens.CardSelectedBase else CourtsideDesignTokens.CardSurface
             ),
             shape = RoundedCornerShape(18.dp),
             modifier = Modifier
@@ -990,7 +991,7 @@ private fun MatchSummaryCard(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .weight(1f, fill = false)
-                                .background(Color(0xFF121216), RoundedCornerShape(8.dp))
+                                .background(CourtsideDesignTokens.ElevatedSurface, RoundedCornerShape(8.dp))
                                 .border(1.dp, pillBorderColor, RoundedCornerShape(8.dp))
                                 .padding(2.dp)
                         ) {
@@ -1028,7 +1029,7 @@ private fun MatchSummaryCard(
                             }
                             Text(
                                 text = metaDetail,
-                                color = Color(0xFFE5E5EA),
+                                color = CourtsideDesignTokens.SecondaryText,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 11.sp,
                                 maxLines = 1,
@@ -1061,7 +1062,7 @@ private fun MatchSummaryCard(
                         Icon(
                             Icons.Default.MoreHoriz,
                             contentDescription = "Menu",
-                            tint = Color(0xFF8E8E93)
+                            tint = CourtsideDesignTokens.MutedText
                         )
                     }
                 }
@@ -1094,19 +1095,19 @@ private fun MatchSummaryCard(
                             ) {
                                 Text(
                                     text = "${game.homeTeam.wins}${strings.winLetter}-${game.homeTeam.losses}${strings.lossLetter}",
-                                    color = Color(0xFFD1D5DB),
+                                    color = CourtsideDesignTokens.SecondaryText,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp
                                 )
                                 Text(
                                     text = "VS",
-                                    color = Color(0xFFFF6600),
+                                    color = CourtsideDesignTokens.EuroLeagueOrange,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 16.sp
                                 )
                                 Text(
                                     text = "${game.awayTeam.wins}${strings.winLetter}-${game.awayTeam.losses}${strings.lossLetter}",
-                                    color = Color(0xFFD1D5DB),
+                                    color = CourtsideDesignTokens.SecondaryText,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp
                                 )
@@ -1114,7 +1115,7 @@ private fun MatchSummaryCard(
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = game.homeTeam.arena,
-                                color = Color(0xFF8E8E93),
+                                color = CourtsideDesignTokens.MutedText,
                                 fontSize = 11.sp,
                                 textAlign = TextAlign.Center
                             )
@@ -1126,19 +1127,19 @@ private fun MatchSummaryCard(
                             ) {
                                 Text(
                                     text = game.homeScore.toString(),
-                                    color = if (game.homeScore >= game.awayScore) Color.White else Color(0xFF9CA3AF),
+                                    color = if (game.homeScore >= game.awayScore) CourtsideDesignTokens.PrimaryText else CourtsideDesignTokens.MutedText,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 20.sp
                                 )
                                 Text(
                                     text = ":",
-                                    color = Color(0xFFFF6600),
+                                    color = CourtsideDesignTokens.EuroLeagueOrange,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 18.sp
                                 )
                                 Text(
                                     text = game.awayScore.toString(),
-                                    color = if (game.awayScore >= game.homeScore) Color.White else Color(0xFF9CA3AF),
+                                    color = if (game.awayScore >= game.homeScore) CourtsideDesignTokens.PrimaryText else CourtsideDesignTokens.MutedText,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 20.sp
                                 )
@@ -1156,7 +1157,7 @@ private fun MatchSummaryCard(
                                         val isActiveQ = game.status == GameStatus.LIVE && (idx + 1) == game.currentQuarter
                                         Text(
                                             text = col,
-                                            color = if (isActiveQ) Color(0xFFFF6600) else Color(0xFF8E8E93),
+                                            color = if (isActiveQ) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.MutedText,
                                             fontWeight = if (isActiveQ) FontWeight.ExtraBold else FontWeight.Normal,
                                             fontSize = 10.sp,
                                             textAlign = TextAlign.Center,
@@ -1170,7 +1171,7 @@ private fun MatchSummaryCard(
                                         val isFutureLiveQ = game.status == GameStatus.LIVE && (idx + 1) > game.currentQuarter && v == 0
                                         Text(
                                             text = if (isFutureLiveQ) "–" else v.toString(),
-                                            color = if (isActiveQ) Color(0xFFFF6600) else Color.White,
+                                            color = if (isActiveQ) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.PrimaryText,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 11.sp,
                                             textAlign = TextAlign.Center,
@@ -1184,7 +1185,7 @@ private fun MatchSummaryCard(
                                         val isFutureLiveQ = game.status == GameStatus.LIVE && (idx + 1) > game.currentQuarter && v == 0
                                         Text(
                                             text = if (isFutureLiveQ) "–" else v.toString(),
-                                            color = if (isActiveQ) Color(0xFFFF6600) else Color(0xFF9CA3AF),
+                                            color = if (isActiveQ) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.MutedText,
                                             fontWeight = if (isActiveQ) FontWeight.Bold else FontWeight.Medium,
                                             fontSize = 11.sp,
                                             textAlign = TextAlign.Center,
@@ -1251,7 +1252,7 @@ private fun ClubCrestColumn(
         Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = team.name,
-            color = Color(0xFFE5E5EA),
+            color = CourtsideDesignTokens.SecondaryText,
             fontSize = 11.sp,
             lineHeight = 14.sp,
             fontWeight = FontWeight.SemiBold,
@@ -1332,7 +1333,7 @@ private fun MatchDetailPane(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Surface(
-                            color = Color(0xFF17171C),
+                            color = CourtsideDesignTokens.CardSurface,
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
                                 .border(1.dp, Color(0xAAFF6600), RoundedCornerShape(10.dp))
@@ -1341,7 +1342,7 @@ private fun MatchDetailPane(
                         ) {
                             Text(
                                 text = "← ${strings.matchCenterTitle}",
-                                color = Color.White,
+                                color = CourtsideDesignTokens.PrimaryText,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
                                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
@@ -1349,7 +1350,7 @@ private fun MatchDetailPane(
                         }
                         Text(
                             text = "${strings.roundPrefix} ${game.round}",
-                            color = Color(0xFFFF6600),
+                            color = CourtsideDesignTokens.EuroLeagueOrange,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 12.sp
                         )
@@ -1384,36 +1385,36 @@ private fun MatchDetailPane(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(18.dp))
-                            .background(Color(0xFF151519))
-                            .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(18.dp))
+                            .background(CourtsideDesignTokens.ElevatedSurface)
+                            .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(18.dp))
                             .padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
                             text = "${home.arena} • ${home.city}",
-                            color = Color(0xFFFF6600),
+                            color = CourtsideDesignTokens.EuroLeagueOrange,
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp
                         )
                         Text(
                             text = formatTipOffDateTime(game.tipOffEpochMillis),
-                            color = Color(0xFFD1D5DB),
+                            color = CourtsideDesignTokens.SecondaryText,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 11.sp
                         )
-                        HorizontalDivider(color = Color(0x1AFFFFFF))
+                        HorizontalDivider(color = CourtsideDesignTokens.SubtleGlassBorder)
                         previewRows.forEach { (label, valH, valA) ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .background(Color(0xFF1B1B21), RoundedCornerShape(10.dp))
+                                    .background(CourtsideDesignTokens.PillSurface, RoundedCornerShape(10.dp))
                                     .padding(horizontal = 12.dp, vertical = 9.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(valH, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                                Text(label, color = Color(0xFFFF6600), fontWeight = FontWeight.Bold, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1.2f))
-                                Text(valA, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
+                                Text(valH, color = CourtsideDesignTokens.PrimaryText, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                Text(label, color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.Bold, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1.2f))
+                                Text(valA, color = CourtsideDesignTokens.PrimaryText, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
                             }
                         }
                     }
@@ -1488,7 +1489,7 @@ private fun MatchDetailPane(
                                 Text(
                                     text = strings.playerColumn,
                                     modifier = Modifier.weight(2.7f),
-                                    color = Color(0xFF8E8E93),
+                                    color = CourtsideDesignTokens.MutedText,
                                     fontSize = 11.sp
                                 )
                                 BoxscoreSortColumn.entries.forEach { col ->
@@ -1505,13 +1506,13 @@ private fun MatchDetailPane(
                                                 }
                                             },
                                         textAlign = if (isPir) TextAlign.End else TextAlign.Center,
-                                        color = if (isPir || sortColumn == col) Color(0xFFFF6600) else Color(0xFF8E8E93),
+                                        color = if (isPir || sortColumn == col) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.MutedText,
                                         fontWeight = if (isPir || sortColumn == col) FontWeight.Bold else FontWeight.Medium,
                                         fontSize = 11.sp
                                     )
                                 }
                             }
-                            HorizontalDivider(color = Color(0x1AFFFFFF))
+                            HorizontalDivider(color = CourtsideDesignTokens.SubtleGlassBorder)
                         }
                     }
 
@@ -1528,7 +1529,7 @@ private fun MatchDetailPane(
                                 Text(
                                     text = "${index + 1}. #${row.jerseyNumber} ${row.playerName}",
                                     modifier = Modifier.weight(2.7f),
-                                    color = Color(0xFFE5E5EA),
+                                    color = CourtsideDesignTokens.SecondaryText,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Medium,
                                     maxLines = 1,
@@ -1543,12 +1544,12 @@ private fun MatchDetailPane(
                                     text = row.pir.toString(),
                                     modifier = Modifier.weight(1f),
                                     textAlign = TextAlign.End,
-                                    color = Color(0xFFFF6600),
+                                    color = CourtsideDesignTokens.EuroLeagueOrange,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 12.sp
                                 )
                             }
-                            HorizontalDivider(color = Color(0x0DFFFFFF))
+                            HorizontalDivider(color = CourtsideDesignTokens.DividerSubtle)
                         }
                     }
                 }
@@ -1694,8 +1695,8 @@ private fun UpcomingMatchPreviewCard(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFF151519))
-            .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(18.dp))
+            .background(CourtsideDesignTokens.ElevatedSurface)
+            .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(18.dp))
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -1706,19 +1707,19 @@ private fun UpcomingMatchPreviewCard(
         ) {
             Text(
                 text = "${home.arena} • ${home.city}",
-                color = Color(0xFFFF6600),
+                color = CourtsideDesignTokens.EuroLeagueOrange,
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp
             )
             Text(
                 text = formatTipOffDateTime(game.tipOffEpochMillis),
-                color = Color(0xFFD1D5DB),
+                color = CourtsideDesignTokens.SecondaryText,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 12.sp
             )
         }
 
-        HorizontalDivider(color = Color(0x1AFFFFFF))
+        HorizontalDivider(color = CourtsideDesignTokens.SubtleGlassBorder)
 
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -1728,21 +1729,21 @@ private fun UpcomingMatchPreviewCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF1B1B21), RoundedCornerShape(10.dp))
+                        .background(CourtsideDesignTokens.PillSurface, RoundedCornerShape(10.dp))
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = valH,
-                        color = Color.White,
+                        color = CourtsideDesignTokens.PrimaryText,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 14.sp,
                         modifier = Modifier.weight(1f)
                     )
                     Text(
                         text = label,
-                        color = Color(0xFFFF6600),
+                        color = CourtsideDesignTokens.EuroLeagueOrange,
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,
                         textAlign = TextAlign.Center,
@@ -1750,7 +1751,7 @@ private fun UpcomingMatchPreviewCard(
                     )
                     Text(
                         text = valA,
-                        color = Color.White,
+                        color = CourtsideDesignTokens.PrimaryText,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 14.sp,
                         textAlign = TextAlign.End,
@@ -1777,13 +1778,13 @@ private fun DualToneScoreboardBanner(
             .background(
                 Brush.horizontalGradient(
                     colors = listOf(
-                        game.homeTeam.primaryColor.copy(alpha = 0.45f),
-                        Color(0xFF17171C),
-                        game.awayTeam.primaryColor.copy(alpha = 0.45f)
+                        game.homeTeam.primaryColor.copy(alpha = CourtsideDesignTokens.BannerClubAlpha),
+                        CourtsideDesignTokens.BannerCenterSurface,
+                        game.awayTeam.primaryColor.copy(alpha = CourtsideDesignTokens.BannerClubAlpha)
                     )
                 )
             )
-            .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(18.dp))
+            .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(18.dp))
             .clickable { onExportCalendar() }
             .padding(horizontal = if (isCompact) 12.dp else 16.dp, vertical = 12.dp)
     ) {
@@ -1792,7 +1793,7 @@ private fun DualToneScoreboardBanner(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Surface(
-                color = if (game.status == GameStatus.LIVE) Color(0xAA2A0E06) else Color(0x77000000),
+                color = if (game.status == GameStatus.LIVE) Color(0x24FF4500) else CourtsideDesignTokens.ElevatedSurface,
                 shape = RoundedCornerShape(6.dp),
                 modifier = Modifier
                     .border(
@@ -1812,7 +1813,7 @@ private fun DualToneScoreboardBanner(
                 }
                 Text(
                     text = topPillText,
-                    color = if (game.status == GameStatus.LIVE) Color(0xFFFFB07C) else Color(0xFFE5E5EA),
+                    color = if (game.status == GameStatus.LIVE) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.SecondaryText,
                     fontSize = if (isCompact) 10.sp else 11.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -1839,7 +1840,7 @@ private fun DualToneScoreboardBanner(
                     )
                     Text(
                         text = game.homeTeam.name,
-                        color = Color.White,
+                        color = CourtsideDesignTokens.PrimaryText,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = if (isCompact) 12.sp else 13.sp,
                         lineHeight = 15.sp,
@@ -1855,13 +1856,13 @@ private fun DualToneScoreboardBanner(
                     ) {
                         Text(
                             text = "VS",
-                            color = Color(0xFFFF6600),
+                            color = CourtsideDesignTokens.EuroLeagueOrange,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = if (isCompact) 17.sp else 20.sp
                         )
                         Text(
                             text = "${game.homeTeam.wins}-${game.homeTeam.losses}  |  ${game.awayTeam.wins}-${game.awayTeam.losses}",
-                            color = Color(0xFFD1D5DB),
+                            color = CourtsideDesignTokens.SecondaryText,
                             fontSize = if (isCompact) 10.sp else 11.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -1874,19 +1875,19 @@ private fun DualToneScoreboardBanner(
                     ) {
                         Text(
                             text = game.homeScore.toString(),
-                            color = Color.White,
+                            color = CourtsideDesignTokens.PrimaryText,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = if (isCompact) 22.sp else 28.sp
                         )
                         Text(
                             text = ":",
-                            color = Color(0xFFFF6600),
+                            color = CourtsideDesignTokens.EuroLeagueOrange,
                             fontWeight = FontWeight.Bold,
                             fontSize = if (isCompact) 18.sp else 20.sp
                         )
                         Text(
                             text = game.awayScore.toString(),
-                            color = Color.White,
+                            color = CourtsideDesignTokens.PrimaryText,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = if (isCompact) 22.sp else 28.sp
                         )
@@ -1900,7 +1901,7 @@ private fun DualToneScoreboardBanner(
                 ) {
                     Text(
                         text = game.awayTeam.name,
-                        color = Color.White,
+                        color = CourtsideDesignTokens.PrimaryText,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = if (isCompact) 12.sp else 13.sp,
                         lineHeight = 15.sp,
@@ -1942,8 +1943,8 @@ private fun InteractiveCourtShotChart(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFF151519))
-            .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(18.dp))
+            .background(CourtsideDesignTokens.ElevatedSurface)
+            .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(18.dp))
             .padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -1972,7 +1973,7 @@ private fun InteractiveCourtShotChart(
                     radius = w * 0.45f
                 )
 
-                val lineColor = Color(0x55FFFFFF)
+                val lineColor = CourtsideDesignTokens.ChartGridStrong
                 drawRect(color = lineColor, style = Stroke(width = 2f))
 
                 // Outer & Inner Key
@@ -2004,7 +2005,7 @@ private fun InteractiveCourtShotChart(
                 // Orange Hoop at Top Center
                 val hoopCenter = Offset(w / 2f, h * 0.10f)
                 drawCircle(
-                    color = Color(0xFFFF6600),
+                    color = CourtsideDesignTokens.EuroLeagueOrange,
                     radius = 9f,
                     center = hoopCenter,
                     style = Stroke(width = 3.5f)
@@ -2033,26 +2034,26 @@ private fun InteractiveCourtShotChart(
                             center = pos
                         )
                         drawCircle(
-                            color = Color(0xFF00E676),
+                            color = CourtsideDesignTokens.NeonMadeGreen,
                             radius = 9f,
                             center = pos,
                             style = Stroke(width = 3f)
                         )
                         drawCircle(
-                            color = Color(0xFF00E676),
+                            color = CourtsideDesignTokens.NeonMadeGreen,
                             radius = 3.5f,
                             center = pos
                         )
                     } else {
                         val r = 7f
                         drawLine(
-                            color = Color(0xFFFF3B5C),
+                            color = CourtsideDesignTokens.NeonMissedRed,
                             start = Offset(pos.x - r, pos.y - r),
                             end = Offset(pos.x + r, pos.y + r),
                             strokeWidth = 3f
                         )
                         drawLine(
-                            color = Color(0xFFFF3B5C),
+                            color = CourtsideDesignTokens.NeonMissedRed,
                             start = Offset(pos.x + r, pos.y - r),
                             end = Offset(pos.x - r, pos.y + r),
                             strokeWidth = 3f
@@ -2073,20 +2074,20 @@ private fun InteractiveCourtShotChart(
                     modifier = Modifier
                         .size(10.dp)
                         .clip(CircleShape)
-                        .border(2.dp, Color(0xFF00E676), CircleShape)
+                        .border(2.dp, CourtsideDesignTokens.NeonMadeGreen, CircleShape)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text(strings.shotMade, color = Color(0xFFD1D5DB), fontSize = 12.sp)
+                Text(strings.shotMade, color = CourtsideDesignTokens.SecondaryText, fontSize = 12.sp)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
                         .size(10.dp)
                         .clip(CircleShape)
-                        .border(2.dp, Color(0xFFFF3B5C), CircleShape)
+                        .border(2.dp, CourtsideDesignTokens.NeonMissedRed, CircleShape)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text(strings.shotMissed, color = Color(0xFFD1D5DB), fontSize = 12.sp)
+                Text(strings.shotMissed, color = CourtsideDesignTokens.SecondaryText, fontSize = 12.sp)
             }
         }
     }
@@ -2114,7 +2115,7 @@ private fun SortableBoxscoreTable(
             Text(
                 text = strings.playerColumn,
                 modifier = Modifier.weight(2.8f),
-                color = Color(0xFF8E8E93),
+                color = CourtsideDesignTokens.MutedText,
                 fontSize = 12.sp
             )
             BoxscoreSortColumn.entries.forEach { col ->
@@ -2126,14 +2127,14 @@ private fun SortableBoxscoreTable(
                         .clickable { onSortChange(col) }
                         .pointerHoverIcon(PointerIcon.Hand),
                     textAlign = if (isPir) TextAlign.End else TextAlign.Center,
-                    color = if (isPir || sortColumn == col) Color(0xFFFF6600) else Color(0xFF8E8E93),
+                    color = if (isPir || sortColumn == col) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.MutedText,
                     fontWeight = if (isPir || sortColumn == col) FontWeight.Bold else FontWeight.Medium,
                     fontSize = 12.sp
                 )
             }
         }
 
-        HorizontalDivider(color = Color(0x1AFFFFFF))
+        HorizontalDivider(color = CourtsideDesignTokens.SubtleGlassBorder)
 
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             itemsIndexed(stats, key = { index, item -> "${item.teamId}_${item.playerId}_$index" }) { index, row ->
@@ -2148,7 +2149,7 @@ private fun SortableBoxscoreTable(
                     Text(
                         text = "${index + 1}. #${row.jerseyNumber} ${row.playerName}",
                         modifier = Modifier.weight(2.8f),
-                        color = Color(0xFFE5E5EA),
+                        color = CourtsideDesignTokens.SecondaryText,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
@@ -2163,12 +2164,12 @@ private fun SortableBoxscoreTable(
                         text = row.pir.toString(),
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.End,
-                        color = Color(0xFFFF6600),
+                        color = CourtsideDesignTokens.EuroLeagueOrange,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 12.sp
                     )
                 }
-                HorizontalDivider(color = Color(0x0DFFFFFF))
+                HorizontalDivider(color = CourtsideDesignTokens.DividerSubtle)
             }
         }
     }
@@ -2180,7 +2181,7 @@ private fun StatValueCell(value: String, modifier: Modifier = Modifier) {
         text = value,
         modifier = modifier,
         textAlign = TextAlign.Center,
-        color = Color(0xFFD1D5DB),
+        color = CourtsideDesignTokens.SecondaryText,
         fontSize = 12.sp
     )
 }

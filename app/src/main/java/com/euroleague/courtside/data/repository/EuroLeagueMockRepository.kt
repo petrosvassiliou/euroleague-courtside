@@ -311,6 +311,9 @@ class EuroLeagueMockRepository @Inject constructor() {
     private val _appLanguage = MutableStateFlow(com.euroleague.courtside.i18n.AppLanguage.fromCode(null))
     val appLanguageFlow: StateFlow<com.euroleague.courtside.i18n.AppLanguage> = _appLanguage.asStateFlow()
 
+    private val _themeMode = MutableStateFlow(com.euroleague.courtside.ui.theme.AppThemeMode.DEFAULT)
+    val themeModeFlow: StateFlow<com.euroleague.courtside.ui.theme.AppThemeMode> = _themeMode.asStateFlow()
+
     private val _activeDestination = MutableStateFlow(com.euroleague.courtside.ui.navigation.CourtsideDestination.START_DESTINATION)
     val activeDestinationFlow: StateFlow<com.euroleague.courtside.ui.navigation.CourtsideDestination> = _activeDestination.asStateFlow()
 
@@ -319,6 +322,10 @@ class EuroLeagueMockRepository @Inject constructor() {
 
     fun selectLanguage(language: com.euroleague.courtside.i18n.AppLanguage) {
         _appLanguage.value = language
+    }
+
+    fun selectThemeMode(mode: com.euroleague.courtside.ui.theme.AppThemeMode) {
+        _themeMode.value = mode
     }
 
     fun selectDestination(destination: com.euroleague.courtside.ui.navigation.CourtsideDestination) {

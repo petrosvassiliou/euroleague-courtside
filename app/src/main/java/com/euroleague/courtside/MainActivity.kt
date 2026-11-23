@@ -18,6 +18,7 @@ import com.euroleague.courtside.data.remote.EuroLeagueOfflineFirstRepository
 import com.euroleague.courtside.data.repository.EuroLeagueMockRepository
 import com.euroleague.courtside.notifications.EuroLeagueNotificationManager
 import com.euroleague.courtside.ui.navigation.MainAppScaffold
+import com.euroleague.courtside.ui.theme.AppThemeMode
 import com.euroleague.courtside.ui.theme.EuroLeagueCourtsideTheme
 import com.euroleague.courtside.widget.CourtsideAppWidgetProvider
 import dagger.hilt.android.AndroidEntryPoint
@@ -47,10 +48,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
-        )
+        val initialThemeMode = preferencesDataStore.getSavedThemeModeImmediate()
+        repository.selectThemeMode(initialThemeMode)
+        applySystemBarAppearance(initialThemeMode)
 
         // Beim regulären Start immer "My Team" anzeigen; bei Klick auf eine Spiel-Notification direkt zum Spiel springen
         if (!consumeDeepLinkIntentIfPresent(intent)) {
@@ -76,12 +76,18 @@ class MainActivity : ComponentActivity() {
         setContent {
             val selectedTeamId by repository.selectedTeamId.collectAsState()
             val teams by repository.teamsFlow.collectAsState()
+            val activeThemeMode by repository.themeModeFlow.collectAsState()
             val activeTeam = repository.findTeam(selectedTeamId) ?: teams.first()
+
+            LaunchedEffect(activeThemeMode) {
+                applySystemBarAppearance(activeThemeMode)
+            }
 
             LaunchedEffect(Unit) {
                 preferencesDataStore.userPreferencesFlow.collect { prefs ->
                     repository.restoreSavedTeamSelection(prefs.primaryTeamId, prefs.favoriteTeamIds)
                     repository.selectLanguage(prefs.language)
+                    repository.selectThemeMode(prefs.themeMode)
                     notificationManager.setLanguage(prefs.language)
                 }
             }
@@ -116,7 +122,10 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            EuroLeagueCourtsideTheme(activeTeam = activeTeam) {
+            EuroLeagueCourtsideTheme(
+                activeTeam = activeTeam,
+                themeMode = activeThemeMode
+            ) {
                 MainAppScaffold(
                     repository = repository,
                     notificationManager = notificationManager,
@@ -124,6 +133,26 @@ class MainActivity : ComponentActivity() {
                     preferencesDataStore = preferencesDataStore
                 )
             }
+        }
+    }
+
+    private fun applySystemBarAppearance(mode: AppThemeMode) {
+        if (mode == AppThemeMode.LIGHT) {
+            enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.light(
+                    android.graphics.Color.TRANSPARENT,
+                    android.graphics.Color.TRANSPARENT
+                ),
+                navigationBarStyle = SystemBarStyle.light(
+                    android.graphics.Color.TRANSPARENT,
+                    android.graphics.Color.TRANSPARENT
+                )
+            )
+        } else {
+            enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+                navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+            )
         }
     }
 

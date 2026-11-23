@@ -161,8 +161,13 @@ data class CourtsideStrings(
     // v1.8.0: Game-Night Alerts & Android Home-Screen Widget
     val autoGameAlertsBadge: String = "⚡ Auto Game-Night Worker Active",
     val widgetSectionTitle: String = "Android Home-Screen Widget",
-    val widgetSectionSubtitle: String = "Live Scoreboard & Next Tip-Off Countdown in Courtside Obsidian",
-    val widgetAddHint: String = "Pin to Home Screen"
+    val widgetSectionSubtitle: String = "Live Scoreboard & Next Tip-Off Countdown in Courtside Design",
+    val widgetAddHint: String = "Pin to Home Screen",
+    // Theme Mode (Light Default & Dark Obsidian)
+    val themeSectionTitle: String = "Appearance (Light & Dark Mode)",
+    val themeSectionSubtitle: String = "Daylight Courtside is the default — switch anytime to Obsidian Dark Mode",
+    val lightModeLabel: String = "☀️ Light Mode (Default)",
+    val darkModeLabel: String = "🌙 Dark Mode"
 )
 
 object CourtsideTranslations {
@@ -274,8 +279,12 @@ object CourtsideTranslations {
         tapPlayerHint = "Tap any player for scouting profile & game log",
         autoGameAlertsBadge = "⚡ Auto Game-Night Worker Active",
         widgetSectionTitle = "Android Home-Screen Widget",
-        widgetSectionSubtitle = "Live Scoreboard & Next Tip-Off Countdown in Courtside Obsidian",
-        widgetAddHint = "Pin to Home Screen"
+        widgetSectionSubtitle = "Live Scoreboard & Next Tip-Off Countdown in Courtside Design",
+        widgetAddHint = "Pin to Home Screen",
+        themeSectionTitle = "Appearance (Light & Dark Mode)",
+        themeSectionSubtitle = "Daylight Courtside is the default — switch anytime to Obsidian Dark Mode",
+        lightModeLabel = "☀️ Light Mode (Default)",
+        darkModeLabel = "🌙 Dark Mode"
     )
 
     val DE = CourtsideStrings(
@@ -386,7 +395,11 @@ object CourtsideTranslations {
         autoGameAlertsBadge = "⚡ Automatischer Spieltags-Worker aktiv",
         widgetSectionTitle = "Android Startbildschirm-Widget",
         widgetSectionSubtitle = "Live-Scoreboard & Tip-Off-Countdown im Courtside-Design",
-        widgetAddHint = "Zum Startbildschirm hinzufügen"
+        widgetAddHint = "Zum Startbildschirm hinzufügen",
+        themeSectionTitle = "Erscheinungsbild (Hell- & Dunkelmodus)",
+        themeSectionSubtitle = "Heller Courtside-Modus als Standard – jederzeit auf Obsidian Dark umschaltbar",
+        lightModeLabel = "☀️ Hellmodus (Standard)",
+        darkModeLabel = "🌙 Dunkelmodus"
     )
 
     val FR = CourtsideStrings(
@@ -497,7 +510,11 @@ object CourtsideTranslations {
         autoGameAlertsBadge = "⚡ Alertes automatiques de soirée actives",
         widgetSectionTitle = "Widget Écran d'accueil Android",
         widgetSectionSubtitle = "Score en direct & Compte à rebours sur votre écran d'accueil",
-        widgetAddHint = "Ajouter à l'écran d'accueil"
+        widgetAddHint = "Ajouter à l'écran d'accueil",
+        themeSectionTitle = "Apparence (Mode Clair & Sombre)",
+        themeSectionSubtitle = "Le mode clair est actif par défaut — basculez vers le mode sombre à tout moment",
+        lightModeLabel = "☀️ Mode Clair (Défaut)",
+        darkModeLabel = "🌙 Mode Sombre"
     )
 
     val IT = CourtsideStrings(
@@ -608,7 +625,11 @@ object CourtsideTranslations {
         autoGameAlertsBadge = "⚡ Avvisi automatici partita attivi",
         widgetSectionTitle = "Widget Schermata Home Android",
         widgetSectionSubtitle = "Risultato live e conto alla rovescia sulla schermata Home",
-        widgetAddHint = "Aggiungi alla schermata Home"
+        widgetAddHint = "Aggiungi alla schermata Home",
+        themeSectionTitle = "Aspetto (Modalità Chiara & Scura)",
+        themeSectionSubtitle = "La modalità chiara è predefinita — passa alla modalità scura quando vuoi",
+        lightModeLabel = "☀️ Modalità Chiara (Predef.)",
+        darkModeLabel = "🌙 Modalità Scura"
     )
 
     val ES = CourtsideStrings(
@@ -719,7 +740,11 @@ object CourtsideTranslations {
         autoGameAlertsBadge = "⚡ Alertas automáticas de jornada activas",
         widgetSectionTitle = "Widget de Pantalla de Inicio Android",
         widgetSectionSubtitle = "Marcador en vivo y cuenta atrás en tu pantalla de inicio",
-        widgetAddHint = "Añadir a pantalla de inicio"
+        widgetAddHint = "Añadir a pantalla de inicio",
+        themeSectionTitle = "Apariencia (Modo Claro y Oscuro)",
+        themeSectionSubtitle = "El modo claro viene por defecto — cambia al modo oscuro cuando quieras",
+        lightModeLabel = "☀️ Modo Claro (Predet.)",
+        darkModeLabel = "🌙 Modo Oscuro"
     )
 
     val EL = CourtsideStrings(
@@ -830,7 +855,11 @@ object CourtsideTranslations {
         autoGameAlertsBadge = "⚡ Αυτόματες ειδοποιήσεις αγώνων ενεργές",
         widgetSectionTitle = "Widget Αρχικής Οθόνης Android",
         widgetSectionSubtitle = "Ζωντανό σκορ & αντίστροφη μέτρηση στην αρχική οθόνη",
-        widgetAddHint = "Προσθήκη στην αρχική οθόνη"
+        widgetAddHint = "Προσθήκη στην αρχική οθόνη",
+        themeSectionTitle = "Εμφάνιση (Φωτεινή & Σκοτεινή Λειτουργία)",
+        themeSectionSubtitle = "Η φωτεινή λειτουργία είναι η προεπιλογή — άμεση εναλλαγή σε σκοτεινή",
+        lightModeLabel = "☀️ Φωτεινή (Προεπιλογή)",
+        darkModeLabel = "🌙 Σκοτεινή Λειτουργία"
     )
 
     fun forLanguage(language: AppLanguage): CourtsideStrings = when (language) {

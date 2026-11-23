@@ -282,7 +282,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                     text = strings.teamAnalyticsTitle,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.ExtraBold,
-                    color = Color.White
+                    color = CourtsideDesignTokens.PrimaryText
                 )
             }
 
@@ -308,12 +308,12 @@ internal fun SeasonLeadersAndComparisonScreen(
                             items(teams, key = { "m_teamA_${it.id}" }) { candidate ->
                                 val selected = candidate.id == teamA.id
                                 Surface(
-                                    color = if (selected) Color(0x38FF6600) else Color(0xFF1B1B21),
+                                    color = if (selected) Color(0x38FF6600) else CourtsideDesignTokens.PillSurface,
                                     shape = RoundedCornerShape(10.dp),
                                     modifier = Modifier
                                         .border(
                                             width = if (selected) 1.5.dp else 1.dp,
-                                            color = if (selected) Color(0xFFFF6600) else Color(0xFF2C2C34),
+                                            color = if (selected) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.SubtleGlassBorder,
                                             shape = RoundedCornerShape(10.dp)
                                         )
                                         .clickable { onSelectTeamA(candidate.id) }
@@ -326,7 +326,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                                         CourtsideClubCrest(team = candidate, size = 20.dp)
                                         Text(
                                             text = candidate.code,
-                                            color = if (selected) Color.White else Color(0xFF9CA3AF),
+                                            color = if (selected) CourtsideDesignTokens.PrimaryText else CourtsideDesignTokens.MutedText,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 11.sp,
                                             maxLines = 1
@@ -336,7 +336,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                             }
                         }
 
-                        HorizontalDivider(color = Color(0x1AFFFFFF))
+                        HorizontalDivider(color = CourtsideDesignTokens.SubtleGlassBorder)
 
                         Text(
                             text = "TEAM B: ${teamB.name}",
@@ -353,12 +353,12 @@ internal fun SeasonLeadersAndComparisonScreen(
                             items(teams, key = { "m_teamB_${it.id}" }) { candidate ->
                                 val selected = candidate.id == teamB.id
                                 Surface(
-                                    color = if (selected) Color(0x3300E676) else Color(0xFF1B1B21),
+                                    color = if (selected) Color(0x3300E676) else CourtsideDesignTokens.PillSurface,
                                     shape = RoundedCornerShape(10.dp),
                                     modifier = Modifier
                                         .border(
                                             width = if (selected) 1.5.dp else 1.dp,
-                                            color = if (selected) CourtsideDesignTokens.NeonMadeGreen else Color(0xFF2C2C34),
+                                            color = if (selected) CourtsideDesignTokens.NeonMadeGreen else CourtsideDesignTokens.SubtleGlassBorder,
                                             shape = RoundedCornerShape(10.dp)
                                         )
                                         .clickable { onSelectTeamB(candidate.id) }
@@ -371,7 +371,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                                         CourtsideClubCrest(team = candidate, size = 20.dp)
                                         Text(
                                             text = candidate.code,
-                                            color = if (selected) Color.White else Color(0xFF9CA3AF),
+                                            color = if (selected) CourtsideDesignTokens.PrimaryText else CourtsideDesignTokens.MutedText,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 11.sp,
                                             maxLines = 1
@@ -405,7 +405,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                             Column {
                                 Text(
                                     text = teamA.name,
-                                    color = Color.White,
+                                    color = CourtsideDesignTokens.PrimaryText,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
                                     lineHeight = 15.sp,
@@ -439,7 +439,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                             ) {
                                 Text(
                                     text = teamB.name,
-                                    color = Color.White,
+                                    color = CourtsideDesignTokens.PrimaryText,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
                                     lineHeight = 15.sp,
@@ -469,8 +469,8 @@ internal fun SeasonLeadersAndComparisonScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(18.dp))
-                        .background(Color(0xFF151519))
-                        .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(18.dp))
+                        .background(CourtsideDesignTokens.ElevatedSurface)
+                        .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(18.dp))
                         .padding(12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -534,7 +534,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                             Box(modifier = Modifier.size(9.dp).clip(CircleShape).background(CourtsideDesignTokens.EuroLeagueOrange))
                             Text(
                                 text = "${teamA.code} (${teamA.name})",
-                                color = Color.White,
+                                color = CourtsideDesignTokens.PrimaryText,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
@@ -548,7 +548,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                             Box(modifier = Modifier.size(9.dp).clip(CircleShape).background(CourtsideDesignTokens.NeonMadeGreen))
                             Text(
                                 text = "${teamB.code} (${teamB.name})",
-                                color = Color.White,
+                                color = CourtsideDesignTokens.PrimaryText,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
@@ -594,7 +594,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = statusText,
-                                        color = Color.White,
+                                        color = CourtsideDesignTokens.PrimaryText,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         maxLines = 1,
@@ -619,11 +619,11 @@ internal fun SeasonLeadersAndComparisonScreen(
                 }
 
                 Surface(
-                    color = Color(0xFF17171C),
+                    color = CourtsideDesignTokens.CardSurface,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(12.dp))
+                        .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(12.dp))
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
                         Row(
@@ -633,7 +633,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                         ) {
                             Text(
                                 text = metric.displayA,
-                                color = if (aLeads) CourtsideDesignTokens.EuroLeagueOrange else Color(0xFFD1D5DB),
+                                color = if (aLeads) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.SecondaryText,
                                 fontWeight = if (aLeads) FontWeight.ExtraBold else FontWeight.SemiBold,
                                 fontSize = 13.sp,
                                 maxLines = 1,
@@ -641,7 +641,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                             )
                             Text(
                                 text = metric.label,
-                                color = Color.White,
+                                color = CourtsideDesignTokens.PrimaryText,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp,
                                 textAlign = TextAlign.Center,
@@ -651,7 +651,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                             )
                             Text(
                                 text = metric.displayB,
-                                color = if (bLeads) CourtsideDesignTokens.NeonMadeGreen else Color(0xFFD1D5DB),
+                                color = if (bLeads) CourtsideDesignTokens.NeonMadeGreen else CourtsideDesignTokens.SecondaryText,
                                 fontWeight = if (bLeads) FontWeight.ExtraBold else FontWeight.SemiBold,
                                 fontSize = 13.sp,
                                 textAlign = TextAlign.End,
@@ -665,7 +665,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                                 .fillMaxWidth()
                                 .height(6.dp)
                                 .clip(RoundedCornerShape(3.dp))
-                                .background(Color(0xFF26262E))
+                                .background(CourtsideDesignTokens.SubtleGlassBorder)
                         ) {
                             Box(
                                 modifier = Modifier
@@ -689,7 +689,7 @@ internal fun SeasonLeadersAndComparisonScreen(
             item {
                 Text(
                     text = "${teamA.code} vs ${teamB.code} • ${strings.seasonLeadersHeader}",
-                    color = Color.White,
+                    color = CourtsideDesignTokens.PrimaryText,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 15.sp
                 )
@@ -708,14 +708,14 @@ internal fun SeasonLeadersAndComparisonScreen(
                             Text("APG", Modifier.weight(0.95f), color = CourtsideDesignTokens.MutedText, fontSize = 11.sp, textAlign = TextAlign.Center)
                             Text("PIR", Modifier.weight(1f), color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.Bold, fontSize = 11.sp, textAlign = TextAlign.End)
                         }
-                        HorizontalDivider(color = Color(0x1AFFFFFF))
+                        HorizontalDivider(color = CourtsideDesignTokens.SubtleGlassBorder)
                         matchupAndLeaguePlayers.take(20).forEachIndexed { idx, p ->
                             val isTeamA = matchesClubCode(p.teamId, teamA)
                             val isTeamB = matchesClubCode(p.teamId, teamB)
                             val teamColor = when {
                                 isTeamA -> CourtsideDesignTokens.EuroLeagueOrange
                                 isTeamB -> CourtsideDesignTokens.NeonMadeGreen
-                                else -> Color(0xFF9CA3AF)
+                                else -> CourtsideDesignTokens.MutedText
                             }
                             Row(
                                 modifier = Modifier
@@ -745,20 +745,20 @@ internal fun SeasonLeadersAndComparisonScreen(
                                     )
                                     Text(
                                         text = p.name,
-                                        color = Color.White,
+                                        color = CourtsideDesignTokens.PrimaryText,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
-                                Text("${p.ppg}", Modifier.weight(0.95f), color = Color(0xFFD1D5DB), fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
-                                Text("${p.rpg}", Modifier.weight(0.95f), color = Color(0xFFD1D5DB), fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
-                                Text("${p.apg}", Modifier.weight(0.95f), color = Color(0xFFD1D5DB), fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
+                                Text("${p.ppg}", Modifier.weight(0.95f), color = CourtsideDesignTokens.SecondaryText, fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
+                                Text("${p.rpg}", Modifier.weight(0.95f), color = CourtsideDesignTokens.SecondaryText, fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
+                                Text("${p.apg}", Modifier.weight(0.95f), color = CourtsideDesignTokens.SecondaryText, fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 1)
                                 Text("${p.pir}", Modifier.weight(1f), color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, textAlign = TextAlign.End, maxLines = 1)
                             }
                             if (idx < minOf(matchupAndLeaguePlayers.size, 20) - 1) {
-                                HorizontalDivider(color = Color(0x0DFFFFFF))
+                                HorizontalDivider(color = CourtsideDesignTokens.DividerSubtle)
                             }
                         }
                     }
@@ -785,7 +785,7 @@ internal fun SeasonLeadersAndComparisonScreen(
             Text(
                 text = strings.teamAnalyticsTitle,
                 style = MaterialTheme.typography.titleLarge,
-                color = Color.White
+                color = CourtsideDesignTokens.PrimaryText
             )
 
             // Team A & Team B Auswahl-Karte
@@ -806,12 +806,12 @@ internal fun SeasonLeadersAndComparisonScreen(
                         items(teams, key = { "teamA_${it.id}" }) { candidate ->
                             val selected = candidate.id == teamA.id
                             Surface(
-                                color = if (selected) Color(0x38FF6600) else Color(0xFF1B1B21),
+                                color = if (selected) Color(0x38FF6600) else CourtsideDesignTokens.PillSurface,
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier
                                     .border(
                                         width = if (selected) 1.5.dp else 1.dp,
-                                        color = if (selected) Color(0xFFFF6600) else Color(0xFF2C2C34),
+                                        color = if (selected) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.SubtleGlassBorder,
                                         shape = RoundedCornerShape(10.dp)
                                     )
                                     .clickable { onSelectTeamA(candidate.id) }
@@ -825,7 +825,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                                     CourtsideClubCrest(team = candidate, size = 20.dp)
                                     Text(
                                         text = candidate.code,
-                                        color = if (selected) Color.White else Color(0xFF9CA3AF),
+                                        color = if (selected) CourtsideDesignTokens.PrimaryText else CourtsideDesignTokens.MutedText,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 11.sp
                                     )
@@ -834,7 +834,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                         }
                     }
 
-                    HorizontalDivider(color = Color(0x1AFFFFFF))
+                    HorizontalDivider(color = CourtsideDesignTokens.SubtleGlassBorder)
 
                     Text(
                         text = "TEAM B (GRÜN): ${teamB.name}",
@@ -848,12 +848,12 @@ internal fun SeasonLeadersAndComparisonScreen(
                         items(teams, key = { "teamB_${it.id}" }) { candidate ->
                             val selected = candidate.id == teamB.id
                             Surface(
-                                color = if (selected) Color(0x3300E676) else Color(0xFF1B1B21),
+                                color = if (selected) Color(0x3300E676) else CourtsideDesignTokens.PillSurface,
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier
                                     .border(
                                         width = if (selected) 1.5.dp else 1.dp,
-                                        color = if (selected) CourtsideDesignTokens.NeonMadeGreen else Color(0xFF2C2C34),
+                                        color = if (selected) CourtsideDesignTokens.NeonMadeGreen else CourtsideDesignTokens.SubtleGlassBorder,
                                         shape = RoundedCornerShape(10.dp)
                                     )
                                     .clickable { onSelectTeamB(candidate.id) }
@@ -867,7 +867,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                                     CourtsideClubCrest(team = candidate, size = 20.dp)
                                     Text(
                                         text = candidate.code,
-                                        color = if (selected) Color.White else Color(0xFF9CA3AF),
+                                        color = if (selected) CourtsideDesignTokens.PrimaryText else CourtsideDesignTokens.MutedText,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 11.sp
                                     )
@@ -915,7 +915,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                                         )
                                         Text(
                                             text = statusText,
-                                            color = Color.White,
+                                            color = CourtsideDesignTokens.PrimaryText,
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold
                                         )
@@ -937,11 +937,11 @@ internal fun SeasonLeadersAndComparisonScreen(
                     }
 
                     Surface(
-                        color = Color(0xFF17171C),
+                        color = CourtsideDesignTokens.CardSurface,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .border(1.dp, Color(0x1FFFFFFF), RoundedCornerShape(12.dp))
+                            .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(12.dp))
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
                             Row(
@@ -951,14 +951,14 @@ internal fun SeasonLeadersAndComparisonScreen(
                             ) {
                                 Text(
                                     text = metric.displayA,
-                                    color = if (aLeads) CourtsideDesignTokens.EuroLeagueOrange else Color(0xFFD1D5DB),
+                                    color = if (aLeads) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.SecondaryText,
                                     fontWeight = if (aLeads) FontWeight.ExtraBold else FontWeight.SemiBold,
                                     fontSize = 13.sp,
                                     modifier = Modifier.weight(1f)
                                 )
                                 Text(
                                     text = metric.label,
-                                    color = Color.White,
+                                    color = CourtsideDesignTokens.PrimaryText,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 11.sp,
                                     textAlign = TextAlign.Center,
@@ -966,7 +966,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                                 )
                                 Text(
                                     text = metric.displayB,
-                                    color = if (bLeads) CourtsideDesignTokens.NeonMadeGreen else Color(0xFFD1D5DB),
+                                    color = if (bLeads) CourtsideDesignTokens.NeonMadeGreen else CourtsideDesignTokens.SecondaryText,
                                     fontWeight = if (bLeads) FontWeight.ExtraBold else FontWeight.SemiBold,
                                     fontSize = 13.sp,
                                     textAlign = TextAlign.End,
@@ -979,7 +979,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                                     .fillMaxWidth()
                                     .height(6.dp)
                                     .clip(RoundedCornerShape(3.dp))
-                                    .background(Color(0xFF26262E))
+                                    .background(CourtsideDesignTokens.SubtleGlassBorder)
                             ) {
                                 Box(
                                     modifier = Modifier
@@ -1025,7 +1025,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                     ) {
                         CourtsideClubCrest(teamA, size = 38.dp)
                         Column {
-                            Text(teamA.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, lineHeight = 16.sp)
+                            Text(teamA.name, color = CourtsideDesignTokens.PrimaryText, fontWeight = FontWeight.Bold, fontSize = 13.sp, lineHeight = 16.sp)
                             Text("${teamA.wins}${strings.winLetter}-${teamA.losses}${strings.lossLetter} • OFF ${teamA.offensiveRating}", color = CourtsideDesignTokens.EuroLeagueOrange, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
@@ -1036,7 +1036,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                         modifier = Modifier.weight(1f)
                     ) {
                         Column(horizontalAlignment = Alignment.End, modifier = Modifier.weight(1f, fill = false)) {
-                            Text(teamB.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp, lineHeight = 16.sp, textAlign = TextAlign.End)
+                            Text(teamB.name, color = CourtsideDesignTokens.PrimaryText, fontWeight = FontWeight.Bold, fontSize = 13.sp, lineHeight = 16.sp, textAlign = TextAlign.End)
                             Text("${teamB.wins}${strings.winLetter}-${teamB.losses}${strings.lossLetter} • OFF ${teamB.offensiveRating}", color = CourtsideDesignTokens.NeonMadeGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                         Spacer(modifier = Modifier.width(10.dp))
@@ -1051,8 +1051,8 @@ internal fun SeasonLeadersAndComparisonScreen(
                     .fillMaxWidth()
                     .height(256.dp)
                     .clip(RoundedCornerShape(18.dp))
-                    .background(Color(0xFF151519))
-                    .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(18.dp))
+                    .background(CourtsideDesignTokens.ElevatedSurface)
+                    .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(18.dp))
                     .padding(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -1109,11 +1109,11 @@ internal fun SeasonLeadersAndComparisonScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(CourtsideDesignTokens.EuroLeagueOrange))
-                        Text("${teamA.code} (${teamA.name})", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("${teamA.code} (${teamA.name})", color = CourtsideDesignTokens.PrimaryText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Box(modifier = Modifier.size(10.dp).clip(CircleShape).background(CourtsideDesignTokens.NeonMadeGreen))
-                        Text("${teamB.code} (${teamB.name})", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("${teamB.code} (${teamB.name})", color = CourtsideDesignTokens.PrimaryText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1121,7 +1121,7 @@ internal fun SeasonLeadersAndComparisonScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "${teamA.code} vs ${teamB.code} • ${strings.seasonLeadersHeader}",
-                    color = Color.White,
+                    color = CourtsideDesignTokens.PrimaryText,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp
                 )
@@ -1135,7 +1135,7 @@ internal fun SeasonLeadersAndComparisonScreen(
                     val teamColor = when {
                         isTeamA -> CourtsideDesignTokens.EuroLeagueOrange
                         isTeamB -> CourtsideDesignTokens.NeonMadeGreen
-                        else -> Color(0xFF9CA3AF)
+                        else -> CourtsideDesignTokens.MutedText
                     }
                     Row(
                         modifier = Modifier
@@ -1163,18 +1163,18 @@ internal fun SeasonLeadersAndComparisonScreen(
                             )
                             Text(
                                 text = p.name,
-                                color = Color.White,
+                                color = CourtsideDesignTokens.PrimaryText,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                                 maxLines = 1
                             )
                         }
-                        Text("PPG ${p.ppg}", Modifier.weight(1f), color = Color(0xFFD1D5DB), fontSize = 11.sp, textAlign = TextAlign.Center)
-                        Text("RPG ${p.rpg}", Modifier.weight(1f), color = Color(0xFFD1D5DB), fontSize = 11.sp, textAlign = TextAlign.Center)
-                        Text("APG ${p.apg}", Modifier.weight(1f), color = Color(0xFFD1D5DB), fontSize = 11.sp, textAlign = TextAlign.Center)
+                        Text("PPG ${p.ppg}", Modifier.weight(1f), color = CourtsideDesignTokens.SecondaryText, fontSize = 11.sp, textAlign = TextAlign.Center)
+                        Text("RPG ${p.rpg}", Modifier.weight(1f), color = CourtsideDesignTokens.SecondaryText, fontSize = 11.sp, textAlign = TextAlign.Center)
+                        Text("APG ${p.apg}", Modifier.weight(1f), color = CourtsideDesignTokens.SecondaryText, fontSize = 11.sp, textAlign = TextAlign.Center)
                         Text("PIR ${p.pir}", Modifier.weight(1f), color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, textAlign = TextAlign.End)
                     }
-                    HorizontalDivider(color = Color(0x0DFFFFFF))
+                    HorizontalDivider(color = CourtsideDesignTokens.DividerSubtle)
                 }
             }
         }
@@ -1189,18 +1189,18 @@ private fun RadarAxisBadge(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        color = Color(0xCC1B1B21),
+        color = CourtsideDesignTokens.CardSurface,
         shape = RoundedCornerShape(8.dp),
-        modifier = modifier.border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(8.dp))
+        modifier = modifier.border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(8.dp))
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp),
             modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
         ) {
-            Text(text = title, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 10.sp)
+            Text(text = title, color = CourtsideDesignTokens.PrimaryText, fontWeight = FontWeight.ExtraBold, fontSize = 10.sp)
             Text(text = valA, color = CourtsideDesignTokens.EuroLeagueOrange, fontWeight = FontWeight.Bold, fontSize = 10.sp)
-            Text(text = "|", color = Color(0xFF6B7280), fontSize = 10.sp)
+            Text(text = "|", color = CourtsideDesignTokens.MutedText, fontSize = 10.sp)
             Text(text = valB, color = CourtsideDesignTokens.NeonMadeGreen, fontWeight = FontWeight.Bold, fontSize = 10.sp)
         }
     }
@@ -1260,7 +1260,7 @@ private fun TeamComparisonRadarCanvas(teamA: EuroLeagueTeam, teamB: EuroLeagueTe
                 if (i == 0) webPath.moveTo(pt.x, pt.y) else webPath.lineTo(pt.x, pt.y)
             }
             webPath.close()
-            drawPath(webPath, color = Color(0x38FFFFFF), style = Stroke(width = 1.5f))
+            drawPath(webPath, color = CourtsideDesignTokens.ChartGridStrong, style = Stroke(width = 1.5f))
         }
 
         // Draw 5 spoke lines from center to vertices
@@ -1270,7 +1270,7 @@ private fun TeamComparisonRadarCanvas(teamA: EuroLeagueTeam, teamB: EuroLeagueTe
                 center.x + (radius * cos(angle)).toFloat(),
                 center.y + (radius * sin(angle)).toFloat()
             )
-            drawLine(color = Color(0x28FFFFFF), start = center, end = vertex, strokeWidth = 1.2f)
+            drawLine(color = CourtsideDesignTokens.ChartGridSubtle, start = center, end = vertex, strokeWidth = 1.2f)
         }
 
         fun buildPolygon(values: List<Float>): Path {
@@ -1291,9 +1291,9 @@ private fun TeamComparisonRadarCanvas(teamA: EuroLeagueTeam, teamB: EuroLeagueTe
         val pathB = buildPolygon(metricsB)
 
         drawPath(pathA, color = Color(0x44FF6600))
-        drawPath(pathA, color = Color(0xFFFF6600), style = Stroke(width = 3.5f))
+        drawPath(pathA, color = CourtsideDesignTokens.EuroLeagueOrange, style = Stroke(width = 3.5f))
 
         drawPath(pathB, color = Color(0x4400E676))
-        drawPath(pathB, color = Color(0xFF00E676), style = Stroke(width = 3.5f))
+        drawPath(pathB, color = CourtsideDesignTokens.NeonMadeGreen, style = Stroke(width = 3.5f))
     }
 }

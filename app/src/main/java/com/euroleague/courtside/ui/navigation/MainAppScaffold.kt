@@ -137,6 +137,7 @@ import com.euroleague.courtside.ui.screens.StandingsScreen
 import com.euroleague.courtside.ui.screens.StandingsTeamDetailScreen
 import com.euroleague.courtside.ui.screens.resolveClickedPlayerProfile
 import com.euroleague.courtside.widget.CourtsideAppWidgetProvider
+import com.euroleague.courtside.ui.theme.AppThemeMode
 import com.euroleague.courtside.ui.theme.CourtsideClubCrest
 import com.euroleague.courtside.ui.theme.CourtsideDesignTokens
 import com.euroleague.courtside.ui.theme.CourtsideDualToneBanner
@@ -214,6 +215,7 @@ fun MainAppScaffold(
     val activeRound by repository.activeRoundFlow.collectAsState()
     val syncStatus by repository.lastSyncStatusFlow.collectAsState()
     val activeLanguage by repository.appLanguageFlow.collectAsState()
+    val activeThemeMode by repository.themeModeFlow.collectAsState()
     val strings = remember(activeLanguage) { CourtsideTranslations.forLanguage(activeLanguage) }
 
     LaunchedEffect(activeLanguage) {
@@ -226,6 +228,15 @@ fun MainAppScaffold(
         preferencesDataStore?.saveLanguageImmediate(newLang)
         scope.launch {
             preferencesDataStore?.setLanguage(newLang)
+        }
+    }
+
+    val onChangeThemeMode: (AppThemeMode) -> Unit = { newMode ->
+        repository.selectThemeMode(newMode)
+        preferencesDataStore?.saveThemeModeImmediate(newMode)
+        scope.launch {
+            preferencesDataStore?.setThemeMode(newMode)
+            CourtsideAppWidgetProvider.updateAllWidgets(context)
         }
     }
 
@@ -262,7 +273,7 @@ fun MainAppScaffold(
         repository.consumePendingDeepLinkGame()
     }
 
-    LaunchedEffect(primaryTeam.id, activeLanguage, games.size) {
+    LaunchedEffect(primaryTeam.id, activeLanguage, activeThemeMode, games.size) {
         CourtsideAppWidgetProvider.updateAllWidgets(context)
     }
 
@@ -477,8 +488,10 @@ fun MainAppScaffold(
             if (isCompact) {
                 CourtsideMobileTopBar(
                     activeLanguage = activeLanguage,
+                    activeThemeMode = activeThemeMode,
                     isSyncing = isLiveSyncing,
                     updateInfo = updateInfo,
+                    onToggleThemeMode = { onChangeThemeMode(activeThemeMode.toggled()) },
                     onCycleLanguage = {
                         val nextIdx = (AppLanguage.entries.indexOf(activeLanguage) + 1) % AppLanguage.entries.size
                         onChangeLanguage(AppLanguage.entries[nextIdx])
@@ -500,11 +513,13 @@ fun MainAppScaffold(
                     CourtsideLeftSidebar(
                         currentDestination = currentDestination,
                         activeLanguage = activeLanguage,
+                        activeThemeMode = activeThemeMode,
                         strings = strings,
                         isExpanded = widthClass == WindowWidthSizeClass.EXPANDED,
                         isSyncing = isLiveSyncing,
                         onSelectDestination = navigateToDestination,
                         onSelectLanguage = onChangeLanguage,
+                        onToggleThemeMode = { onChangeThemeMode(activeThemeMode.toggled()) },
                         onLiveRefresh = triggerLiveSync
                     )
                 }
@@ -694,6 +709,8 @@ fun MainAppScaffold(
                             primaryTeam = primaryTeam,
                             games = games,
                             activeLanguage = activeLanguage,
+                            activeThemeMode = activeThemeMode,
+                            onSelectThemeMode = onChangeThemeMode,
                             isCompact = isCompact,
                             onSelectLanguage = onChangeLanguage,
                             notificationManager = notificationManager,
@@ -763,7 +780,7 @@ fun MainAppScaffold(
                             .padding(top = 14.dp, end = 16.dp, start = 16.dp)
                     ) {
                         Surface(
-                            color = Color(0xF215151C),
+                            color = CourtsideDesignTokens.CardSurface,
                             shape = RoundedCornerShape(14.dp),
                             modifier = Modifier
                                 .widthIn(max = 460.dp)
@@ -799,7 +816,7 @@ fun MainAppScaffold(
                                 }
                                 Text(
                                     text = "v${BuildConfig.VERSION_NAME} → v${updateInfo.latestVersionName} • ${updateInfo.releaseTitle}",
-                                    color = Color(0xFFE5E7EB),
+                                    color = CourtsideDesignTokens.SecondaryText,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium
                                 )
@@ -817,16 +834,16 @@ fun MainAppScaffold(
                                     ) {
                                         Text(
                                             text = strings.downloadInstallUpdateButton,
-                                            color = Color.Black,
+                                            color = CourtsideDesignTokens.OnAccentText,
                                             fontWeight = FontWeight.ExtraBold,
                                             fontSize = 11.sp
                                         )
                                     }
                                     Surface(
-                                        color = Color(0xFF22222A),
+                                        color = CourtsideDesignTokens.PillSurface,
                                         shape = RoundedCornerShape(8.dp),
                                         modifier = Modifier
-                                            .border(1.dp, Color(0xFF3A3A44), RoundedCornerShape(8.dp))
+                                            .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(8.dp))
                                             .clickable {
                                                 CourtsideAppUpdateManager.dismissUpdateBanner(updateInfo.latestVersionName)
                                             }
@@ -834,7 +851,7 @@ fun MainAppScaffold(
                                     ) {
                                         Text(
                                             text = strings.laterButton,
-                                            color = Color(0xFFD1D5DB),
+                                            color = CourtsideDesignTokens.SecondaryText,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 11.sp,
                                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)
@@ -866,7 +883,7 @@ fun MainAppScaffold(
                                 else -> CourtsideDesignTokens.NeonMadeGreen
                             }
                             Surface(
-                                color = Color(0xEB141419),
+                                color = CourtsideDesignTokens.CardSurface,
                                 shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier
                                     .widthIn(max = 520.dp)
@@ -893,7 +910,7 @@ fun MainAppScaffold(
                                         )
                                         Text(
                                             text = banner.detail,
-                                            color = Color(0xFFE5E7EB),
+                                            color = CourtsideDesignTokens.SecondaryText,
                                             fontSize = 11.sp,
                                             lineHeight = 14.sp
                                         )
@@ -907,7 +924,7 @@ fun MainAppScaffold(
                     if (!isCompact) {
                         val hasNewUpdate = updateInfo.status == UpdateStatus.UPDATE_AVAILABLE
                         Surface(
-                            color = if (hasNewUpdate) Color(0xD9102A1E) else Color(0xCC121216),
+                            color = if (hasNewUpdate) Color(0x26059669) else CourtsideDesignTokens.CardSurface,
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
@@ -932,7 +949,7 @@ fun MainAppScaffold(
                                 } else {
                                     "v${BuildConfig.VERSION_NAME}"
                                 },
-                                color = if (hasNewUpdate) CourtsideDesignTokens.NeonMadeGreen else Color(0xFFD1D5DB),
+                                color = if (hasNewUpdate) CourtsideDesignTokens.NeonMadeGreen else CourtsideDesignTokens.SecondaryText,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.sp,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -983,8 +1000,10 @@ fun MainAppScaffold(
 @Composable
 private fun CourtsideMobileTopBar(
     activeLanguage: AppLanguage,
+    activeThemeMode: AppThemeMode,
     isSyncing: Boolean,
     updateInfo: AppUpdateInfo,
+    onToggleThemeMode: () -> Unit,
     onCycleLanguage: () -> Unit,
     onLiveRefresh: () -> Unit,
     onVersionClick: () -> Unit
@@ -1009,7 +1028,7 @@ private fun CourtsideMobileTopBar(
                     .clip(CircleShape)
                     .background(
                         Brush.linearGradient(
-                            colors = listOf(Color(0xFFFF6600), Color(0xFFFF3D00))
+                            colors = listOf(CourtsideDesignTokens.EuroLeagueOrange, Color(0xFFFF3D00))
                         )
                     ),
                 contentAlignment = Alignment.Center
@@ -1017,13 +1036,13 @@ private fun CourtsideMobileTopBar(
                 Icon(
                     imageVector = Icons.Default.SportsBasketball,
                     contentDescription = null,
-                    tint = Color.Black,
+                    tint = CourtsideDesignTokens.OnAccentText,
                     modifier = Modifier.size(17.dp)
                 )
             }
             Text(
                 text = "EuroLeague Courtside",
-                color = Color.White,
+                color = CourtsideDesignTokens.PrimaryText,
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 14.sp,
                 maxLines = 1,
@@ -1036,7 +1055,7 @@ private fun CourtsideMobileTopBar(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Surface(
-                color = if (hasNewUpdate) Color(0x3300E676) else Color(0xFF16161B),
+                color = if (hasNewUpdate) Color(0x3300E676) else CourtsideDesignTokens.ElevatedSurface,
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier
                     .border(
@@ -1048,7 +1067,7 @@ private fun CourtsideMobileTopBar(
             ) {
                 Text(
                     text = if (hasNewUpdate) "🚀 v${updateInfo.latestVersionName}" else "v${BuildConfig.VERSION_NAME}",
-                    color = if (hasNewUpdate) CourtsideDesignTokens.NeonMadeGreen else Color(0xFFD1D5DB),
+                    color = if (hasNewUpdate) CourtsideDesignTokens.NeonMadeGreen else CourtsideDesignTokens.SecondaryText,
                     fontWeight = FontWeight.Bold,
                     fontSize = 10.sp,
                     maxLines = 1,
@@ -1057,7 +1076,21 @@ private fun CourtsideMobileTopBar(
             }
 
             Surface(
-                color = Color(0xFF16161B),
+                color = CourtsideDesignTokens.ElevatedSurface,
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .border(1.dp, Color(0x55FF6600), RoundedCornerShape(8.dp))
+                    .clickable { onToggleThemeMode() }
+            ) {
+                Text(
+                    text = if (activeThemeMode.isLight) "☀️" else "🌙",
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                )
+            }
+
+            Surface(
+                color = CourtsideDesignTokens.ElevatedSurface,
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier
                     .border(1.dp, Color(0x55FF6600), RoundedCornerShape(8.dp))
@@ -1065,7 +1098,7 @@ private fun CourtsideMobileTopBar(
             ) {
                 Text(
                     text = "${activeLanguage.flagEmoji} ${activeLanguage.shortLabel}",
-                    color = Color.White,
+                    color = CourtsideDesignTokens.PrimaryText,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 10.sp,
                     maxLines = 1,
@@ -1262,11 +1295,13 @@ private fun buildSyncOfflineFeedbackState(language: AppLanguage, timeStr: String
 private fun CourtsideLeftSidebar(
     currentDestination: CourtsideDestination,
     activeLanguage: AppLanguage,
+    activeThemeMode: AppThemeMode,
     strings: CourtsideStrings,
     isExpanded: Boolean,
     isSyncing: Boolean = false,
     onSelectDestination: (CourtsideDestination) -> Unit,
     onSelectLanguage: (AppLanguage) -> Unit,
+    onToggleThemeMode: () -> Unit = {},
     onLiveRefresh: () -> Unit
 ) {
     Column(
@@ -1274,7 +1309,7 @@ private fun CourtsideLeftSidebar(
             .width(if (isExpanded) 172.dp else 76.dp)
             .fillMaxHeight()
             .background(CourtsideDesignTokens.SidebarObsidian)
-            .border(width = 1.dp, color = Color(0x14FFFFFF))
+            .border(width = 1.dp, color = CourtsideDesignTokens.SubtleGlassBorder)
             .padding(horizontal = 14.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.SpaceBetween,
         horizontalAlignment = if (isExpanded) Alignment.Start else Alignment.CenterHorizontally
@@ -1292,7 +1327,7 @@ private fun CourtsideLeftSidebar(
                         .clip(CircleShape)
                         .background(
                             Brush.linearGradient(
-                                colors = listOf(Color(0xFFFF6600), Color(0xFFFF3D00))
+                                colors = listOf(CourtsideDesignTokens.EuroLeagueOrange, Color(0xFFFF3D00))
                             )
                         ),
                     contentAlignment = Alignment.Center
@@ -1300,7 +1335,7 @@ private fun CourtsideLeftSidebar(
                     Icon(
                         Icons.Default.SportsBasketball,
                         contentDescription = null,
-                        tint = Color.Black,
+                        tint = CourtsideDesignTokens.OnAccentText,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -1308,13 +1343,13 @@ private fun CourtsideLeftSidebar(
                     Column {
                         Text(
                             text = "EuroLeague",
-                            color = Color.White,
+                            color = CourtsideDesignTokens.PrimaryText,
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 14.sp
                         )
                         Text(
                             text = "Courtside",
-                            color = Color(0xFFD1D5DB),
+                            color = CourtsideDesignTokens.SecondaryText,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
                         )
@@ -1370,7 +1405,7 @@ private fun CourtsideLeftSidebar(
                         if (isExpanded) {
                             Text(
                                 text = navTitle,
-                                color = if (isSelected) Color.White else CourtsideDesignTokens.MutedText,
+                                color = if (isSelected) CourtsideDesignTokens.PrimaryText else CourtsideDesignTokens.MutedText,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                 fontSize = 13.sp
                             )
@@ -1391,12 +1426,12 @@ private fun CourtsideLeftSidebar(
                     AppLanguage.entries.forEach { lang ->
                         val isLangSelected = lang == activeLanguage
                         Surface(
-                            color = if (isLangSelected) Color(0x33FF6600) else Color(0xFF16161B),
+                            color = if (isLangSelected) Color(0x33FF6600) else CourtsideDesignTokens.ElevatedSurface,
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .border(
                                     width = 1.dp,
-                                    color = if (isLangSelected) Color(0xFFFF6600) else Color(0x22FFFFFF),
+                                    color = if (isLangSelected) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.SubtleGlassBorder,
                                     shape = RoundedCornerShape(8.dp)
                                 )
                                 .clickable { onSelectLanguage(lang) }
@@ -1404,7 +1439,7 @@ private fun CourtsideLeftSidebar(
                         ) {
                             Text(
                                 text = "${lang.flagEmoji} ${lang.shortLabel}",
-                                color = if (isLangSelected) Color.White else CourtsideDesignTokens.MutedText,
+                                color = if (isLangSelected) CourtsideDesignTokens.PrimaryText else CourtsideDesignTokens.MutedText,
                                 fontWeight = if (isLangSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
                                 fontSize = 10.sp,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
@@ -1415,7 +1450,7 @@ private fun CourtsideLeftSidebar(
             } else {
                 // Compact Rail Mode: Click cycles through the 6 languages
                 Surface(
-                    color = Color(0xFF16161B),
+                    color = CourtsideDesignTokens.ElevatedSurface,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1428,13 +1463,37 @@ private fun CourtsideLeftSidebar(
                 ) {
                     Text(
                         text = "${activeLanguage.flagEmoji} ${activeLanguage.shortLabel}",
-                        color = Color.White,
+                        color = CourtsideDesignTokens.PrimaryText,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 10.sp,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(vertical = 6.dp)
                     )
                 }
+            }
+
+            // Quick Light / Dark Mode Switcher in Sidebar
+            Surface(
+                color = CourtsideDesignTokens.ElevatedSurface,
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(10.dp))
+                    .clickable { onToggleThemeMode() }
+                    .pointerHoverIcon(PointerIcon.Hand)
+            ) {
+                Text(
+                    text = if (isExpanded) {
+                        if (activeThemeMode.isLight) "☀️ Light • 🌙" else "🌙 Dark • ☀️"
+                    } else {
+                        if (activeThemeMode.isLight) "☀️" else "🌙"
+                    },
+                    color = CourtsideDesignTokens.PrimaryText,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 6.dp, horizontal = 6.dp)
+                )
             }
 
             // Bottom Live-Refresh Trigger mit aktivem Lade-Indikator
@@ -1476,7 +1535,7 @@ private fun CourtsideLeftSidebar(
                             }
                             Text(
                                 text = syncingLabel,
-                                color = Color.White,
+                                color = CourtsideDesignTokens.PrimaryText,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 11.sp
                             )

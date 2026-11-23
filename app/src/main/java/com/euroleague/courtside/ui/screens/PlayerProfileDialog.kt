@@ -139,14 +139,14 @@ internal fun PlayerProfileDialog(
     }
 
     val primaryColor = team?.primaryColor ?: CourtsideDesignTokens.EuroLeagueOrange
-    val secondaryColor = team?.secondaryColor ?: Color(0xFF1A1A22)
+    val secondaryColor = team?.secondaryColor ?: CourtsideDesignTokens.PillSurface
 
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Surface(
-            color = Color(0xFF121217),
+            color = CourtsideDesignTokens.CardSurface,
             shape = RoundedCornerShape(if (isCompact) 20.dp else 22.dp),
             modifier = Modifier
                 .fillMaxWidth(if (isCompact) 0.95f else 0.78f)
@@ -162,9 +162,9 @@ internal fun PlayerProfileDialog(
                         .background(
                             Brush.horizontalGradient(
                                 colors = listOf(
-                                    primaryColor.copy(alpha = 0.42f),
-                                    Color(0xFF16161D),
-                                    secondaryColor.copy(alpha = 0.36f)
+                                    primaryColor.copy(alpha = CourtsideDesignTokens.BannerClubAlpha),
+                                    CourtsideDesignTokens.BannerCenterSurface,
+                                    secondaryColor.copy(alpha = CourtsideDesignTokens.BannerClubAlpha)
                                 )
                             )
                         )
@@ -185,7 +185,7 @@ internal fun PlayerProfileDialog(
                                 modifier = Modifier
                                     .size(if (isCompact) 56.dp else 66.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0xFF1F1F28))
+                                    .background(CourtsideDesignTokens.PillSurface)
                                     .border(2.dp, CourtsideDesignTokens.EuroLeagueOrange, CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -218,7 +218,7 @@ internal fun PlayerProfileDialog(
                                     }
                                     Text(
                                         text = "${team?.name ?: player.teamId} • #${player.number} • ${player.position}",
-                                        color = Color(0xFFD1D5DB),
+                                        color = CourtsideDesignTokens.SecondaryText,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         maxLines = 1,
@@ -227,7 +227,7 @@ internal fun PlayerProfileDialog(
                                 }
                                 Text(
                                     text = player.name,
-                                    color = Color.White,
+                                    color = CourtsideDesignTokens.PrimaryText,
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = if (isCompact) 18.sp else 21.sp,
                                     maxLines = 1,
@@ -260,13 +260,13 @@ internal fun PlayerProfileDialog(
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = strings.closeButtonLabel,
-                                tint = Color.White
+                                tint = CourtsideDesignTokens.PrimaryText
                             )
                         }
                     }
                 }
 
-                HorizontalDivider(color = Color(0x22FFFFFF))
+                HorizontalDivider(color = CourtsideDesignTokens.SubtleGlassBorder)
 
                 // 2. Scrollable Scouting Body: Season Averages + Shooting Splits + PIR Trend + Game Log
                 LazyColumn(
@@ -280,7 +280,7 @@ internal fun PlayerProfileDialog(
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
                                 text = strings.seasonAveragesHeader,
-                                color = Color(0xFF9CA3AF),
+                                color = CourtsideDesignTokens.MutedText,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold
                             )
@@ -303,14 +303,14 @@ internal fun PlayerProfileDialog(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(14.dp))
-                                .background(Color(0xFF181820))
-                                .border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(14.dp))
+                                .background(CourtsideDesignTokens.ElevatedSurface)
+                                .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(14.dp))
                                 .padding(12.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
                                 text = strings.shootingSplitsHeader,
-                                color = Color.White,
+                                color = CourtsideDesignTokens.PrimaryText,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.ExtraBold
                             )
@@ -337,7 +337,7 @@ internal fun PlayerProfileDialog(
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = strings.pirTrendHeader,
-                                    color = Color(0xFF9CA3AF),
+                                    color = CourtsideDesignTokens.MutedText,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -357,7 +357,7 @@ internal fun PlayerProfileDialog(
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(
                                     text = "${strings.gameLogHeader} (${summary.gamesLogged})",
-                                    color = Color.White,
+                                    color = CourtsideDesignTokens.PrimaryText,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.ExtraBold
                                 )
@@ -367,15 +367,15 @@ internal fun PlayerProfileDialog(
                                         .padding(vertical = 2.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("RND", Modifier.weight(0.9f), color = Color(0xFF8E8E93), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                    Text(strings.opponentColumn, Modifier.weight(1.4f), color = Color(0xFF8E8E93), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                    Text(strings.resultColumn, Modifier.weight(1.5f), color = Color(0xFF8E8E93), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                                    Text("PTS", Modifier.weight(0.8f), color = Color(0xFF8E8E93), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                                    Text("REB", Modifier.weight(0.8f), color = Color(0xFF8E8E93), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                                    Text("AST", Modifier.weight(0.8f), color = Color(0xFF8E8E93), fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                                    Text("RND", Modifier.weight(0.9f), color = CourtsideDesignTokens.MutedText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    Text(strings.opponentColumn, Modifier.weight(1.4f), color = CourtsideDesignTokens.MutedText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    Text(strings.resultColumn, Modifier.weight(1.5f), color = CourtsideDesignTokens.MutedText, fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                                    Text("PTS", Modifier.weight(0.8f), color = CourtsideDesignTokens.MutedText, fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                                    Text("REB", Modifier.weight(0.8f), color = CourtsideDesignTokens.MutedText, fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                                    Text("AST", Modifier.weight(0.8f), color = CourtsideDesignTokens.MutedText, fontSize = 10.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                                     Text("PIR", Modifier.weight(0.9f), color = CourtsideDesignTokens.EuroLeagueOrange, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.End)
                                 }
-                                HorizontalDivider(color = Color(0x1AFFFFFF))
+                                HorizontalDivider(color = CourtsideDesignTokens.SubtleGlassBorder)
                             }
                         }
 
@@ -407,10 +407,10 @@ private fun PlayerStatBox(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(if (highlight) Color(0x28FF6600) else Color(0xFF1A1A22))
+            .background(if (highlight) Color(0x28FF6600) else CourtsideDesignTokens.PillSurface)
             .border(
                 1.dp,
-                if (highlight) CourtsideDesignTokens.EuroLeagueOrange else Color(0x22FFFFFF),
+                if (highlight) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.SubtleGlassBorder,
                 RoundedCornerShape(10.dp)
             )
             .padding(vertical = 8.dp, horizontal = 4.dp),
@@ -418,13 +418,13 @@ private fun PlayerStatBox(
     ) {
         Text(
             text = label,
-            color = if (highlight) CourtsideDesignTokens.EuroLeagueOrange else Color(0xFF9CA3AF),
+            color = if (highlight) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.MutedText,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold
         )
         Text(
             text = value,
-            color = if (highlight) CourtsideDesignTokens.EuroLeagueOrange else Color.White,
+            color = if (highlight) CourtsideDesignTokens.EuroLeagueOrange else CourtsideDesignTokens.PrimaryText,
             fontSize = 14.sp,
             fontWeight = FontWeight.ExtraBold,
             maxLines = 1
@@ -445,7 +445,7 @@ private fun ShootingSplitBar(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(label, color = Color(0xFFD1D5DB), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Text(label, color = CourtsideDesignTokens.SecondaryText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
             val rightLabel = if (detail.isNotBlank()) "${pct}% ($detail)" else "${pct}%"
             Text(rightLabel, color = color, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
         }
@@ -454,7 +454,7 @@ private fun ShootingSplitBar(
                 .fillMaxWidth()
                 .height(6.dp)
                 .clip(RoundedCornerShape(99.dp))
-                .background(Color(0xFF262630))
+                .background(CourtsideDesignTokens.PillSurface)
         ) {
             Box(
                 modifier = Modifier
@@ -536,14 +536,14 @@ private fun GameLogRow(
             Text(
                 text = "R${entry.round}",
                 modifier = Modifier.weight(0.9f),
-                color = Color(0xFF9CA3AF),
+                color = CourtsideDesignTokens.MutedText,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold
             )
             Text(
                 text = "$venueSymbol ${entry.opponentCode}",
                 modifier = Modifier.weight(1.4f),
-                color = Color.White,
+                color = CourtsideDesignTokens.PrimaryText,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1
@@ -560,7 +560,7 @@ private fun GameLogRow(
             Text(
                 text = "${entry.stat.points}",
                 modifier = Modifier.weight(0.8f),
-                color = Color.White,
+                color = CourtsideDesignTokens.PrimaryText,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center
@@ -568,14 +568,14 @@ private fun GameLogRow(
             Text(
                 text = "${entry.stat.totalRebounds}",
                 modifier = Modifier.weight(0.8f),
-                color = Color(0xFFD1D5DB),
+                color = CourtsideDesignTokens.SecondaryText,
                 fontSize = 11.sp,
                 textAlign = TextAlign.Center
             )
             Text(
                 text = "${entry.stat.assists}",
                 modifier = Modifier.weight(0.8f),
-                color = Color(0xFFD1D5DB),
+                color = CourtsideDesignTokens.SecondaryText,
                 fontSize = 11.sp,
                 textAlign = TextAlign.Center
             )
@@ -588,6 +588,6 @@ private fun GameLogRow(
                 textAlign = TextAlign.End
             )
         }
-        HorizontalDivider(color = Color(0x0DFFFFFF))
+        HorizontalDivider(color = CourtsideDesignTokens.DividerSubtle)
     }
 }

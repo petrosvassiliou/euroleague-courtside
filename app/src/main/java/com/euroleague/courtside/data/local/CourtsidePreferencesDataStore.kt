@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.euroleague.courtside.i18n.AppLanguage
+import com.euroleague.courtside.ui.theme.AppThemeMode
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -26,7 +27,8 @@ data class UserPreferencesState(
     val halftimeFinalScoreEnabled: Boolean = true,
     val closeGameAlertEnabled: Boolean = true,
     val autoUpdateCheckEnabled: Boolean = true,
-    val language: AppLanguage = AppLanguage.DE
+    val language: AppLanguage = AppLanguage.DE,
+    val themeMode: AppThemeMode = AppThemeMode.LIGHT
 )
 
 /**
@@ -48,6 +50,7 @@ class CourtsidePreferencesDataStore @Inject constructor(
         private const val KEY_QUICK_TIP_OFF = "tip_off_alarm_enabled"
         private const val KEY_QUICK_HT_FINAL = "halftime_final_score_enabled"
         private const val KEY_QUICK_CLOSE_GAME = "close_game_alert_enabled"
+        private const val KEY_QUICK_THEME_MODE = "app_theme_mode"
     }
 
     private val quickBootPrefs by lazy {
@@ -62,6 +65,7 @@ class CourtsidePreferencesDataStore @Inject constructor(
         val CLOSE_GAME_ALERT = booleanPreferencesKey("close_game_alert_enabled")
         val AUTO_UPDATE_CHECK = booleanPreferencesKey("auto_update_check_enabled")
         val APP_LANGUAGE = stringPreferencesKey("app_language_code")
+        val APP_THEME_MODE = stringPreferencesKey("app_theme_mode")
     }
 
     fun getSavedPrimaryTeamImmediate(): String? =
@@ -74,6 +78,15 @@ class CourtsidePreferencesDataStore @Inject constructor(
         quickBootPrefs.getString(KEY_QUICK_LANG, null)
             ?.takeIf { it.isNotBlank() }
             ?.let { AppLanguage.fromCode(it) }
+
+    fun getSavedThemeModeImmediate(): AppThemeMode =
+        AppThemeMode.fromCode(quickBootPrefs.getString(KEY_QUICK_THEME_MODE, AppThemeMode.DEFAULT.code))
+
+    fun saveThemeModeImmediate(mode: AppThemeMode) {
+        quickBootPrefs.edit()
+            .putString(KEY_QUICK_THEME_MODE, mode.code)
+            .commit()
+    }
 
     fun getSavedAutoUpdateEnabledImmediate(): Boolean =
         quickBootPrefs.getBoolean(KEY_QUICK_AUTO_UPDATE, true)
@@ -145,6 +158,9 @@ class CourtsidePreferencesDataStore @Inject constructor(
                 .apply()
         }
 
+        val resolvedThemeCode = prefs[Keys.APP_THEME_MODE]
+            ?: quickBootPrefs.getString(KEY_QUICK_THEME_MODE, AppThemeMode.DEFAULT.code)
+
         UserPreferencesState(
             primaryTeamId = resolvedTeamId,
             favoriteTeamIds = resolvedFavs,
@@ -152,7 +168,8 @@ class CourtsidePreferencesDataStore @Inject constructor(
             halftimeFinalScoreEnabled = prefs[Keys.HALFTIME_FINAL_SCORE] ?: getSavedHalftimeFinalImmediate(),
             closeGameAlertEnabled = prefs[Keys.CLOSE_GAME_ALERT] ?: getSavedCloseGameAlertImmediate(),
             autoUpdateCheckEnabled = resolvedAutoUpdate,
-            language = AppLanguage.fromCode(resolvedLangCode)
+            language = AppLanguage.fromCode(resolvedLangCode),
+            themeMode = AppThemeMode.fromCode(resolvedThemeCode)
         )
     }
 
@@ -160,6 +177,13 @@ class CourtsidePreferencesDataStore @Inject constructor(
         saveLanguageImmediate(language)
         context.dataStore.edit { prefs ->
             prefs[Keys.APP_LANGUAGE] = language.code
+        }
+    }
+
+    suspend fun setThemeMode(mode: AppThemeMode) {
+        saveThemeModeImmediate(mode)
+        context.dataStore.edit { prefs ->
+            prefs[Keys.APP_THEME_MODE] = mode.code
         }
     }
 

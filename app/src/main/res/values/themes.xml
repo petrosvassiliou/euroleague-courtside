@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.EuroLeagueCourtside" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">#121212</item>
-        <item name="android:navigationBarColor">#121212</item>
-        <item name="android:windowBackground">#121212</item>
+    <style name="Theme.EuroLeagueCourtside" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#F4F6FA</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:windowBackground">#F4F6FA</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 </resources>

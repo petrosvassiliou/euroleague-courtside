@@ -172,6 +172,7 @@ class CourtsideAppWidgetProvider : AppWidgetProvider() {
 
                 val savedTeamId = prefs.getSavedPrimaryTeamImmediate() ?: mockRepo.selectedTeamId.value
                 val language = prefs.getSavedLanguageImmediate() ?: mockRepo.appLanguageFlow.value
+                val isLight = prefs.getSavedThemeModeImmediate().isLight
                 val primaryTeam = mockRepo.findTeam(savedTeamId) ?: mockRepo.teams.first()
 
                 val state = buildWidgetMatchupState(
@@ -182,7 +183,17 @@ class CourtsideAppWidgetProvider : AppWidgetProvider() {
                 )
 
                 val views = RemoteViews(context.packageName, R.layout.widget_courtside_hub)
+                views.setInt(
+                    R.id.widget_root,
+                    "setBackgroundResource",
+                    if (isLight) R.drawable.widget_bg_light else R.drawable.widget_bg_obsidian
+                )
+                val primaryTxt = if (isLight) 0xFF0F172A.toInt() else 0xFFFFFFFF.toInt()
+                val mutedTxt = if (isLight) 0xFF64748B.toInt() else 0xFF9CA3AF.toInt()
+                val brandTxt = if (isLight) 0xFF334155.toInt() else 0xFFD1D5DB.toInt()
+
                 views.setTextViewText(R.id.widget_brand_title, "${primaryTeam.name.uppercase()}")
+                views.setTextColor(R.id.widget_brand_title, brandTxt)
                 views.setTextViewText(R.id.widget_status_badge, state.badgeText)
                 views.setInt(
                     R.id.widget_status_badge,
@@ -191,19 +202,25 @@ class CourtsideAppWidgetProvider : AppWidgetProvider() {
                 )
                 views.setTextColor(
                     R.id.widget_status_badge,
-                    if (state.isLive) 0xFFFF3B5C.toInt() else 0xFFFF6600.toInt()
+                    if (state.isLive) 0xFFE11D48.toInt() else 0xFFEA580C.toInt()
                 )
 
                 views.setImageViewResource(R.id.widget_home_logo, resolveClubDrawable(context, state.homeTeam))
                 views.setImageViewResource(R.id.widget_away_logo, resolveClubDrawable(context, state.awayTeam))
                 views.setTextViewText(R.id.widget_home_code, state.homeTeam.code)
+                views.setTextColor(R.id.widget_home_code, primaryTxt)
                 views.setTextViewText(R.id.widget_home_record, "${state.homeTeam.wins}-${state.homeTeam.losses}")
+                views.setTextColor(R.id.widget_home_record, mutedTxt)
                 views.setTextViewText(R.id.widget_away_code, state.awayTeam.code)
+                views.setTextColor(R.id.widget_away_code, primaryTxt)
                 views.setTextViewText(R.id.widget_away_record, "${state.awayTeam.wins}-${state.awayTeam.losses}")
+                views.setTextColor(R.id.widget_away_record, mutedTxt)
 
                 views.setTextViewText(R.id.widget_center_primary, state.centerPrimaryText)
                 views.setTextViewText(R.id.widget_center_secondary, state.centerSecondaryText)
+                views.setTextColor(R.id.widget_center_secondary, mutedTxt)
                 views.setTextViewText(R.id.widget_footer_arena, state.footerArenaText)
+                views.setTextColor(R.id.widget_footer_arena, mutedTxt)
 
                 // Klick auf das Widget öffnet bei Live-Spielen direkt das Live-Spiel im Match-Center, sonst My Team
                 val openAppIntent = Intent(context, MainActivity::class.java).apply {
