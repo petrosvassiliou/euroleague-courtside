@@ -128,6 +128,8 @@ import com.euroleague.courtside.i18n.LocalCourtsideStrings
 import com.euroleague.courtside.i18n.formatTipOffCountdown
 import com.euroleague.courtside.i18n.localizedLabel
 import com.euroleague.courtside.notifications.EuroLeagueNotificationManager
+import com.euroleague.courtside.notifications.GameReminderType
+import com.euroleague.courtside.ui.screens.GameRemindersDialog
 import com.euroleague.courtside.ui.screens.MatchCenterScreen
 import com.euroleague.courtside.ui.screens.MyTeamDashboardScreen
 import com.euroleague.courtside.ui.screens.PlayerProfileDialog
@@ -254,6 +256,16 @@ fun MainAppScaffold(
     var comparisonTeamBId by rememberSaveable { mutableStateOf("PAN") }
     var activeDeepLinkGameId by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedPlayerProfile by remember { mutableStateOf<PlayerProfile?>(null) }
+    var reminderDialogGameId by rememberSaveable { mutableStateOf<String?>(null) }
+    var gameRemindersMap by remember {
+        mutableStateOf(preferencesDataStore?.getSavedGameRemindersImmediate() ?: emptyMap())
+    }
+
+    LaunchedEffect(preferencesDataStore) {
+        preferencesDataStore?.userPreferencesFlow?.collect { prefs ->
+            gameRemindersMap = prefs.gameReminders
+        }
+    }
 
     var tipOffChannelEnabled by rememberSaveable {
         mutableStateOf(preferencesDataStore?.getSavedTipOffAlarmImmediate() ?: true)
@@ -263,6 +275,29 @@ fun MainAppScaffold(
     }
     var closeGameChannelEnabled by rememberSaveable {
         mutableStateOf(preferencesDataStore?.getSavedCloseGameAlertImmediate() ?: true)
+    }
+
+    val updateRemindersForGame: (EuroLeagueGame, Set<GameReminderType>) -> Unit = { game, newSet ->
+        val nextMap = if (newSet.isEmpty()) {
+            gameRemindersMap - game.id
+        } else {
+            gameRemindersMap + (game.id to newSet)
+        }
+        gameRemindersMap = nextMap
+        preferencesDataStore?.saveGameRemindersImmediate(nextMap)
+        notificationManager.onGameRemindersUpdated(game, newSet)
+        scope.launch {
+            preferencesDataStore?.setGameReminders(nextMap)
+            notificationManager.evaluateAutomaticGameNightAlerts(
+                games = repository.games.value,
+                favoriteTeamIds = favoriteIds + primaryTeam.id,
+                tipOffEnabled = tipOffChannelEnabled,
+                halftimeFinalEnabled = halftimeFinalChannelEnabled,
+                closeGameEnabled = closeGameChannelEnabled,
+                language = activeLanguage,
+                perGameReminders = nextMap
+            )
+        }
     }
 
     LaunchedEffect(pendingDeepLinkGame) {
@@ -601,7 +636,9 @@ fun MainAppScaffold(
                                     }
                                 }
                             },
-                            onSelectPlayer = { player -> selectedPlayerProfile = player }
+                            onSelectPlayer = { player -> selectedPlayerProfile = player },
+                            gameRemindersMap = gameRemindersMap,
+                            onOpenGameRemindersDialog = { g -> reminderDialogGameId = g.id }
                         )
 
                         CourtsideDestination.MATCHDAY -> MatchCenterScreen(
@@ -630,6 +667,15 @@ fun MainAppScaffold(
                             onLiveScoreTick = {
                                 scope.launch {
                                     offlineFirstRepository?.refreshLiveMatchdayTick()
+                                    notificationManager.evaluateAutomaticGameNightAlerts(
+                                        games = repository.games.value,
+                                        favoriteTeamIds = favoriteIds + primaryTeam.id,
+                                        tipOffEnabled = tipOffChannelEnabled,
+                                        halftimeFinalEnabled = halftimeFinalChannelEnabled,
+                                        closeGameEnabled = closeGameChannelEnabled,
+                                        language = activeLanguage,
+                                        perGameReminders = gameRemindersMap
+                                    )
                                 }
                             },
                             onRefreshSelectedGameStats = { game ->
@@ -651,7 +697,10 @@ fun MainAppScaffold(
                                     allPlayers = allPlayers,
                                     allGames = games
                                 )
-                            }
+                            },
+                            gameRemindersMap = gameRemindersMap,
+                            onUpdateGameReminders = updateRemindersForGame,
+                            onOpenGameRemindersDialog = { g -> reminderDialogGameId = g.id }
                         )
 
                         CourtsideDestination.STANDINGS_PLAYOFFS -> {
@@ -764,7 +813,8 @@ fun MainAppScaffold(
                                         tipOffEnabled = tipOff,
                                         halftimeFinalEnabled = htFinal,
                                         closeGameEnabled = closeGame,
-                                        language = activeLanguage
+                                        language = activeLanguage,
+                                        perGameReminders = gameRemindersMap
                                     )
                                 }
                             },
@@ -801,6 +851,20 @@ fun MainAppScaffold(
                                 activeDeepLinkGameId = gId
                                 repository.selectDestination(CourtsideDestination.MATCHDAY)
                             }
+                        )
+                    }
+
+                    // Spielspezifischer Erinnerungs-Dialog (Q1, Halbzeit, Q3, Crunch-Time, Endergebnis)
+                    val activeReminderGame = reminderDialogGameId?.let { id -> games.find { it.id == id } }
+                    if (activeReminderGame != null) {
+                        GameRemindersDialog(
+                            game = activeReminderGame,
+                            activeReminders = gameRemindersMap[activeReminderGame.id].orEmpty(),
+                            isCompact = isCompact,
+                            onUpdateReminders = { nextSet ->
+                                updateRemindersForGame(activeReminderGame, nextSet)
+                            },
+                            onDismiss = { reminderDialogGameId = null }
                         )
                     }
 

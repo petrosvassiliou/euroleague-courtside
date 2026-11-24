@@ -128,6 +128,7 @@ import com.euroleague.courtside.i18n.LocalCourtsideStrings
 import com.euroleague.courtside.i18n.formatTipOffCountdown
 import com.euroleague.courtside.i18n.localizedLabel
 import com.euroleague.courtside.notifications.EuroLeagueNotificationManager
+import com.euroleague.courtside.notifications.GameReminderType
 import com.euroleague.courtside.ui.screens.MatchCenterScreen
 import com.euroleague.courtside.ui.theme.CourtsideClubCrest
 import com.euroleague.courtside.ui.theme.CourtsideDesignTokens
@@ -161,7 +162,9 @@ internal fun MyTeamDashboardScreen(
     isCompact: Boolean = false,
     onSelectPrimaryTeam: (String) -> Unit,
     onVerifyRosterNow: () -> Unit = {},
-    onSelectPlayer: (PlayerProfile) -> Unit = {}
+    onSelectPlayer: (PlayerProfile) -> Unit = {},
+    gameRemindersMap: Map<String, Set<GameReminderType>> = emptyMap(),
+    onOpenGameRemindersDialog: (EuroLeagueGame) -> Unit = {}
 ) {
     val context = LocalContext.current
     val strings = LocalCourtsideStrings.current
@@ -380,12 +383,21 @@ internal fun MyTeamDashboardScreen(
                                 )
                             }
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "${strings.roundPrefix} ${nextGame.round}",
-                                color = CourtsideDesignTokens.MutedText,
-                                fontSize = 12.sp,
-                                maxLines = 1
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "${strings.roundPrefix} ${nextGame.round}",
+                                    color = CourtsideDesignTokens.MutedText,
+                                    fontSize = 12.sp,
+                                    maxLines = 1
+                                )
+                                GameReminderBellPill(
+                                    activeReminders = gameRemindersMap[nextGame.id].orEmpty(),
+                                    onClick = { onOpenGameRemindersDialog(nextGame) }
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Row(
@@ -682,11 +694,20 @@ internal fun MyTeamDashboardScreen(
                             detailText = pillDetailText,
                             badgeColor = pillBadgeColor
                         )
-                        Text(
-                            text = "${strings.roundPrefix} ${nextGame.round}",
-                            color = CourtsideDesignTokens.MutedText,
-                            fontSize = 12.sp
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "${strings.roundPrefix} ${nextGame.round}",
+                                color = CourtsideDesignTokens.MutedText,
+                                fontSize = 12.sp
+                            )
+                            GameReminderBellPill(
+                                activeReminders = gameRemindersMap[nextGame.id].orEmpty(),
+                                onClick = { onOpenGameRemindersDialog(nextGame) }
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     Row(

@@ -175,7 +175,8 @@ class MainActivity : ComponentActivity() {
             tipOffEnabled = preferencesDataStore.getSavedTipOffAlarmImmediate(),
             halftimeFinalEnabled = preferencesDataStore.getSavedHalftimeFinalImmediate(),
             closeGameEnabled = preferencesDataStore.getSavedCloseGameAlertImmediate(),
-            language = lang
+            language = lang,
+            perGameReminders = preferencesDataStore.getSavedGameRemindersImmediate()
         )
         CourtsideAppWidgetProvider.updateAllWidgets(applicationContext)
     }

@@ -497,6 +497,145 @@ class EuroLeagueCourtsideUnitTest {
         assertTrue(urlT0.contains("https://live.euroleague.net/api/Header?gamecode=136&seasoncode=E2026&_t="))
         assertTrue(urlT0 != urlT4)
 
+        // Verify per-game reminders (Q1, Halftime, Q3, Crunch Time, Final Score) fire independently of Favorite Teams
+        val sampleRepo = EuroLeagueMockRepository()
+        val nonFavHome = sampleRepo.findTeam("BAR") ?: sampleRepo.teams.first()
+        val nonFavAway = sampleRepo.findTeam("ULK") ?: sampleRepo.teams[1]
+        val baseGame = sampleRepo.games.value.first().copy(
+            id = "E2026_133",
+            gameCode = 133,
+            round = 14,
+            homeTeam = nonFavHome,
+            awayTeam = nonFavAway,
+            tipOffEpochMillis = 1_700_000_000_000L
+        )
+        val perGameMap = mapOf(
+            "E2026_133" to com.euroleague.courtside.notifications.GameReminderType.entries.toSet()
+        )
+        val encoded = com.euroleague.courtside.data.local.CourtsidePreferencesDataStore.encodeGameReminders(perGameMap)
+        val decoded = com.euroleague.courtside.data.local.CourtsidePreferencesDataStore.decodeGameReminders(encoded)
+        assertEquals(5, decoded["E2026_133"]?.size)
+
+        // 1) End of Q1 (`currentQuarter = 1, remainingClock = "00:00"`)
+        val q1Game = baseGame.copy(
+            status = GameStatus.LIVE,
+            currentQuarter = 1,
+            remainingClock = "00:00",
+            homeScore = 28,
+            awayScore = 21,
+            quarters = com.euroleague.courtside.data.repository.QuarterScores(28, 21, 0, 0, 0, 0, 0, 0)
+        )
+        val q1Actions = com.euroleague.courtside.notifications.EuroLeagueNotificationManager.selectAutoAlertActions(
+            games = listOf(q1Game),
+            favoriteTeamIds = setOf("MUN"),
+            tipOffEnabled = false,
+            halftimeFinalEnabled = false,
+            closeGameEnabled = false,
+            alreadySentKeys = emptySet(),
+            nowMillis = 1_700_001_200_000L,
+            perGameReminders = perGameMap
+        )
+        assertEquals(1, q1Actions.size)
+        assertEquals(
+            com.euroleague.courtside.notifications.EuroLeagueNotificationManager.Companion.AutoAlertType.Q1_SCORE,
+            q1Actions.first().type
+        )
+
+        // 2) Halftime (`currentQuarter = 2, remainingClock = "00:00"`)
+        val htGame = q1Game.copy(
+            currentQuarter = 2,
+            remainingClock = "00:00",
+            homeScore = 45,
+            awayScore = 39,
+            quarters = com.euroleague.courtside.data.repository.QuarterScores(28, 21, 17, 18, 0, 0, 0, 0)
+        )
+        val htActions = com.euroleague.courtside.notifications.EuroLeagueNotificationManager.selectAutoAlertActions(
+            games = listOf(htGame),
+            favoriteTeamIds = setOf("MUN"),
+            tipOffEnabled = false,
+            halftimeFinalEnabled = false,
+            closeGameEnabled = false,
+            alreadySentKeys = setOf("q1_E2026_133"),
+            nowMillis = 1_700_002_800_000L,
+            perGameReminders = perGameMap
+        )
+        assertEquals(1, htActions.size)
+        assertEquals(
+            com.euroleague.courtside.notifications.EuroLeagueNotificationManager.Companion.AutoAlertType.HALFTIME_SCORE,
+            htActions.first().type
+        )
+
+        // 3) End of Q3 (`currentQuarter = 3, remainingClock = "00:00"`)
+        val q3Game = htGame.copy(
+            currentQuarter = 3,
+            remainingClock = "00:00",
+            homeScore = 61,
+            awayScore = 53,
+            quarters = com.euroleague.courtside.data.repository.QuarterScores(28, 21, 17, 18, 16, 14, 0, 0)
+        )
+        val q3Actions = com.euroleague.courtside.notifications.EuroLeagueNotificationManager.selectAutoAlertActions(
+            games = listOf(q3Game),
+            favoriteTeamIds = setOf("MUN"),
+            tipOffEnabled = false,
+            halftimeFinalEnabled = false,
+            closeGameEnabled = false,
+            alreadySentKeys = setOf("q1_E2026_133", "ht_E2026_133"),
+            nowMillis = 1_700_004_500_000L,
+            perGameReminders = perGameMap
+        )
+        assertEquals(1, q3Actions.size)
+        assertEquals(
+            com.euroleague.courtside.notifications.EuroLeagueNotificationManager.Companion.AutoAlertType.Q3_SCORE,
+            q3Actions.first().type
+        )
+
+        // 4) Crunch Time (`Q4, 01:42, 2 pts diff`)
+        val crunchGame = q3Game.copy(
+            currentQuarter = 4,
+            remainingClock = "01:42",
+            homeScore = 82,
+            awayScore = 80,
+            quarters = com.euroleague.courtside.data.repository.QuarterScores(28, 21, 17, 18, 16, 14, 21, 27)
+        )
+        val crunchActions = com.euroleague.courtside.notifications.EuroLeagueNotificationManager.selectAutoAlertActions(
+            games = listOf(crunchGame),
+            favoriteTeamIds = setOf("MUN"),
+            tipOffEnabled = false,
+            halftimeFinalEnabled = false,
+            closeGameEnabled = false,
+            alreadySentKeys = setOf("q1_E2026_133", "ht_E2026_133", "q3_E2026_133"),
+            nowMillis = 1_700_005_800_000L,
+            perGameReminders = perGameMap
+        )
+        assertEquals(1, crunchActions.size)
+        assertEquals(
+            com.euroleague.courtside.notifications.EuroLeagueNotificationManager.Companion.AutoAlertType.CRUNCH_TIME,
+            crunchActions.first().type
+        )
+
+        // 5) Final Score (`FINAL`)
+        val finalGame = crunchGame.copy(
+            status = GameStatus.FINAL,
+            remainingClock = "00:00",
+            homeScore = 86,
+            awayScore = 83
+        )
+        val finalActions = com.euroleague.courtside.notifications.EuroLeagueNotificationManager.selectAutoAlertActions(
+            games = listOf(finalGame),
+            favoriteTeamIds = setOf("MUN"),
+            tipOffEnabled = false,
+            halftimeFinalEnabled = false,
+            closeGameEnabled = false,
+            alreadySentKeys = setOf("q1_E2026_133", "ht_E2026_133", "q3_E2026_133", "crunch_E2026_133"),
+            nowMillis = 1_700_006_500_000L,
+            perGameReminders = perGameMap
+        )
+        assertEquals(1, finalActions.size)
+        assertEquals(
+            com.euroleague.courtside.notifications.EuroLeagueNotificationManager.Companion.AutoAlertType.FINAL_SCORE,
+            finalActions.first().type
+        )
+
         AppLanguage.entries.forEach { lang ->
             val strings = CourtsideTranslations.forLanguage(lang)
             assertTrue(strings.updateSectionTitle.isNotBlank())

@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.euroleague.courtside.BuildConfig
 import com.euroleague.courtside.i18n.AppLanguage
+import com.euroleague.courtside.notifications.GameReminderType
 import com.euroleague.courtside.ui.theme.AppThemeMode
 import com.euroleague.courtside.update.CourtsideAppUpdateManager
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -30,6 +31,7 @@ data class UserPreferencesState(
     val closeGameAlertEnabled: Boolean = true,
     val autoUpdateCheckEnabled: Boolean = true,
     val betaUpdateChannelEnabled: Boolean = CourtsideAppUpdateManager.isPreReleaseVersion(BuildConfig.VERSION_NAME),
+    val gameReminders: Map<String, Set<GameReminderType>> = emptyMap(),
     val language: AppLanguage = AppLanguage.DE,
     val themeMode: AppThemeMode = AppThemeMode.LIGHT
 )
@@ -55,6 +57,27 @@ class CourtsidePreferencesDataStore @Inject constructor(
         private const val KEY_QUICK_HT_FINAL = "halftime_final_score_enabled"
         private const val KEY_QUICK_CLOSE_GAME = "close_game_alert_enabled"
         private const val KEY_QUICK_THEME_MODE = "app_theme_mode"
+        private const val KEY_QUICK_GAME_REMINDERS = "per_game_reminder_entries"
+
+        internal fun encodeGameReminders(map: Map<String, Set<GameReminderType>>): Set<String> =
+            map.flatMap { (gameId, types) ->
+                if (gameId.isBlank()) emptyList() else types.map { "$gameId|${it.code}" }
+            }.toSet()
+
+        internal fun decodeGameReminders(entries: Set<String>?): Map<String, Set<GameReminderType>> {
+            if (entries.isNullOrEmpty()) return emptyMap()
+            val out = mutableMapOf<String, MutableSet<GameReminderType>>()
+            for (raw in entries) {
+                val sep = raw.lastIndexOf('|')
+                if (sep <= 0 || sep >= raw.length - 1) continue
+                val gameId = raw.substring(0, sep).trim()
+                val type = GameReminderType.fromCode(raw.substring(sep + 1)) ?: continue
+                if (gameId.isNotEmpty()) {
+                    out.getOrPut(gameId) { mutableSetOf() }.add(type)
+                }
+            }
+            return out
+        }
     }
 
     private val quickBootPrefs by lazy {
@@ -71,6 +94,7 @@ class CourtsidePreferencesDataStore @Inject constructor(
         val BETA_UPDATE_CHANNEL = booleanPreferencesKey("beta_update_channel_enabled")
         val APP_LANGUAGE = stringPreferencesKey("app_language_code")
         val APP_THEME_MODE = stringPreferencesKey("app_theme_mode")
+        val GAME_REMINDERS = stringSetPreferencesKey("per_game_reminder_entries")
     }
 
     fun getSavedPrimaryTeamImmediate(): String? =
@@ -111,6 +135,15 @@ class CourtsidePreferencesDataStore @Inject constructor(
 
     fun getSavedCloseGameAlertImmediate(): Boolean =
         quickBootPrefs.getBoolean(KEY_QUICK_CLOSE_GAME, true)
+
+    fun getSavedGameRemindersImmediate(): Map<String, Set<GameReminderType>> =
+        decodeGameReminders(quickBootPrefs.getStringSet(KEY_QUICK_GAME_REMINDERS, null))
+
+    fun saveGameRemindersImmediate(remindersMap: Map<String, Set<GameReminderType>>) {
+        quickBootPrefs.edit()
+            .putStringSet(KEY_QUICK_GAME_REMINDERS, encodeGameReminders(remindersMap))
+            .commit()
+    }
 
     fun saveNotificationChannelsImmediate(
         tipOff: Boolean,
@@ -180,6 +213,9 @@ class CourtsidePreferencesDataStore @Inject constructor(
 
         val resolvedThemeCode = prefs[Keys.APP_THEME_MODE]
             ?: quickBootPrefs.getString(KEY_QUICK_THEME_MODE, AppThemeMode.DEFAULT.code)
+        val resolvedGameReminders = prefs[Keys.GAME_REMINDERS]
+            ?.let { decodeGameReminders(it) }
+            ?: getSavedGameRemindersImmediate()
 
         UserPreferencesState(
             primaryTeamId = resolvedTeamId,
@@ -189,6 +225,7 @@ class CourtsidePreferencesDataStore @Inject constructor(
             closeGameAlertEnabled = prefs[Keys.CLOSE_GAME_ALERT] ?: getSavedCloseGameAlertImmediate(),
             autoUpdateCheckEnabled = resolvedAutoUpdate,
             betaUpdateChannelEnabled = resolvedBetaUpdates,
+            gameReminders = resolvedGameReminders,
             language = AppLanguage.fromCode(resolvedLangCode),
             themeMode = AppThemeMode.fromCode(resolvedThemeCode)
         )
@@ -219,6 +256,14 @@ class CourtsidePreferencesDataStore @Inject constructor(
         saveBetaUpdatesEnabledImmediate(enabled)
         context.dataStore.edit { prefs ->
             prefs[Keys.BETA_UPDATE_CHANNEL] = enabled
+        }
+    }
+
+    suspend fun setGameReminders(remindersMap: Map<String, Set<GameReminderType>>) {
+        val cleaned = remindersMap.filterValues { it.isNotEmpty() }
+        saveGameRemindersImmediate(cleaned)
+        context.dataStore.edit { prefs ->
+            prefs[Keys.GAME_REMINDERS] = encodeGameReminders(cleaned)
         }
     }
 

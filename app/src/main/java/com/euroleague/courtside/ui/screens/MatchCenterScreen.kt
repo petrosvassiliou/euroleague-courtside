@@ -88,6 +88,7 @@ import com.euroleague.courtside.data.repository.ShotAttempt
 import com.euroleague.courtside.i18n.LocalCourtsideStrings
 import com.euroleague.courtside.ui.theme.CourtsideDesignTokens
 import com.euroleague.courtside.notifications.EuroLeagueNotificationManager
+import com.euroleague.courtside.notifications.GameReminderType
 import com.euroleague.courtside.util.CalendarExportHelper
 import kotlinx.coroutines.launch
 
@@ -124,7 +125,10 @@ fun MatchCenterScreen(
     onOpenTeamStats: (String) -> Unit,
     deepLinkGameId: String? = null,
     onConsumeDeepLinkGame: () -> Unit = {},
-    onClickPlayerRef: (playerId: String, playerName: String, teamId: String) -> Unit = { _, _, _ -> }
+    onClickPlayerRef: (playerId: String, playerName: String, teamId: String) -> Unit = { _, _, _ -> },
+    gameRemindersMap: Map<String, Set<GameReminderType>> = emptyMap(),
+    onUpdateGameReminders: (EuroLeagueGame, Set<GameReminderType>) -> Unit = { _, _ -> },
+    onOpenGameRemindersDialog: (EuroLeagueGame) -> Unit = {}
 ) {
     val context = LocalContext.current
     val strings = LocalCourtsideStrings.current
@@ -627,6 +631,7 @@ fun MatchCenterScreen(
                             MatchSummaryCard(
                                 game = game,
                                 isSelected = game.id == selectedGame?.id,
+                                activeReminders = gameRemindersMap[game.id].orEmpty(),
                                 onSelect = {
                                     activeGameId = game.id
                                     onRefreshSelectedGameStats(game)
@@ -640,6 +645,9 @@ fun MatchCenterScreen(
                                 onScheduleTipOffAlarm = {
                                     notificationManager.scheduleTipOffAlarm(game, strings.language)
                                 },
+                                onOpenReminders = {
+                                    onOpenGameRemindersDialog(game)
+                                },
                                 onOpenTeamStats = onOpenTeamStats
                             )
                         }
@@ -650,6 +658,7 @@ fun MatchCenterScreen(
         detailPane = {
             AnimatedPane {
                 if (selectedGame != null) {
+                    val selectedReminders = gameRemindersMap[selectedGame.id].orEmpty()
                     MatchDetailPane(
                         game = selectedGame,
                         isCompact = isCompact,
@@ -683,7 +692,24 @@ fun MatchCenterScreen(
                             }
                         },
                         onOpenTeamStats = onOpenTeamStats,
-                        onClickPlayerRef = onClickPlayerRef
+                        onClickPlayerRef = onClickPlayerRef,
+                        activeReminders = selectedReminders,
+                        onToggleReminder = { type ->
+                            val next = if (type in selectedReminders) {
+                                selectedReminders - type
+                            } else {
+                                selectedReminders + type
+                            }
+                            onUpdateGameReminders(selectedGame, next)
+                        },
+                        onToggleAllReminders = {
+                            val all = GameReminderType.entries.toSet()
+                            val next = if (selectedReminders.size == all.size) emptySet() else all
+                            onUpdateGameReminders(selectedGame, next)
+                        },
+                        onOpenRemindersDialog = {
+                            onOpenGameRemindersDialog(selectedGame)
+                        }
                     )
                 }
             }
@@ -932,9 +958,11 @@ private fun formatTipOffDateTime(epochMillis: Long): String {
 private fun MatchSummaryCard(
     game: EuroLeagueGame,
     isSelected: Boolean,
+    activeReminders: Set<GameReminderType> = emptySet(),
     onSelect: () -> Unit,
     onExportCalendar: () -> Unit,
     onScheduleTipOffAlarm: () -> Unit,
+    onOpenReminders: () -> Unit = {},
     onOpenTeamStats: (String) -> Unit
 ) {
     val strings = LocalCourtsideStrings.current
@@ -1066,15 +1094,24 @@ private fun MatchSummaryCard(
                         }
                     }
 
-                    IconButton(
-                        onClick = { showContextMenu = true },
-                        modifier = Modifier.size(28.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(
-                            Icons.Default.MoreHoriz,
-                            contentDescription = "Menu",
-                            tint = CourtsideDesignTokens.MutedText
+                        GameReminderBellPill(
+                            activeReminders = activeReminders,
+                            onClick = onOpenReminders
                         )
+                        IconButton(
+                            onClick = { showContextMenu = true },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.MoreHoriz,
+                                contentDescription = "Menu",
+                                tint = CourtsideDesignTokens.MutedText
+                            )
+                        }
                     }
                 }
 
@@ -1229,6 +1266,14 @@ private fun MatchSummaryCard(
                 }
             )
             DropdownMenuItem(
+                text = { Text(strings.gameRemindersTitle) },
+                leadingIcon = { Icon(Icons.Default.NotificationsActive, contentDescription = null) },
+                onClick = {
+                    showContextMenu = false
+                    onOpenReminders()
+                }
+            )
+            DropdownMenuItem(
                 text = { Text(strings.contextScheduleTipOff) },
                 leadingIcon = { Icon(Icons.Default.NotificationsActive, contentDescription = null) },
                 onClick = {
@@ -1291,7 +1336,11 @@ private fun MatchDetailPane(
     onExportCalendar: () -> Unit,
     onTriggerCloseGameAlert: () -> Unit,
     onOpenTeamStats: (String) -> Unit = {},
-    onClickPlayerRef: (String, String, String) -> Unit = { _, _, _ -> }
+    onClickPlayerRef: (String, String, String) -> Unit = { _, _, _ -> },
+    activeReminders: Set<GameReminderType> = emptySet(),
+    onToggleReminder: (GameReminderType) -> Unit = {},
+    onToggleAllReminders: () -> Unit = {},
+    onOpenRemindersDialog: () -> Unit = {}
 ) {
     val strings = LocalCourtsideStrings.current
     var sortColumn by rememberSaveable { mutableStateOf(BoxscoreSortColumn.PIR) }
@@ -1375,6 +1424,15 @@ private fun MatchDetailPane(
                     isCompact = true,
                     onExportCalendar = onExportCalendar,
                     onTriggerCloseGameAlert = onTriggerCloseGameAlert
+                )
+            }
+
+            item {
+                GameRemindersQuickStrip(
+                    activeReminders = activeReminders,
+                    onToggleReminder = onToggleReminder,
+                    onToggleAll = onToggleAllReminders,
+                    onOpenDialog = onOpenRemindersDialog
                 )
             }
 
@@ -1571,11 +1629,18 @@ private fun MatchDetailPane(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 1. Top Dual-Tone Gradient Scoreboard Banner
+            // 1. Top Dual-Tone Gradient Scoreboard Banner + Per-Game Reminders Bar
             DualToneScoreboardBanner(
                 game = game,
                 onExportCalendar = onExportCalendar,
                 onTriggerCloseGameAlert = onTriggerCloseGameAlert
+            )
+
+            GameRemindersQuickStrip(
+                activeReminders = activeReminders,
+                onToggleReminder = onToggleReminder,
+                onToggleAll = onToggleAllReminders,
+                onOpenDialog = onOpenRemindersDialog
             )
 
             if (game.status == GameStatus.UPCOMING) {

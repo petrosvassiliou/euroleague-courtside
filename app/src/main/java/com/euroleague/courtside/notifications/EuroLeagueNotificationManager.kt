@@ -45,6 +45,26 @@ data class LocalizedNotificationPayload(
     val summaryText: String
 )
 
+enum class GameReminderType(val code: String, val shortBadge: String) {
+    Q1_RESULT("Q1", "Q1"),
+    HALFTIME_RESULT("HT", "HT"),
+    Q3_RESULT("Q3", "Q3"),
+    CRUNCH_TIME("CRUNCH", "🔥 Q4"),
+    FINAL_SCORE("FINAL", "FT");
+
+    companion object {
+        fun fromCode(code: String): GameReminderType? =
+            entries.firstOrNull { it.code.equals(code.trim(), ignoreCase = true) }
+    }
+}
+
+enum class ScoreMilestone {
+    Q1,
+    HALFTIME,
+    Q3,
+    FINAL
+}
+
 /**
  * Verwaltet die dedizierten EuroLeague-Notification-Channels sowie WorkManager-Jobs in allen
  * 6 unterstützten Sprachen (EN, DE, FR, IT, ES, EL) für:
@@ -77,7 +97,9 @@ class EuroLeagueNotificationManager @Inject constructor(
 
         enum class AutoAlertType {
             SCHEDULE_TIP_OFF,
+            Q1_SCORE,
             HALFTIME_SCORE,
+            Q3_SCORE,
             FINAL_SCORE,
             CRUNCH_TIME
         }
@@ -88,10 +110,28 @@ class EuroLeagueNotificationManager @Inject constructor(
             val dedupeKey: String
         )
 
+        fun isQuarterResultReady(game: EuroLeagueGame, quarterNumber: Int): Boolean {
+            if (game.status != GameStatus.LIVE) return false
+            val clockTrimmed = game.remainingClock.trim()
+            val isClockZero = clockTrimmed == "00:00" || clockTrimmed == "0:00"
+            val q = game.quarters
+            return when (quarterNumber) {
+                1 -> (q.q1Home + q.q1Away) > 0 &&
+                    ((game.currentQuarter == 1 && isClockZero) ||
+                        (game.currentQuarter == 2 && (q.q2Home + q.q2Away) <= 6))
+                2 -> (q.q1Home + q.q1Away + q.q2Home + q.q2Away) > 0 &&
+                    ((game.currentQuarter == 2 && isClockZero) ||
+                        (game.currentQuarter == 3 && (q.q3Home + q.q3Away) <= 6))
+                3 -> (q.q3Home + q.q3Away) > 0 &&
+                    ((game.currentQuarter == 3 && isClockZero) ||
+                        (game.currentQuarter == 4 && (q.q4Home + q.q4Away) <= 6))
+                else -> false
+            }
+        }
+
         /**
-         * Reine Entscheidungslogik für automatische Spieltags-Benachrichtigungen im Hintergrund:
-         * Filtert nach Favoriten-Clubs, prüft aktive Kanäle, vermeidet historische Duplikate
-         * (`alreadySentKeys`) und begrenzt `FINAL`-Alarme auf aktuelle Spiele (letzte 12 Std.).
+         * Reine Entscheidungslogik für automatische Spieltags-Benachrichtigungen UND spielspezifische
+         * Erinnerungen (`perGameReminders`: Q1, Halbzeit, Q3, Crunch-Time, Endergebnis).
          */
         fun selectAutoAlertActions(
             games: List<EuroLeagueGame>,
@@ -100,7 +140,8 @@ class EuroLeagueNotificationManager @Inject constructor(
             halftimeFinalEnabled: Boolean,
             closeGameEnabled: Boolean,
             alreadySentKeys: Set<String>,
-            nowMillis: Long = System.currentTimeMillis()
+            nowMillis: Long = System.currentTimeMillis(),
+            perGameReminders: Map<String, Set<GameReminderType>> = emptyMap()
         ): List<AutoAlertAction> {
             val favCanon = favoriteTeamIds.map { EuroLeagueMockRepository.canonicalClubId(it) }.toSet()
             val actions = mutableListOf<AutoAlertAction>()
@@ -109,42 +150,63 @@ class EuroLeagueNotificationManager @Inject constructor(
                 val homeCanon = EuroLeagueMockRepository.canonicalClubId(game.homeTeam.id)
                 val awayCanon = EuroLeagueMockRepository.canonicalClubId(game.awayTeam.id)
                 val involvesFavorite = favCanon.isEmpty() || homeCanon in favCanon || awayCanon in favCanon
+                val custom = perGameReminders[game.id].orEmpty()
 
-                // 1. Geplante Tip-Off-Alarme (15 Min. vorher) für Favoriten innerhalb der nächsten 48 Std.
-                if (tipOffEnabled && involvesFavorite && game.status == GameStatus.UPCOMING) {
+                // 1. Geplante Tip-Off-Alarme (15 Min. vorher) für Favoriten oder Spiele mit aktiver Erinnerung
+                if (((tipOffEnabled && involvesFavorite) || custom.isNotEmpty()) && game.status == GameStatus.UPCOMING) {
                     val timeUntilTipOff = game.tipOffEpochMillis - nowMillis
                     val key = "tipoff_${game.id}"
-                    if (timeUntilTipOff in (16 * 60_000L)..(48 * 3_600_000L) && key !in alreadySentKeys) {
+                    if (tipOffEnabled && involvesFavorite &&
+                        timeUntilTipOff in (16 * 60_000L)..(48 * 3_600_000L) &&
+                        key !in alreadySentKeys
+                    ) {
                         actions.add(AutoAlertAction(AutoAlertType.SCHEDULE_TIP_OFF, game, key))
                     }
                 }
 
-                // 2. Halbzeit-Stand für Favoriten
-                val clockTrimmed = game.remainingClock.trim()
-                val isHalftimeMoment = game.status == GameStatus.LIVE &&
-                    game.currentQuarter == 2 &&
-                    (clockTrimmed == "00:00" || clockTrimmed == "0:00") &&
-                    (game.homeScore > 0 || game.awayScore > 0)
-                if (halftimeFinalEnabled && involvesFavorite && isHalftimeMoment) {
+                // 2. 1. Viertel-Ergebnis (spielspezifische Erinnerung)
+                if (GameReminderType.Q1_RESULT in custom && isQuarterResultReady(game, 1)) {
+                    val key = "q1_${game.id}"
+                    if (key !in alreadySentKeys) {
+                        actions.add(AutoAlertAction(AutoAlertType.Q1_SCORE, game, key))
+                    }
+                }
+
+                // 3. Halbzeit-Ergebnis (Favoriten-Kanal ODER spielspezifische Erinnerung)
+                if ((GameReminderType.HALFTIME_RESULT in custom || (halftimeFinalEnabled && involvesFavorite)) &&
+                    isQuarterResultReady(game, 2)
+                ) {
                     val key = "ht_${game.id}"
                     if (key !in alreadySentKeys) {
                         actions.add(AutoAlertAction(AutoAlertType.HALFTIME_SCORE, game, key))
                     }
                 }
 
-                // 3. Offizielles Endergebnis für Favoriten (nur Spiele aus dem aktuellen 12-Std.-Fenster)
+                // 4. 3. Viertel-Ergebnis (spielspezifische Erinnerung)
+                if (GameReminderType.Q3_RESULT in custom && isQuarterResultReady(game, 3)) {
+                    val key = "q3_${game.id}"
+                    if (key !in alreadySentKeys) {
+                        actions.add(AutoAlertAction(AutoAlertType.Q3_SCORE, game, key))
+                    }
+                }
+
+                // 5. Offizielles Endergebnis (Favoriten-Kanal ODER spielspezifische Erinnerung im 12-Std.-Fenster)
                 val finishedRecently = game.status == GameStatus.FINAL &&
                     (game.homeScore > 0 || game.awayScore > 0) &&
                     (nowMillis - game.tipOffEpochMillis) in (-2 * 3_600_000L)..(12 * 3_600_000L)
-                if (halftimeFinalEnabled && involvesFavorite && finishedRecently) {
+                if ((GameReminderType.FINAL_SCORE in custom || (halftimeFinalEnabled && involvesFavorite)) &&
+                    finishedRecently
+                ) {
                     val key = "final_${game.id}"
                     if (key !in alreadySentKeys) {
                         actions.add(AutoAlertAction(AutoAlertType.FINAL_SCORE, game, key))
                     }
                 }
 
-                // 4. Crunch-Time Thriller (Q4 < 3:00, <= 5 Pkt. Differenz) für Favoriten
-                if (closeGameEnabled && involvesFavorite && game.isCloseGameFourthQuarter) {
+                // 6. Crunch-Time Thriller (Q4 <= 3:00, <= 5 Pkt. Differenz)
+                if ((GameReminderType.CRUNCH_TIME in custom || (closeGameEnabled && involvesFavorite)) &&
+                    game.isCloseGameFourthQuarter
+                ) {
                     val key = "crunch_${game.id}"
                     if (key !in alreadySentKeys) {
                         actions.add(AutoAlertAction(AutoAlertType.CRUNCH_TIME, game, key))
@@ -250,9 +312,10 @@ class EuroLeagueNotificationManager @Inject constructor(
         val scoresChannel = NotificationChannel(
             CHANNEL_SCORES,
             strings.scoresChannelTitle,
-            NotificationManager.IMPORTANCE_DEFAULT
+            NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = strings.scoresChannelSubtitle
+            enableVibration(true)
         }
 
         val closeGameChannel = NotificationChannel(
@@ -356,26 +419,102 @@ class EuroLeagueNotificationManager @Inject constructor(
     }
 
     /**
-     * Sendet eine Halbzeit- oder Endergebnis-Benachrichtigung in der gewählten App-Sprache.
+     * Sendet eine Viertel- (Q1, Halbzeit, Q3) oder Endergebnis-Benachrichtigung in der gewählten App-Sprache.
      */
+    fun sendMilestoneScoreNotification(
+        game: EuroLeagueGame,
+        milestone: ScoreMilestone,
+        language: AppLanguage = resolveActiveLanguage()
+    ) {
+        val payload = buildMilestoneScoreContent(game, milestone, language)
+        val distinctId = NOTIFICATION_ID_SCORE + ((game.gameCode.coerceAtLeast(1) % 200) * 10) + milestone.ordinal
+
+        dispatchNotification(
+            channelId = CHANNEL_SCORES,
+            notificationId = distinctId,
+            title = payload.title,
+            shortText = payload.shortText,
+            bigText = payload.bigText,
+            summaryText = payload.summaryText,
+            priority = NotificationCompat.PRIORITY_HIGH,
+            deepLinkGameId = game.id,
+            deepLinkRound = game.round
+        )
+    }
+
     fun sendHalftimeOrFinalNotification(
         game: EuroLeagueGame,
         isFinal: Boolean,
         language: AppLanguage = resolveActiveLanguage()
     ) {
-        val payload = buildHalftimeOrFinalContent(game, isFinal, language)
-
-        dispatchNotification(
-            channelId = CHANNEL_SCORES,
-            notificationId = NOTIFICATION_ID_SCORE + (game.gameCode % 50),
-            title = payload.title,
-            shortText = payload.shortText,
-            bigText = payload.bigText,
-            summaryText = payload.summaryText,
-            priority = NotificationCompat.PRIORITY_DEFAULT,
-            deepLinkGameId = game.id,
-            deepLinkRound = game.round
+        sendMilestoneScoreNotification(
+            game = game,
+            milestone = if (isFinal) ScoreMilestone.FINAL else ScoreMilestone.HALFTIME,
+            language = language
         )
+    }
+
+    /**
+     * Wird aufgerufen, wenn der Nutzer Erinnerungen für ein spezifisches Spiel ändert:
+     * - Markiert bereits vergangene Viertel eines laufenden Spiels als erledigt, damit nur kommende Spielphasen feuern.
+     * - Plant gezielte WorkManager-Hintergrundchecks für Q1, Halbzeit, Q3, Crunch-Time & Ende dieses Spiels.
+     */
+    fun onGameRemindersUpdated(
+        game: EuroLeagueGame,
+        enabledReminders: Set<GameReminderType>
+    ) {
+        val workManager = WorkManager.getInstance(context)
+        if (enabledReminders.isEmpty()) {
+            workManager.cancelAllWorkByTag("game_rem_${game.id}")
+            return
+        }
+
+        if (game.status == GameStatus.LIVE) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val sentSet = prefs.getStringSet(KEY_DISPATCHED_EVENTS, emptySet())?.toMutableSet() ?: mutableSetOf()
+            val q = game.quarters
+            if (game.currentQuarter > 1 && (q.q2Home + q.q2Away) > 6) {
+                sentSet.add("q1_${game.id}")
+            }
+            if (game.currentQuarter > 2 && (q.q3Home + q.q3Away) > 6) {
+                sentSet.add("ht_${game.id}")
+            }
+            if (game.currentQuarter > 3 && (q.q4Home + q.q4Away) > 6) {
+                sentSet.add("q3_${game.id}")
+            }
+            prefs.edit().putStringSet(KEY_DISPATCHED_EVENTS, sentSet).apply()
+        }
+
+        if (game.status == GameStatus.FINAL) return
+
+        val nowMillis = System.currentTimeMillis()
+        val offsetsMinutes = buildList {
+            if (GameReminderType.Q1_RESULT in enabledReminders) add("q1" to 22L)
+            if (GameReminderType.HALFTIME_RESULT in enabledReminders) add("ht" to 48L)
+            if (GameReminderType.Q3_RESULT in enabledReminders) add("q3" to 80L)
+            if (GameReminderType.CRUNCH_TIME in enabledReminders) add("crunch" to 98L)
+            if (GameReminderType.FINAL_SCORE in enabledReminders) add("ft" to 112L)
+        }
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        for ((slot, minsFromTipOff) in offsetsMinutes) {
+            val targetMs = game.tipOffEpochMillis + TimeUnit.MINUTES.toMillis(minsFromTipOff)
+            val delayMs = (targetMs - nowMillis).coerceAtLeast(2 * 60_000L)
+            if (targetMs >= nowMillis - 25 * 60_000L) {
+                val req = OneTimeWorkRequestBuilder<DailyEuroLeagueSyncWorker>()
+                    .setConstraints(constraints)
+                    .setInitialDelay(delayMs, TimeUnit.MILLISECONDS)
+                    .addTag("game_rem_${game.id}")
+                    .build()
+                workManager.enqueueUniqueWork(
+                    "game_rem_${game.id}_$slot",
+                    ExistingWorkPolicy.REPLACE,
+                    req
+                )
+            }
+        }
     }
 
     /**
@@ -413,7 +552,8 @@ class EuroLeagueNotificationManager @Inject constructor(
         tipOffEnabled: Boolean,
         halftimeFinalEnabled: Boolean,
         closeGameEnabled: Boolean,
-        language: AppLanguage = resolveActiveLanguage()
+        language: AppLanguage = resolveActiveLanguage(),
+        perGameReminders: Map<String, Set<GameReminderType>> = emptyMap()
     ) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val sentSet = prefs.getStringSet(KEY_DISPATCHED_EVENTS, emptySet())?.toMutableSet() ?: mutableSetOf()
@@ -426,20 +566,23 @@ class EuroLeagueNotificationManager @Inject constructor(
             halftimeFinalEnabled = halftimeFinalEnabled,
             closeGameEnabled = closeGameEnabled,
             alreadySentKeys = sentSet,
-            nowMillis = nowMillis
+            nowMillis = nowMillis,
+            perGameReminders = perGameReminders
         )
 
         if (actions.isNotEmpty()) {
             for (action in actions) {
                 when (action.type) {
                     AutoAlertType.SCHEDULE_TIP_OFF -> enqueueSilentTipOffWorker(action.game, language)
-                    AutoAlertType.HALFTIME_SCORE -> sendHalftimeOrFinalNotification(action.game, isFinal = false, language = language)
-                    AutoAlertType.FINAL_SCORE -> sendHalftimeOrFinalNotification(action.game, isFinal = true, language = language)
+                    AutoAlertType.Q1_SCORE -> sendMilestoneScoreNotification(action.game, ScoreMilestone.Q1, language)
+                    AutoAlertType.HALFTIME_SCORE -> sendMilestoneScoreNotification(action.game, ScoreMilestone.HALFTIME, language)
+                    AutoAlertType.Q3_SCORE -> sendMilestoneScoreNotification(action.game, ScoreMilestone.Q3, language)
+                    AutoAlertType.FINAL_SCORE -> sendMilestoneScoreNotification(action.game, ScoreMilestone.FINAL, language)
                     AutoAlertType.CRUNCH_TIME -> evaluateAndSendCloseGameAlert(action.game, language = language)
                 }
                 sentSet.add(action.dedupeKey)
             }
-            val trimmed = if (sentSet.size > 300) sentSet.toList().takeLast(300).toSet() else sentSet
+            val trimmed = if (sentSet.size > 400) sentSet.toList().takeLast(400).toSet() else sentSet
             prefs.edit().putStringSet(KEY_DISPATCHED_EVENTS, trimmed).apply()
         }
 
@@ -447,7 +590,8 @@ class EuroLeagueNotificationManager @Inject constructor(
             g.status == GameStatus.LIVE ||
                 (g.status == GameStatus.UPCOMING && (g.tipOffEpochMillis - nowMillis) in 0L..(90 * 60_000L))
         }
-        if (hasImminentOrLiveGame && (tipOffEnabled || halftimeFinalEnabled || closeGameEnabled)) {
+        val anyPerGameActive = perGameReminders.values.any { it.isNotEmpty() }
+        if (hasImminentOrLiveGame && (tipOffEnabled || halftimeFinalEnabled || closeGameEnabled || anyPerGameActive)) {
             scheduleGameWindowFollowUpCheck()
         }
     }
@@ -627,15 +771,51 @@ class EuroLeagueNotificationManager @Inject constructor(
         game: EuroLeagueGame,
         isFinal: Boolean,
         language: AppLanguage
+    ): LocalizedNotificationPayload = buildMilestoneScoreContent(
+        game = game,
+        milestone = if (isFinal) ScoreMilestone.FINAL else ScoreMilestone.HALFTIME,
+        language = language
+    )
+
+    fun buildMilestoneScoreContent(
+        game: EuroLeagueGame,
+        milestone: ScoreMilestone,
+        language: AppLanguage
     ): LocalizedNotificationPayload {
         val strings = CourtsideTranslations.forLanguage(language)
-        val statusLabel = when (language) {
-            AppLanguage.EN -> if (isFinal) "FINAL SCORE" else "HALFTIME SCORE"
-            AppLanguage.DE -> if (isFinal) "ENDERGEBNIS" else "HALBZEIT-STAND"
-            AppLanguage.FR -> if (isFinal) "SCORE FINAL" else "SCORE À LA MI-TEMPS"
-            AppLanguage.IT -> if (isFinal) "RISULTATO FINALE" else "FINE PRIMO TEMPO"
-            AppLanguage.ES -> if (isFinal) "RESULTADO FINAL" else "DESCANSO"
-            AppLanguage.EL -> if (isFinal) "ΤΕΛΙΚΟ ΣΚΟΡ" else "ΗΜΙΧΡΟΝΟ"
+        val statusLabel = when (milestone) {
+            ScoreMilestone.Q1 -> when (language) {
+                AppLanguage.EN -> "END OF 1ST QUARTER"
+                AppLanguage.DE -> "ENDE 1. VIERTEL"
+                AppLanguage.FR -> "FIN DU 1ER QUART"
+                AppLanguage.IT -> "FINE 1° QUARTO"
+                AppLanguage.ES -> "FINAL 1.º CUARTO"
+                AppLanguage.EL -> "ΤΕΛΟΣ 1ΗΣ ΠΕΡΙΟΔΟΥ"
+            }
+            ScoreMilestone.HALFTIME -> when (language) {
+                AppLanguage.EN -> "HALFTIME SCORE"
+                AppLanguage.DE -> "HALBZEIT-STAND"
+                AppLanguage.FR -> "SCORE À LA MI-TEMPS"
+                AppLanguage.IT -> "FINE PRIMO TEMPO"
+                AppLanguage.ES -> "DESCANSO"
+                AppLanguage.EL -> "ΗΜΙΧΡΟΝΟ"
+            }
+            ScoreMilestone.Q3 -> when (language) {
+                AppLanguage.EN -> "END OF 3RD QUARTER"
+                AppLanguage.DE -> "ENDE 3. VIERTEL"
+                AppLanguage.FR -> "FIN DU 3E QUART"
+                AppLanguage.IT -> "FINE 3° QUARTO"
+                AppLanguage.ES -> "FINAL 3.º CUARTO"
+                AppLanguage.EL -> "ΤΕΛΟΣ 3ΗΣ ΠΕΡΙΟΔΟΥ"
+            }
+            ScoreMilestone.FINAL -> when (language) {
+                AppLanguage.EN -> "FINAL SCORE"
+                AppLanguage.DE -> "ENDERGEBNIS"
+                AppLanguage.FR -> "SCORE FINAL"
+                AppLanguage.IT -> "RISULTATO FINALE"
+                AppLanguage.ES -> "RESULTADO FINAL"
+                AppLanguage.EL -> "ΤΕΛΙΚΟ ΣΚΟΡ"
+            }
         }
         val topPerformerLabel = when (language) {
             AppLanguage.EN -> "Top Performer"
@@ -653,13 +833,44 @@ class EuroLeagueNotificationManager @Inject constructor(
             AppLanguage.EL -> "Ζωντανό Match Center"
         }
 
+        val q = game.quarters
+        val (displayHome, displayAway) = when (milestone) {
+            ScoreMilestone.Q1 -> if (q.q1Home + q.q1Away > 0) (q.q1Home to q.q1Away) else (game.homeScore to game.awayScore)
+            ScoreMilestone.HALFTIME -> {
+                val h = q.q1Home + q.q2Home
+                val a = q.q1Away + q.q2Away
+                if (h + a > 0) (h to a) else (game.homeScore to game.awayScore)
+            }
+            ScoreMilestone.Q3 -> {
+                val h = q.q1Home + q.q2Home + q.q3Home
+                val a = q.q1Away + q.q2Away + q.q3Away
+                if (h + a > 0) (h to a) else (game.homeScore to game.awayScore)
+            }
+            ScoreMilestone.FINAL -> game.homeScore to game.awayScore
+        }
+
+        val partialsSummary = when (milestone) {
+            ScoreMilestone.Q1 -> "Q1 ${q.q1Home}:${q.q1Away}"
+            ScoreMilestone.HALFTIME -> "Q1 ${q.q1Home}:${q.q1Away} • Q2 ${q.q2Home}:${q.q2Away}"
+            ScoreMilestone.Q3 -> "Q1 ${q.q1Home}:${q.q1Away} • Q2 ${q.q2Home}:${q.q2Away} • Q3 ${q.q3Home}:${q.q3Away}"
+            ScoreMilestone.FINAL -> buildString {
+                append("Q1 ${q.q1Home}:${q.q1Away} • Q2 ${q.q2Home}:${q.q2Away} • Q3 ${q.q3Home}:${q.q3Away} • Q4 ${q.q4Home}:${q.q4Away}")
+                if (q.otHome != null && q.otAway != null) {
+                    append(" • OT ${q.otHome}:${q.otAway}")
+                }
+            }
+        }
+
         val title = "🏀 $statusLabel • ${strings.roundPrefix} ${game.round}"
-        val shortText = "${game.homeTeam.name} ${game.homeScore} : ${game.awayScore} ${game.awayTeam.name}"
+        val shortText = "${game.homeTeam.name} $displayHome : $displayAway ${game.awayTeam.name}"
         val topHome = game.boxscoreHome.maxByOrNull { it.pir }
         val topAway = game.boxscoreAway.maxByOrNull { it.pir }
 
         val bigText = buildString {
             appendLine(shortText)
+            if (q.q1Home + q.q1Away > 0) {
+                appendLine(partialsSummary)
+            }
             if (topHome != null) {
                 appendLine("${game.homeTeam.code} $topPerformerLabel: ${topHome.playerName} (${topHome.points} PTS, ${topHome.totalRebounds} REB, PIR ${topHome.pir})")
             }
@@ -893,7 +1104,8 @@ class DailyEuroLeagueSyncWorker(
                 tipOffEnabled = prefs.getSavedTipOffAlarmImmediate(),
                 halftimeFinalEnabled = prefs.getSavedHalftimeFinalImmediate(),
                 closeGameEnabled = prefs.getSavedCloseGameAlertImmediate(),
-                language = lang
+                language = lang,
+                perGameReminders = prefs.getSavedGameRemindersImmediate()
             )
 
             com.euroleague.courtside.widget.CourtsideAppWidgetProvider.updateAllWidgets(applicationContext)
