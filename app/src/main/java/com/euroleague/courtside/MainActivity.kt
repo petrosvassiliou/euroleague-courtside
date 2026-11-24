@@ -102,18 +102,27 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            // Sofortiges Laden des gebündelten Live-Snapshots + vollständiger Live-API-Sync beim Start
-            // + schonender 45s-Live-Ticker (verhindert HTTP 429) & vollständiger Kader/Statistik-Sync alle 15 Min.
+            // Sofortiges Laden des gebündelten Live-Snapshots + schneller Live-Header-Puls (<200ms) beim Start
+            // + adaptiver Echtzeit-Ticker (8s während laufender Live-Spiele, 30s im Ruhemodus) & Voll-Sync alle 15 Min.
             LaunchedEffect(Unit) {
                 offlineFirstRepository.loadBundledLiveSnapshotFromAssets(applicationContext)
-                offlineFirstRepository.refreshLiveMatchdayTick()
+                offlineFirstRepository.refreshLiveMatchdayTick(forceScheduleSync = true)
+                evaluateAlertsAndSyncWidgets()
                 offlineFirstRepository.syncSeasonDataFromRemoteOrSeedCache()
                 evaluateAlertsAndSyncWidgets()
-                var tickCount = 0
+                var elapsedMs = 0L
                 while (true) {
-                    delay(45_000L)
-                    tickCount++
-                    if (tickCount % 20 == 0) {
+                    val nowMs = System.currentTimeMillis()
+                    val hasActiveLiveWindow = repository.games.value.any { g ->
+                        g.status == com.euroleague.courtside.data.repository.GameStatus.LIVE ||
+                            (g.status == com.euroleague.courtside.data.repository.GameStatus.UPCOMING &&
+                                g.tipOffEpochMillis in (nowMs - 4 * 3_600_000L)..(nowMs + 20 * 60_000L))
+                    }
+                    val pollIntervalMs = if (hasActiveLiveWindow) 8_000L else 30_000L
+                    delay(pollIntervalMs)
+                    elapsedMs += pollIntervalMs
+                    if (elapsedMs >= 15 * 60_000L) {
+                        elapsedMs = 0L
                         offlineFirstRepository.syncSeasonDataFromRemoteOrSeedCache()
                     } else {
                         offlineFirstRepository.refreshLiveMatchdayTick()

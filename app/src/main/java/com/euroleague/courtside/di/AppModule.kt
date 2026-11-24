@@ -15,7 +15,9 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
 import retrofit2.Retrofit
+import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
 @Module
@@ -46,10 +48,33 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideEuroLeagueApiService(json: Json): EuroLeagueApiService {
+    fun provideOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(6, TimeUnit.SECONDS)
+        .readTimeout(8, TimeUnit.SECONDS)
+        .addInterceptor { chain ->
+            val original = chain.request()
+            val host = original.url.host
+            val reqBuilder = original.newBuilder()
+                .header("User-Agent", "EuroLeagueCourtside/1.8 (Android; CourtsideLiveTicker)")
+            if (host.contains("live.euroleague.net", ignoreCase = true)) {
+                reqBuilder
+                    .header("Cache-Control", "no-cache, no-store, max-age=0")
+                    .header("Pragma", "no-cache")
+            }
+            chain.proceed(reqBuilder.build())
+        }
+        .build()
+
+    @Provides
+    @Singleton
+    fun provideEuroLeagueApiService(
+        json: Json,
+        okHttpClient: OkHttpClient
+    ): EuroLeagueApiService {
         val contentType = "application/json".toMediaType()
         return Retrofit.Builder()
             .baseUrl("https://api-live.euroleague.net/")
+            .client(okHttpClient)
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()
             .create(EuroLeagueApiService::class.java)

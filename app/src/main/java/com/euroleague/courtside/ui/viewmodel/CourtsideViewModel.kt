@@ -172,8 +172,8 @@ class CourtsideViewModel @Inject constructor(
     private fun startLivePollingLoop() {
         viewModelScope.launch {
             while (true) {
-                delay(30_000L)
-                offlineFirstRepository.syncSeasonDataFromRemoteOrSeedCache()
+                delay(10_000L)
+                offlineFirstRepository.refreshLiveMatchdayTick()
             }
         }
     }

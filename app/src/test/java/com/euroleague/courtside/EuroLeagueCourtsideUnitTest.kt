@@ -481,6 +481,22 @@ class EuroLeagueCourtsideUnitTest {
         assertEquals(com.euroleague.courtside.update.UpdateStatus.UPDATE_AVAILABLE, stableOptInBeta.status)
         assertEquals("1.8.0-beta.3", stableOptInBeta.latestVersionName)
 
+        // Verify live ticker URLs bypass Cloudflare 60s edge cache via 3-second `_t` cache-busting bucket
+        val urlT0 = com.euroleague.courtside.data.remote.EuroLeagueOfflineFirstRepository.buildLiveApiUrl(
+            endpoint = "Header",
+            gameCode = 136,
+            seasonCode = "E2026",
+            nowMillis = 1_700_000_000_000L
+        )
+        val urlT4 = com.euroleague.courtside.data.remote.EuroLeagueOfflineFirstRepository.buildLiveApiUrl(
+            endpoint = "Header",
+            gameCode = 136,
+            seasonCode = "E2026",
+            nowMillis = 1_700_000_004_000L
+        )
+        assertTrue(urlT0.contains("https://live.euroleague.net/api/Header?gamecode=136&seasoncode=E2026&_t="))
+        assertTrue(urlT0 != urlT4)
+
         AppLanguage.entries.forEach { lang ->
             val strings = CourtsideTranslations.forLanguage(lang)
             assertTrue(strings.updateSectionTitle.isNotBlank())

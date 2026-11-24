@@ -140,11 +140,19 @@ fun MatchCenterScreen(
         }
     }
 
-    // Automatischer Echtzeit-Live-Score-Ticker (sofort beim Öffnen + alle 15 Sekunden), solange der EuroLeague-Screen geöffnet ist
+    val currentGames by androidx.compose.runtime.rememberUpdatedState(games)
+
+    // Automatischer Echtzeit-Live-Score-Ticker: 5 Sekunden Taktung bei aktiven Live-Spielen (20s im Ruhemodus)
     androidx.compose.runtime.LaunchedEffect(Unit) {
         onLiveScoreTick()
         while (true) {
-            kotlinx.coroutines.delay(15_000L)
+            val nowMs = System.currentTimeMillis()
+            val hasActiveLiveWindow = currentGames.any { g ->
+                g.status == GameStatus.LIVE ||
+                    (g.status == GameStatus.UPCOMING &&
+                        g.tipOffEpochMillis in (nowMs - 4 * 3_600_000L)..(nowMs + 20 * 60_000L))
+            }
+            kotlinx.coroutines.delay(if (hasActiveLiveWindow) 5_000L else 20_000L)
             onLiveScoreTick()
         }
     }
@@ -245,12 +253,15 @@ fun MatchCenterScreen(
         }
     }
 
-    androidx.compose.runtime.LaunchedEffect(selectedGame?.id, selectedGame?.boxscoreHome?.isEmpty(), selectedGame?.status) {
-        if (selectedGame != null) {
-            onRefreshSelectedGameStats(selectedGame)
-            while (selectedGame.status == GameStatus.LIVE) {
-                kotlinx.coroutines.delay(15_000L)
-                onRefreshSelectedGameStats(selectedGame)
+    val latestSelectedGame by androidx.compose.runtime.rememberUpdatedState(selectedGame)
+
+    androidx.compose.runtime.LaunchedEffect(selectedGame?.id, selectedGame?.status) {
+        val initial = latestSelectedGame
+        if (initial != null) {
+            onRefreshSelectedGameStats(initial)
+            while (latestSelectedGame?.status == GameStatus.LIVE) {
+                kotlinx.coroutines.delay(5_000L)
+                latestSelectedGame?.let { onRefreshSelectedGameStats(it) }
             }
         }
     }
@@ -1290,7 +1301,7 @@ private fun MatchDetailPane(
     var pbpQuarterFilter by rememberSaveable(game.id) { mutableStateOf(0) }
     var pbpClutchOnly by rememberSaveable(game.id) { mutableStateOf(false) }
 
-    val allPlayByPlay = remember(game.id, game.playByPlay.size, game.homeScore, game.awayScore, game.status) {
+    val allPlayByPlay = remember(game.id, game.playByPlay, game.homeScore, game.awayScore, game.status) {
         game.playByPlay.ifEmpty { EuroLeagueMockRepository.buildFallbackPlayByPlayForGame(game) }
     }
     val hasOvertimePlays = remember(game, allPlayByPlay) {
@@ -1470,7 +1481,7 @@ private fun MatchDetailPane(
                         )
                     }
 
-                    itemsIndexed(filteredPlayByPlay, key = { index, ev -> "m_pbp_${ev.id}_$index" }) { _, ev ->
+                    itemsIndexed(filteredPlayByPlay, key = { _, ev -> "m_pbp_${ev.id}" }) { _, ev ->
                         PlayByPlayEventRow(
                             event = ev,
                             game = game,
@@ -1635,7 +1646,7 @@ private fun MatchDetailPane(
                         )
 
                         LazyColumn(modifier = Modifier.fillMaxSize()) {
-                            itemsIndexed(filteredPlayByPlay, key = { idx, ev -> "d_pbp_${ev.id}_$idx" }) { _, ev ->
+                            itemsIndexed(filteredPlayByPlay, key = { _, ev -> "d_pbp_${ev.id}" }) { _, ev ->
                                 PlayByPlayEventRow(
                                     event = ev,
                                     game = game,

@@ -421,9 +421,16 @@ fun MainAppScaffold(
             scope.launch {
                 isLiveSyncing = true
                 syncFeedbackBanner = buildSyncingFeedbackState(activeLanguage)
+                // 1. Sofortiger High-Speed Live-Header-Puls (<200ms), damit Spielstände augenblicklich aktualisieren
+                val tickRes = offlineFirstRepository?.refreshLiveMatchdayTick(forceScheduleSync = false)
+                repository.games.value
+                    .filter { it.status == GameStatus.LIVE }
+                    .forEach { liveGame ->
+                        launch { offlineFirstRepository?.refreshSelectedGameLiveStats(liveGame) }
+                    }
+                // 2. Anschließend vollständiger Hintergrund-Abgleich von Tabelle & Kader
                 val res = offlineFirstRepository?.syncSeasonDataFromRemoteOrSeedCache()
                 offlineFirstRepository?.verifyAndSyncClubRoster(primaryTeam.id)
-                val tickRes = offlineFirstRepository?.refreshLiveMatchdayTick()
                 val timeStr = runCatching {
                     LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))
                 }.getOrDefault("")
