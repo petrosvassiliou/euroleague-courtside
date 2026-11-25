@@ -11,4 +11,6 @@
     <string name="filter_all_games">Tutte le partite</string>
     <string name="player_boxscore">Tabellino giocatori</string>
     <string name="send_test_push">Invia notifica push di prova</string>
+    <string name="widget_title">Courtside Live &amp; Palla a due</string>
+    <string name="widget_description">Conto alla rovescia e punteggio EuroLeague live per La Mia Squadra</string>
 </resources>
