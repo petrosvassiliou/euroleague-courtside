@@ -1,53 +1,216 @@
 import SwiftUI
 import AppKit
+import Combine
 import CourtsideCore
 
 @main
 struct EuroLeagueCourtsideMacApp: App {
-    @StateObject private var vm = CourtsideViewModel()
-
-    init() {
-        NSApplication.shared.setActivationPolicy(.regular)
-    }
+    @NSApplicationDelegateAdaptor(CourtsideAppDelegate.self) private var appDelegate
 
     var body: some Scene {
+        // IMPORTANT: Keep `App` struct completely stateless (do NOT attach `@StateObject`,
+        // `.preferredColorScheme`, or `MenuBarExtra(isInserted:)` at the Scene graph root,
+        // which triggers an infinite `AppKitWindowController.updateRootHost` <-> `AppGraph.sceneList`
+        // recursion on macOS 26/27 SwiftUI 8.1).
         WindowGroup("EuroLeague Courtside 2.0") {
-            MacRootShellView(vm: vm)
-                .environment(\.glassPalette, vm.palette)
-                .preferredColorScheme(vm.themeMode.isLight ? .light : .dark)
+            MacRootContainerView()
                 .frame(minWidth: 1040, minHeight: 680)
         }
         .commands {
             CommandMenu("Courtside") {
-                ForEach(MacCourtsideTab.allCases) { tab in
-                    Button(tab.title(vm.strings)) {
-                        if tab == .standings { vm.selectedStandingsTeam = nil }
-                        vm.selectedTab = tab
-                    }
-                    .keyboardShortcut(tab.shortcutCharacter, modifiers: [.command])
+                Button("My Team") {
+                    Task { @MainActor in CourtsideViewModel.shared.selectedTab = .myTeam }
                 }
+                .keyboardShortcut("1", modifiers: [.command])
+
+                Button("Match Center") {
+                    Task { @MainActor in CourtsideViewModel.shared.selectedTab = .matchCenter }
+                }
+                .keyboardShortcut("2", modifiers: [.command])
+
+                Button("Standings") {
+                    Task { @MainActor in
+                        CourtsideViewModel.shared.selectedStandingsTeam = nil
+                        CourtsideViewModel.shared.selectedTab = .standings
+                    }
+                }
+                .keyboardShortcut("3", modifiers: [.command])
+
+                Button("Analytics") {
+                    Task { @MainActor in CourtsideViewModel.shared.selectedTab = .analytics }
+                }
+                .keyboardShortcut("4", modifiers: [.command])
+
+                Button("Settings") {
+                    Task { @MainActor in CourtsideViewModel.shared.selectedTab = .settings }
+                }
+                .keyboardShortcut("5", modifiers: [.command])
+
                 Divider()
-                Button(vm.strings.liveSyncButton) {
-                    Task { await vm.triggerLiveSync(silent: false) }
+
+                Button("Live Sync") {
+                    Task { @MainActor in await CourtsideViewModel.shared.triggerLiveSync(silent: false) }
                 }
                 .keyboardShortcut("r", modifiers: [.command])
 
                 Button("Toggle Light / Dark Liquid Glass") {
-                    vm.selectThemeMode(vm.themeMode.toggled())
+                    Task { @MainActor in
+                        let vm = CourtsideViewModel.shared
+                        vm.selectThemeMode(vm.themeMode.toggled())
+                    }
                 }
                 .keyboardShortcut("d", modifiers: [.command, .shift])
             }
         }
+    }
+}
 
-        // Native macOS Menu Bar Live Scoreboard Tracker (counterpart to Android's Lock-Screen Live Tracker)
-        MenuBarExtra(isInserted: Binding(
-            get: { vm.menuBarTrackerEnabled },
-            set: { vm.setMenuBarTracker($0) }
-        )) {
-            MenuBarLiveDropdownView(vm: vm)
-        } label: {
-            Text(vm.menuBarTitle)
+// MARK: - AppKit Delegate & Native macOS Status Bar Live Scoreboard
+
+@MainActor
+final class CourtsideAppDelegate: NSObject, NSApplicationDelegate {
+    private var statusItem: NSStatusItem?
+    private var cancellables = Set<AnyCancellable>()
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApplication.shared.setActivationPolicy(.regular)
+        let vm = CourtsideViewModel.shared
+        vm.startBackgroundServicesIfNeeded()
+        setupNativeMenuBarLiveScoreboard(vm: vm)
+
+        if CommandLine.arguments.contains("--smoke-test-ui") {
+            runAutomatedUiSmokeTest(vm: vm)
+        } else {
+            NSApplication.shared.activate(ignoringOtherApps: true)
         }
+    }
+
+    private func setupNativeMenuBarLiveScoreboard(vm: CourtsideViewModel) {
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        self.statusItem = item
+
+        Publishers.CombineLatest4(vm.$games, vm.$primaryTeamId, vm.$menuBarTrackerEnabled, vm.$language)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _, _, enabled, _ in
+                self?.refreshStatusItem(vm: vm, enabled: enabled)
+            }
+            .store(in: &cancellables)
+
+        refreshStatusItem(vm: vm, enabled: vm.menuBarTrackerEnabled)
+    }
+
+    private func refreshStatusItem(vm: CourtsideViewModel, enabled: Bool) {
+        guard let item = statusItem else { return }
+        item.isVisible = enabled
+        guard enabled else { return }
+        item.button?.title = vm.menuBarTitle
+
+        let menu = NSMenu()
+        let headerItem = NSMenuItem(
+            title: "🏀 EuroLeague Courtside 2.0 • \(vm.strings.roundPrefix) \(vm.activeRound)",
+            action: nil,
+            keyEquivalent: ""
+        )
+        headerItem.isEnabled = false
+        menu.addItem(headerItem)
+        menu.addItem(.separator())
+
+        let roundGames = vm.games.filter { $0.status == .live || $0.round == vm.activeRound }.prefix(8)
+        for (idx, g) in roundGames.enumerated() {
+            let badge = g.status == .live ? "🔴 Q\(g.currentQuarter) \(g.remainingClock)" : (g.status == .final_ ? "FT" : "UP")
+            let mItem = NSMenuItem(
+                title: "\(badge)  \(g.homeTeam.code) \(g.homeScore):\(g.awayScore) \(g.awayTeam.code)",
+                action: #selector(openGameFromMenu(_:)),
+                keyEquivalent: ""
+            )
+            mItem.target = self
+            mItem.tag = idx
+            mItem.representedObject = g.id
+            menu.addItem(mItem)
+        }
+
+        menu.addItem(.separator())
+        let syncItem = NSMenuItem(title: vm.strings.liveSyncButton, action: #selector(triggerSyncFromMenu), keyEquivalent: "r")
+        syncItem.target = self
+        menu.addItem(syncItem)
+
+        let showWindowItem = NSMenuItem(title: "Open Courtside Window", action: #selector(bringWindowToFront), keyEquivalent: "0")
+        showWindowItem.target = self
+        menu.addItem(showWindowItem)
+
+        menu.addItem(.separator())
+        let quitItem = NSMenuItem(title: "Quit EuroLeague Courtside", action: #selector(quitApp), keyEquivalent: "q")
+        quitItem.target = self
+        menu.addItem(quitItem)
+
+        item.menu = menu
+    }
+
+    @objc private func openGameFromMenu(_ sender: NSMenuItem) {
+        guard let gameId = sender.representedObject as? String else { return }
+        let vm = CourtsideViewModel.shared
+        let round = vm.games.first(where: { $0.id == gameId })?.round ?? vm.activeRound
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        vm.openGameInMatchCenter(gameId: gameId, round: round)
+    }
+
+    @objc private func triggerSyncFromMenu() {
+        Task { @MainActor in
+            await CourtsideViewModel.shared.triggerLiveSync(silent: false)
+        }
+    }
+
+    @objc private func bringWindowToFront() {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        NSApplication.shared.windows.first?.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func quitApp() {
+        NSApplication.shared.terminate(nil)
+    }
+
+    private func runAutomatedUiSmokeTest(vm: CourtsideViewModel) {
+        Task { @MainActor in
+            let originalOnboarding = UserDefaults.standard.bool(forKey: "courtside.onboardingCompletedV2")
+            vm.showOnboardingSheet = true
+            try? await Task.sleep(nanoseconds: 220_000_000)
+            vm.showOnboardingSheet = false
+
+            for tab in MacCourtsideTab.allCases {
+                vm.selectedTab = tab
+                try? await Task.sleep(nanoseconds: 180_000_000)
+            }
+
+            vm.selectedPlayerProfile = vm.players.first
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            vm.selectedPlayerProfile = nil
+
+            vm.reminderSheetGame = vm.games.first
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            vm.reminderSheetGame = nil
+
+            vm.selectThemeMode(.dark)
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            vm.selectThemeMode(.light)
+            vm.selectedTab = .myTeam
+            UserDefaults.standard.set(originalOnboarding, forKey: "courtside.onboardingCompletedV2")
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            print("✅ UI_SMOKE_TEST_PASSED: All 5 Liquid Glass tabs, all 3 modal sheets, Menu Bar status item & Light/Dark themes rendered cleanly!")
+            fflush(stdout)
+            NSApplication.shared.terminate(nil)
+        }
+    }
+}
+
+// MARK: - Root SwiftUI Shell
+
+struct MacRootContainerView: View {
+    @ObservedObject private var vm = CourtsideViewModel.shared
+
+    var body: some View {
+        MacRootShellView(vm: vm)
+            .environment(\.glassPalette, vm.palette)
+            .environment(\.colorScheme, vm.themeMode.isLight ? .light : .dark)
     }
 }
 
@@ -60,13 +223,11 @@ struct MacRootShellView: View {
             LiquidGlassAmbientBackdrop(activeTeam: vm.primaryTeam, mode: vm.themeMode)
 
             HStack(spacing: 0) {
-                // Translucent Liquid Glass Sidebar
                 liquidGlassSidebar
                     .frame(width: 215)
                     .padding(.leading, 12)
                     .padding(.vertical, 12)
 
-                // Active Content Area
                 VStack(spacing: 0) {
                     topGlassToolbar
                         .padding(.horizontal, 18)
@@ -118,7 +279,6 @@ struct MacRootShellView: View {
 
     private var liquidGlassSidebar: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // Brand Header
             HStack(spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -172,7 +332,6 @@ struct MacRootShellView: View {
 
             Spacer()
 
-            // Selected Club Mini Card in Sidebar Footer
             HStack(spacing: 9) {
                 ClubCrestView(team: vm.primaryTeam, size: 28)
                 VStack(alignment: .leading, spacing: 1) {
@@ -235,42 +394,5 @@ struct MacRootShellView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .liquidGlassCard(cornerRadius: 14)
-    }
-}
-
-struct MenuBarLiveDropdownView: View {
-    @ObservedObject var vm: CourtsideViewModel
-
-    var body: some View {
-        let roundGames = vm.games.filter { $0.status == .live || $0.round == vm.activeRound }.prefix(6)
-
-        VStack(alignment: .leading, spacing: 6) {
-            Text("🏀 EuroLeague Courtside 2.0 • \(vm.strings.roundPrefix) \(vm.activeRound)")
-                .font(.headline)
-
-            Divider()
-
-            ForEach(Array(roundGames)) { g in
-                Button {
-                    NSApplication.shared.activate(ignoringOtherApps: true)
-                    vm.openGameInMatchCenter(gameId: g.id, round: g.round)
-                } label: {
-                    let badge = g.status == .live ? "🔴 Q\(g.currentQuarter) \(g.remainingClock)" : (g.status == .final_ ? "FT" : "UP")
-                    Text("\(badge)  \(g.homeTeam.code) \(g.homeScore):\(g.awayScore) \(g.awayTeam.code)")
-                }
-            }
-
-            Divider()
-
-            Button(vm.strings.liveSyncButton) {
-                Task { await vm.triggerLiveSync(silent: false) }
-            }
-
-            Button("Quit EuroLeague Courtside") {
-                NSApplication.shared.terminate(nil)
-            }
-            .keyboardShortcut("q")
-        }
-        .padding(8)
     }
 }

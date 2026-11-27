@@ -45,6 +45,8 @@ public enum MacCourtsideTab: String, CaseIterable, Identifiable {
 
 @MainActor
 final class CourtsideViewModel: ObservableObject {
+    static let shared = CourtsideViewModel()
+
     // Navigation & Modals
     @Published var selectedTab: MacCourtsideTab = .myTeam
     @Published var selectedStandingsTeam: EuroLeagueTeam? = nil
@@ -157,9 +159,21 @@ final class CourtsideViewModel: ObservableObject {
         self.showOnboardingSheet = !onboardingDone
 
         bootstrapOfflineSnapshotAndCache()
+    }
+
+    private var didStartBackgroundServices = false
+
+    func startBackgroundServicesIfNeeded() {
+        guard !didStartBackgroundServices else { return }
+        didStartBackgroundServices = true
+        applySystemWindowAppearance()
         requestNotificationAuthorizationIfAvailable()
         startAdaptiveLiveTicker()
         Task { await checkForUpdates(manual: false) }
+    }
+
+    func applySystemWindowAppearance() {
+        NSApp?.appearance = NSAppearance(named: themeMode.isLight ? .aqua : .darkAqua)
     }
 
     // MARK: - Persistence Setters
@@ -192,6 +206,7 @@ final class CourtsideViewModel: ObservableObject {
     func selectThemeMode(_ mode: AppThemeMode) {
         themeMode = mode
         defaults.set(mode.rawValue, forKey: "courtside.themeMode")
+        applySystemWindowAppearance()
     }
 
     func updateNotificationChannels(tipOff: Bool, htFinal: Bool, closeGame: Bool) {

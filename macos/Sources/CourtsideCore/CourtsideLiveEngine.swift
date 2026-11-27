@@ -232,8 +232,8 @@ public struct AppReleaseCheckResult: Hashable, Sendable {
 
 public enum CourtsideLiveEngine {
 
-    public static let currentVersionName = "2.0.0-beta.2"
-    public static let currentBuildNumber = 26
+    public static let currentVersionName = "2.0.0-beta.3"
+    public static let currentBuildNumber = 27
 
     /// Cloudflare 3-second cache-busting bucket (`&_t=`) matching Android's high-speed 5s ticker.
     public static func buildLiveApiUrl(
