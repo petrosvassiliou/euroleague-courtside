@@ -3,7 +3,7 @@ name: Android & Googlebook OS CI Build
 on:
   push:
     branches: [ "main", "master", "beta" ]
-    tags: [ "v*-beta*", "v*-rc*" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "main", "master", "beta" ]
   schedule:
@@ -90,9 +90,9 @@ jobs:
             fi
           else
             TITLE="EuroLeague Courtside ${TAG} (Build ${VER_CODE} — Official Signed Release APK)"
-            NOTES="Offizielle, kryptografisch signierte und R8-optimierte **Release-APK (\`EuroLeague-Courtside-${TAG}.apk\`, Build \`${VER_CODE}\`)** von **EuroLeague Courtside** mit Live-Anbindung an \`api-live.euroleague.net\` (v2/v3), allen 38 Spieltagen (380 Spiele), echten offiziellen Vereins-Logos (\`images.crest\`), vollständigen Spieler- & Team-Saisonstatistiken (\`seasonMode=Single\`), interaktivem Team-Vergleich sowie komplett lokalisierten Push-Benachrichtigungen & Kadern in allen 6 Sprachen (\`EN\`, \`DE\`, \`FR\`, \`IT\`, \`ES\`, \`EL\`)."
+            NOTES="🏀 **EuroLeague Courtside ${TAG} (\`EuroLeague-Courtside-${TAG}.apk\`, Build \`${VER_CODE}\`)** — Offizielles signiertes Release mit **Daylight Light Mode (Standard) & Courtside Dark Mode**, **5s High-Speed Live-Ticker** (inkl. Cloudflare-Cache-Bypass & parallelem Gamecast-Abruf), **Live Play-by-Play & Game-Flow Momentum-Chart**, **anklickbaren Spieler-Scouting-Karten** (Top-Aligned 3:4 Headshots & Spiel-Logbücher), **spielspezifischen Erinnerungen** (\`Q1\`, \`Halbzeit\`, \`Q3\`, \`Crunch-Time\`, \`Endergebnis\`), **Android Startbildschirm-Widget** sowie Play-Protect-konformem **Stable/Beta In-App-Updater** in allen 6 Sprachen (\`EN\`, \`DE\`, \`FR\`, \`IT\`, \`ES\`, \`EL\`)."
             if gh release view "${TAG}" >/dev/null 2>&1; then
-              gh release edit "${TAG}" --title "${TITLE}" --notes "${NOTES}"
+              gh release edit "${TAG}" --title "${TITLE}" --notes "${NOTES}" --latest
             else
               gh release create "${TAG}" --title "${TITLE}" --notes "${NOTES}" --latest
             fi

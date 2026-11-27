@@ -45,9 +45,9 @@ Komplette Live-Lokalisierung in **6 Sprachen (`🇬🇧 EN`, `🇩🇪 DE`, `�
 
 ## ✨ Features & Architektur
 
-### 1. Courtside UI Design & Offizielle Vereinswappen/-farben
-- **Obsidian Broadcast-Design (`#0E0E11` / `#17171C`)** mit warmem EuroLeague-Orange-Glow (`#FF6600`) und Dual-Tone-Verlaufs-Bannern.
-- **Immer „My Team“ beim Start:** Kaltstart, Prozess-Wiederherstellung, Warmstart aus dem Hintergrund und Launcher-/Notification-Aufrufe öffnen zuverlässig immer den **Mein Team Hub**, wobei das gewählte Lieblingsteam dauerhaft gespeichert bleibt.
+### 1. Daylight Light Mode (Standard) & Obsidian Dark Mode + Offizielle Vereinswappen
+- **Zwei Live-Themes (`CourtsideTheme.kt`):** Heller, kontrastreicher **Daylight Light Mode** als Standardansicht sowie umschaltbarer **Obsidian Broadcast Dark Mode (`#0E0E11` / `#17171C`)** mit warmem EuroLeague-Orange-Akzent (`#FF6600`), Dual-Tone-Verlaufs-Bannern und synchronisiertem Android-Widget.
+- **Immer „My Team“ beim Start:** Kaltstart, Prozess-Wiederherstellung, Warmstart aus dem Hintergrund und Launcher-Aufrufe öffnen zuverlässig den **Mein Team Hub** (Tipps auf Spiel-Benachrichtigungen öffnen direkt das betreffende Live-Spiel im Match-Center).
 - **Alle EuroLeague-Clubs** mit ihren offiziellen Primär-, Sekundär- und Akzentfarben sowie offiziellen Vereinswappen (`CourtsideClubCrest` in `CourtsideTheme.kt`).
 - **Touch- & Desktop-Ergonomie:** Garantierte `48.dp` Touch-Targets kombiniert mit Maus-Hover-Effekten (`Modifier.hoverable()`), `PointerIcon.Hand`, Rechtsklick-Kontextmenü (`isSecondaryPressed`) und Hintergrund-Tastatur-Shortcuts (`Ctrl/Cmd + 1–5`, `F`, `R`, `←`/`→`).
 
@@ -68,9 +68,10 @@ Komplette Live-Lokalisierung in **6 Sprachen (`🇬🇧 EN`, `🇩🇪 DE`, `�
 2. **RFC 5545 `.ics` Saison-Generator:** Erzeugt eine standardkonforme `.ics`-Datei inkl. `VALARM` (`-PT30M`) für alle Saisonspiele des Lieblingsteams und teilt sie über `FileProvider`.
 3. **Android Home-Screen Widget (`CourtsideAppWidgetProvider.kt`):** Obsidian/Orange Broadcast-Widget für den Android-Startbildschirm mit Nächster-Tip-Off-Countdown & Echtzeit-Live-Scoreboard an Spieltagen.
 
-### 5. Natives Spieltags-Benachrichtigungs-System in 6 Sprachen (`EuroLeagueNotificationManager.kt`)
-- Automatische Hintergrund-Auswertung & deduplizierter Versand für **Tip-Off-Alarme** (15 Min. vor Spielbeginn via `WorkManager`), **Halbzeit-/Endergebnisse** und **Crunch-Time Close-Game-Alerts** (Q4 `< 3:00` Restzeit bei `<= 5` Punkten Differenz) inkl. direktem **Deep-Link ins Live-Spiel** – vollständig lokalisiert in `EN`, `DE`, `FR`, `IT`, `ES` und `EL`.
-- Integrierter **Test-Push-Button** im Einstellungs-Tab mit `NotificationCompat.BigTextStyle`.
+### 5. Spielspezifische & Favoriten-Benachrichtigungen in 6 Sprachen (`EuroLeagueNotificationManager.kt`)
+- **Per-Game Reminders (`Q1`, `Halbzeit`, `Q3`, `Crunch-Time`, `Endergebnis`):** Direkt auf jeder Spielkarte (`🔔`) oder über die 1-Tap-Schnellleiste im Match-Center lassen sich Erinnerungen individuell pro Partie aktivieren – unabhängig von den Favoriten-Clubs.
+- Automatische Hintergrund-Auswertung & deduplizierter Versand für **Tip-Off-Alarme** (15 Min. vor Spielbeginn via `WorkManager`), **Viertel-/Halbzeit-/Endergebnisse** und **Crunch-Time Close-Game-Alerts** (Q4 `< 3:00` Restzeit bei `<= 5` Punkten Differenz) inkl. direktem **Deep-Link ins Live-Spiel** – vollständig lokalisiert in `EN`, `DE`, `FR`, `IT`, `ES` und `EL`.
+- Play-Protect-konformer **In-App-Updater** (`CourtsideAppUpdateManager.kt`) mit optionalem **Beta- & Pre-Release-Kanal** sowie integriertem **Test-Push-Button** im Einstellungs-Tab.
 
 ---
 
