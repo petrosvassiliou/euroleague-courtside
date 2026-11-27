@@ -2,6 +2,7 @@ package com.euroleague.courtside.data.remote
 
 import android.content.Context
 import com.euroleague.courtside.data.local.CachedGameEntity
+import com.euroleague.courtside.data.local.CachedPlayerEntity
 import com.euroleague.courtside.data.local.CachedTeamEntity
 import com.euroleague.courtside.data.local.CourtsideDao
 import com.euroleague.courtside.data.repository.EuroLeagueGame
@@ -24,6 +25,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -1515,6 +1517,7 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                     headerMerged
                 }
                 fallbackMockRepository.updateSingleGameDetails(updated)
+                runCatching { dao.upsertSingleGame(toCachedGameEntity(updated)) }
                 updated
             }
         }
@@ -2112,9 +2115,241 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
         return address.split(",").lastOrNull()?.trim().orEmpty()
     }
 
-    private suspend fun persistToRoomCache(
+    /**
+     * v2.0 Full Offline Gamecast Restore:
+     * Stellt beim Kaltstart oder im Flugmodus alle lokal in Room gespeicherten Spielstände,
+     * Boxscores, Half-Court Shot-Charts, Play-by-Play-Feeds und Spieler-Kader wieder her.
+     */
+    suspend fun restoreFromRoomCacheIfAvailable(): Boolean = withContext(ioDispatcher) {
+        runCatching {
+            val cachedTeams = dao.getAllTeamsOnce()
+            val cachedGames = dao.getAllGamesOnce()
+            val cachedPlayers = dao.getAllPlayersOnce()
+            if (cachedGames.isEmpty()) return@runCatching false
+
+            val existingTeamsById = fallbackMockRepository.teams.associateBy { it.id }
+            val restoredTeams = if (cachedTeams.size >= 16) {
+                cachedTeams.map { t ->
+                    val existing = existingTeamsById[t.id]
+                    EuroLeagueTeam(
+                        id = t.id,
+                        code = t.code,
+                        name = t.name,
+                        city = t.city,
+                        country = t.country,
+                        arena = t.arena,
+                        primaryColorHex = t.primaryColorHex,
+                        secondaryColorHex = t.secondaryColorHex,
+                        accentColorHex = if (t.accentColorHex != 0L) t.accentColorHex else (existing?.accentColorHex ?: 0xFFFFFFFF),
+                        wins = t.wins,
+                        losses = t.losses,
+                        pointsFor = t.pointsFor,
+                        pointsAgainst = t.pointsAgainst,
+                        totalPointsFor = if (t.totalPointsFor > 0) t.totalPointsFor else t.pointsFor,
+                        totalPointsAgainst = if (t.totalPointsAgainst > 0) t.totalPointsAgainst else t.pointsAgainst,
+                        streak = t.streakCsv.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                        offensiveRating = t.offensiveRating,
+                        defensiveRating = t.defensiveRating,
+                        pace = t.pace,
+                        threePointPct = t.threePointPct,
+                        twoPointPct = t.twoPointPct,
+                        reboundRate = t.reboundRate,
+                        logoUrl = t.logoUrl.ifBlank { existing?.logoUrl.orEmpty() },
+                        localLogoResName = t.localLogoResName.ifBlank { "club_logo_${t.id.lowercase()}" }
+                    )
+                }
+            } else {
+                fallbackMockRepository.teams
+            }
+
+            val teamMap = restoredTeams.associateBy { it.id }
+            val existingGamesById = fallbackMockRepository.games.value.associateBy { it.id }
+
+            val restoredPlayers = if (cachedPlayers.isNotEmpty()) {
+                cachedPlayers.map { p ->
+                    PlayerProfile(
+                        id = p.id,
+                        teamId = p.teamId,
+                        number = p.number,
+                        name = p.name,
+                        position = p.position,
+                        nationality = p.nationality,
+                        heightCm = p.heightCm,
+                        ppg = p.ppg,
+                        rpg = p.rpg,
+                        apg = p.apg,
+                        pir = p.pir,
+                        injuryStatus = runCatching { InjuryStatus.valueOf(p.injuryStatusName) }.getOrDefault(InjuryStatus.FIT),
+                        injuryDetail = p.injuryDetail,
+                        headshotUrl = p.headshotUrl
+                    )
+                }
+            } else {
+                fallbackMockRepository.players
+            }
+
+            val cachedById = cachedGames.associateBy { it.id }
+            val baseGames = fallbackMockRepository.games.value
+            val baseIds = baseGames.map { it.id }.toSet()
+            val mergedGames = if (baseGames.isNotEmpty()) {
+                val updatedBase = baseGames.map { base ->
+                    val cg = cachedById[base.id] ?: return@map base
+                    fromCachedGameEntity(cg, teamMap, base)
+                }
+                val extraFromRoom = cachedGames
+                    .filter { it.id !in baseIds }
+                    .mapNotNull { cg -> fromCachedGameEntityOrNull(cg, teamMap, existingGamesById[cg.id]) }
+                updatedBase + extraFromRoom
+            } else {
+                cachedGames.mapNotNull { cg ->
+                    val fallback = existingGamesById[cg.id]
+                    fromCachedGameEntityOrNull(cg, teamMap, fallback)
+                }
+            }
+
+            val activeRound = mergedGames
+                .filter { it.status == GameStatus.LIVE || (it.status == GameStatus.FINAL && (it.homeScore > 0 || it.awayScore > 0)) }
+                .maxOfOrNull { it.round }
+                ?: fallbackMockRepository.activeRoundFlow.value
+
+            fallbackMockRepository.applyLiveDataset(
+                liveTeams = restoredTeams,
+                livePlayers = restoredPlayers,
+                liveGames = mergedGames,
+                activeRound = activeRound,
+                seasonCode = mergedGames.firstOrNull()?.seasonCode ?: fallbackMockRepository.seasonCodeFlow.value,
+                syncLabel = "OFFLINE CACHE • Round $activeRound"
+            )
+            true
+        }.getOrDefault(false)
+    }
+
+    private fun fromCachedGameEntity(
+        cg: CachedGameEntity,
+        teamMap: Map<String, EuroLeagueTeam>,
+        base: EuroLeagueGame
+    ): EuroLeagueGame {
+        val roomStatus = runCatching { GameStatus.valueOf(cg.status) }.getOrDefault(base.status)
+        val useRoomScore = roomStatus == GameStatus.FINAL || roomStatus == GameStatus.LIVE ||
+            (cg.homeScore + cg.awayScore) > (base.homeScore + base.awayScore)
+
+        val decodedBoxH = decodeJsonListOrEmpty<PlayerBoxscoreStat>(cg.boxscoreHomeJson)
+        val decodedBoxA = decodeJsonListOrEmpty<PlayerBoxscoreStat>(cg.boxscoreAwayJson)
+        val decodedShots = decodeJsonListOrEmpty<ShotAttempt>(cg.shotsJson)
+        val decodedPbp = decodeJsonListOrEmpty<PlayByPlayEvent>(cg.playByPlayJson)
+
+        return base.copy(
+            homeTeam = teamMap[cg.homeTeamId] ?: base.homeTeam,
+            awayTeam = teamMap[cg.awayTeamId] ?: base.awayTeam,
+            status = if (useRoomScore) roomStatus else base.status,
+            currentQuarter = if (useRoomScore) cg.currentQuarter else base.currentQuarter,
+            remainingClock = if (useRoomScore) cg.remainingClock else base.remainingClock,
+            homeScore = if (useRoomScore) cg.homeScore else base.homeScore,
+            awayScore = if (useRoomScore) cg.awayScore else base.awayScore,
+            quarters = if (useRoomScore) {
+                QuarterScores(
+                    q1Home = cg.q1Home,
+                    q1Away = cg.q1Away,
+                    q2Home = cg.q2Home,
+                    q2Away = cg.q2Away,
+                    q3Home = cg.q3Home,
+                    q3Away = cg.q3Away,
+                    q4Home = cg.q4Home,
+                    q4Away = cg.q4Away,
+                    otHome = cg.otHome,
+                    otAway = cg.otAway
+                )
+            } else {
+                base.quarters
+            },
+            boxscoreHome = decodedBoxH.ifEmpty { base.boxscoreHome },
+            boxscoreAway = decodedBoxA.ifEmpty { base.boxscoreAway },
+            shots = decodedShots.ifEmpty { base.shots },
+            playByPlay = decodedPbp.ifEmpty { base.playByPlay }
+        )
+    }
+
+    private fun fromCachedGameEntityOrNull(
+        cg: CachedGameEntity,
+        teamMap: Map<String, EuroLeagueTeam>,
+        fallback: EuroLeagueGame?
+    ): EuroLeagueGame? {
+        val home = teamMap[cg.homeTeamId] ?: fallback?.homeTeam ?: return null
+        val away = teamMap[cg.awayTeamId] ?: fallback?.awayTeam ?: return null
+        return EuroLeagueGame(
+            id = cg.id,
+            gameCode = if (cg.gameCode > 0) cg.gameCode else (cg.id.substringAfterLast("_").toIntOrNull() ?: 0),
+            seasonCode = cg.seasonCode.ifBlank { "E2026" },
+            round = cg.round,
+            homeTeam = home,
+            awayTeam = away,
+            tipOffEpochMillis = cg.tipOffEpochMillis,
+            status = runCatching { GameStatus.valueOf(cg.status) }.getOrDefault(GameStatus.UPCOMING),
+            currentQuarter = cg.currentQuarter,
+            remainingClock = cg.remainingClock,
+            homeScore = cg.homeScore,
+            awayScore = cg.awayScore,
+            quarters = QuarterScores(
+                q1Home = cg.q1Home,
+                q1Away = cg.q1Away,
+                q2Home = cg.q2Home,
+                q2Away = cg.q2Away,
+                q3Home = cg.q3Home,
+                q3Away = cg.q3Away,
+                q4Home = cg.q4Home,
+                q4Away = cg.q4Away,
+                otHome = cg.otHome,
+                otAway = cg.otAway
+            ),
+            headToHeadHomeWins = cg.headToHeadHomeWins,
+            headToHeadAwayWins = cg.headToHeadAwayWins,
+            boxscoreHome = decodeJsonListOrEmpty(cg.boxscoreHomeJson),
+            boxscoreAway = decodeJsonListOrEmpty(cg.boxscoreAwayJson),
+            shots = decodeJsonListOrEmpty(cg.shotsJson),
+            playByPlay = decodeJsonListOrEmpty(cg.playByPlayJson)
+        )
+    }
+
+    private inline fun <reified T> decodeJsonListOrEmpty(raw: String): List<T> {
+        if (raw.isBlank()) return emptyList()
+        return runCatching { json.decodeFromString<List<T>>(raw) }.getOrDefault(emptyList())
+    }
+
+    private fun toCachedGameEntity(g: EuroLeagueGame): CachedGameEntity = CachedGameEntity(
+        id = g.id,
+        gameCode = g.gameCode,
+        seasonCode = g.seasonCode,
+        round = g.round,
+        homeTeamId = g.homeTeam.id,
+        awayTeamId = g.awayTeam.id,
+        tipOffEpochMillis = g.tipOffEpochMillis,
+        status = g.status.name,
+        currentQuarter = g.currentQuarter,
+        remainingClock = g.remainingClock,
+        homeScore = g.homeScore,
+        awayScore = g.awayScore,
+        q1Home = g.quarters.q1Home,
+        q1Away = g.quarters.q1Away,
+        q2Home = g.quarters.q2Home,
+        q2Away = g.quarters.q2Away,
+        q3Home = g.quarters.q3Home,
+        q3Away = g.quarters.q3Away,
+        q4Home = g.quarters.q4Home,
+        q4Away = g.quarters.q4Away,
+        otHome = g.quarters.otHome,
+        otAway = g.quarters.otAway,
+        headToHeadHomeWins = g.headToHeadHomeWins,
+        headToHeadAwayWins = g.headToHeadAwayWins,
+        boxscoreHomeJson = if (g.boxscoreHome.isNotEmpty()) runCatching { json.encodeToString(g.boxscoreHome) }.getOrDefault("") else "",
+        boxscoreAwayJson = if (g.boxscoreAway.isNotEmpty()) runCatching { json.encodeToString(g.boxscoreAway) }.getOrDefault("") else "",
+        shotsJson = if (g.shots.isNotEmpty()) runCatching { json.encodeToString(g.shots) }.getOrDefault("") else "",
+        playByPlayJson = if (g.playByPlay.isNotEmpty()) runCatching { json.encodeToString(g.playByPlay) }.getOrDefault("") else ""
+    )
+
+    internal suspend fun persistToRoomCache(
         teams: List<EuroLeagueTeam>,
-        games: List<EuroLeagueGame>
+        games: List<EuroLeagueGame>,
+        players: List<PlayerProfile> = fallbackMockRepository.players
     ) {
         val teamEntities = teams.map { team ->
             CachedTeamEntity(
@@ -2126,46 +2361,47 @@ class EuroLeagueOfflineFirstRepository @Inject constructor(
                 arena = team.arena,
                 primaryColorHex = team.primaryColorHex,
                 secondaryColorHex = team.secondaryColorHex,
+                accentColorHex = team.accentColorHex,
                 wins = team.wins,
                 losses = team.losses,
                 pointsFor = team.pointsFor,
                 pointsAgainst = team.pointsAgainst,
+                totalPointsFor = team.totalPointsFor,
+                totalPointsAgainst = team.totalPointsAgainst,
                 streakCsv = team.streak.joinToString(","),
                 offensiveRating = team.offensiveRating,
                 defensiveRating = team.defensiveRating,
                 pace = team.pace,
                 threePointPct = team.threePointPct,
                 twoPointPct = team.twoPointPct,
-                reboundRate = team.reboundRate
+                reboundRate = team.reboundRate,
+                logoUrl = team.logoUrl,
+                localLogoResName = team.localLogoResName
             )
         }
-        val gameEntities = games.map { g ->
-            CachedGameEntity(
-                id = g.id,
-                round = g.round,
-                homeTeamId = g.homeTeam.id,
-                awayTeamId = g.awayTeam.id,
-                tipOffEpochMillis = g.tipOffEpochMillis,
-                status = g.status.name,
-                currentQuarter = g.currentQuarter,
-                remainingClock = g.remainingClock,
-                homeScore = g.homeScore,
-                awayScore = g.awayScore,
-                q1Home = g.quarters.q1Home,
-                q1Away = g.quarters.q1Away,
-                q2Home = g.quarters.q2Home,
-                q2Away = g.quarters.q2Away,
-                q3Home = g.quarters.q3Home,
-                q3Away = g.quarters.q3Away,
-                q4Home = g.quarters.q4Home,
-                q4Away = g.quarters.q4Away,
-                otHome = g.quarters.otHome,
-                otAway = g.quarters.otAway,
-                headToHeadHomeWins = g.headToHeadHomeWins,
-                headToHeadAwayWins = g.headToHeadAwayWins
+        val playerEntities = players.map { p ->
+            CachedPlayerEntity(
+                id = p.id,
+                teamId = p.teamId,
+                number = p.number,
+                name = p.name,
+                position = p.position,
+                nationality = p.nationality,
+                heightCm = p.heightCm,
+                ppg = p.ppg,
+                rpg = p.rpg,
+                apg = p.apg,
+                pir = p.pir,
+                injuryStatusName = p.injuryStatus.name,
+                injuryDetail = p.injuryDetail,
+                headshotUrl = p.headshotUrl
             )
         }
+        val gameEntities = games.map { g -> toCachedGameEntity(g) }
         dao.upsertTeams(teamEntities)
+        if (playerEntities.isNotEmpty()) {
+            dao.upsertPlayers(playerEntities)
+        }
         dao.upsertGames(gameEntities)
     }
 

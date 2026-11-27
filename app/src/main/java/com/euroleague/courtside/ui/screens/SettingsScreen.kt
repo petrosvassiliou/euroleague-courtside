@@ -164,6 +164,10 @@ internal fun SettingsAndNotificationTestScreen(
     halftimeFinalEnabled: Boolean = true,
     closeGameAlertEnabled: Boolean = true,
     onUpdateNotificationChannels: (tipOff: Boolean, halftimeFinal: Boolean, closeGame: Boolean) -> Unit = { _, _, _ -> },
+    lockScreenTrackerEnabled: Boolean = true,
+    onToggleLockScreenTracker: (Boolean) -> Unit = {},
+    onPreviewLockScreenTracker: () -> Unit = {},
+    onReplayOnboarding: () -> Unit = {},
     updateInfo: AppUpdateInfo = AppUpdateInfo(),
     autoUpdateCheckEnabled: Boolean = true,
     onToggleAutoUpdateCheck: (Boolean) -> Unit = {},
@@ -538,6 +542,64 @@ internal fun SettingsAndNotificationTestScreen(
                     onCheckedChange = { onUpdateNotificationChannels(tipOffEnabled, halftimeFinalEnabled, it) }
                 )
             }
+            CourtsideGlassCard(
+                isSelected = lockScreenTrackerEnabled,
+                glowColor = CourtsideDesignTokens.NeonMadeGreen,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                ChannelToggleRow(
+                    badge = "LOCK SCREEN",
+                    title = strings.lockScreenTrackerTitle,
+                    subtitle = strings.lockScreenTrackerSubtitle,
+                    checked = lockScreenTrackerEnabled,
+                    onCheckedChange = onToggleLockScreenTracker
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        onPreviewLockScreenTracker()
+                        statusBanner = "📲 ${strings.lockScreenTrackerTitle}"
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CourtsideDesignTokens.PillSurface),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 9.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .border(1.dp, CourtsideDesignTokens.EuroLeagueOrange, RoundedCornerShape(10.dp))
+                ) {
+                    Text(
+                        text = strings.lockScreenPreviewButton,
+                        color = CourtsideDesignTokens.PrimaryText,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Button(
+                    onClick = onReplayOnboarding,
+                    colors = ButtonDefaults.buttonColors(containerColor = CourtsideDesignTokens.PillSurface),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 9.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(10.dp))
+                ) {
+                    Text(
+                        text = strings.replayOnboardingButton,
+                        color = CourtsideDesignTokens.SecondaryText,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
 
             // Android Home-Screen Courtside Widget Card
             HomeScreenWidgetPromoCard(
@@ -761,6 +823,64 @@ internal fun SettingsAndNotificationTestScreen(
                     checked = closeGameAlertEnabled,
                     onCheckedChange = { onUpdateNotificationChannels(tipOffEnabled, halftimeFinalEnabled, it) }
                 )
+            }
+            CourtsideGlassCard(
+                isSelected = lockScreenTrackerEnabled,
+                glowColor = CourtsideDesignTokens.NeonMadeGreen,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                ChannelToggleRow(
+                    badge = "LOCK SCREEN",
+                    title = strings.lockScreenTrackerTitle,
+                    subtitle = strings.lockScreenTrackerSubtitle,
+                    checked = lockScreenTrackerEnabled,
+                    onCheckedChange = onToggleLockScreenTracker
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        onPreviewLockScreenTracker()
+                        statusBanner = "📲 ${strings.lockScreenTrackerTitle}"
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CourtsideDesignTokens.PillSurface),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .border(1.dp, CourtsideDesignTokens.EuroLeagueOrange, RoundedCornerShape(10.dp))
+                        .pointerHoverIcon(PointerIcon.Hand)
+                ) {
+                    Text(
+                        text = strings.lockScreenPreviewButton,
+                        color = CourtsideDesignTokens.PrimaryText,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Button(
+                    onClick = onReplayOnboarding,
+                    colors = ButtonDefaults.buttonColors(containerColor = CourtsideDesignTokens.PillSurface),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(10.dp))
+                        .pointerHoverIcon(PointerIcon.Hand)
+                ) {
+                    Text(
+                        text = strings.replayOnboardingButton,
+                        color = CourtsideDesignTokens.SecondaryText,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
 
             HomeScreenWidgetPromoCard(

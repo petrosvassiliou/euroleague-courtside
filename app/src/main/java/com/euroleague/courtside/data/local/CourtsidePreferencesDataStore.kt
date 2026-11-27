@@ -29,6 +29,8 @@ data class UserPreferencesState(
     val tipOffAlarmEnabled: Boolean = true,
     val halftimeFinalScoreEnabled: Boolean = true,
     val closeGameAlertEnabled: Boolean = true,
+    val lockScreenLiveTrackerEnabled: Boolean = true,
+    val onboardingCompleted: Boolean = false,
     val autoUpdateCheckEnabled: Boolean = true,
     val betaUpdateChannelEnabled: Boolean = CourtsideAppUpdateManager.isPreReleaseVersion(BuildConfig.VERSION_NAME),
     val gameReminders: Map<String, Set<GameReminderType>> = emptyMap(),
@@ -56,6 +58,8 @@ class CourtsidePreferencesDataStore @Inject constructor(
         private const val KEY_QUICK_TIP_OFF = "tip_off_alarm_enabled"
         private const val KEY_QUICK_HT_FINAL = "halftime_final_score_enabled"
         private const val KEY_QUICK_CLOSE_GAME = "close_game_alert_enabled"
+        private const val KEY_QUICK_LOCK_TRACKER = "lock_screen_live_tracker_enabled"
+        private const val KEY_QUICK_ONBOARDING_DONE = "onboarding_v2_completed"
         private const val KEY_QUICK_THEME_MODE = "app_theme_mode"
         private const val KEY_QUICK_GAME_REMINDERS = "per_game_reminder_entries"
 
@@ -90,6 +94,8 @@ class CourtsidePreferencesDataStore @Inject constructor(
         val TIP_OFF_ALARM = booleanPreferencesKey("tip_off_alarm_enabled")
         val HALFTIME_FINAL_SCORE = booleanPreferencesKey("halftime_final_score_enabled")
         val CLOSE_GAME_ALERT = booleanPreferencesKey("close_game_alert_enabled")
+        val LOCK_SCREEN_TRACKER = booleanPreferencesKey("lock_screen_live_tracker_enabled")
+        val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_v2_completed")
         val AUTO_UPDATE_CHECK = booleanPreferencesKey("auto_update_check_enabled")
         val BETA_UPDATE_CHANNEL = booleanPreferencesKey("beta_update_channel_enabled")
         val APP_LANGUAGE = stringPreferencesKey("app_language_code")
@@ -135,6 +141,24 @@ class CourtsidePreferencesDataStore @Inject constructor(
 
     fun getSavedCloseGameAlertImmediate(): Boolean =
         quickBootPrefs.getBoolean(KEY_QUICK_CLOSE_GAME, true)
+
+    fun getSavedLockScreenTrackerImmediate(): Boolean =
+        quickBootPrefs.getBoolean(KEY_QUICK_LOCK_TRACKER, true)
+
+    fun saveLockScreenTrackerImmediate(enabled: Boolean) {
+        quickBootPrefs.edit()
+            .putBoolean(KEY_QUICK_LOCK_TRACKER, enabled)
+            .apply()
+    }
+
+    fun getSavedOnboardingCompletedImmediate(): Boolean =
+        quickBootPrefs.getBoolean(KEY_QUICK_ONBOARDING_DONE, false)
+
+    fun saveOnboardingCompletedImmediate(completed: Boolean) {
+        quickBootPrefs.edit()
+            .putBoolean(KEY_QUICK_ONBOARDING_DONE, completed)
+            .apply()
+    }
 
     fun getSavedGameRemindersImmediate(): Map<String, Set<GameReminderType>> =
         decodeGameReminders(quickBootPrefs.getStringSet(KEY_QUICK_GAME_REMINDERS, null))
@@ -216,6 +240,10 @@ class CourtsidePreferencesDataStore @Inject constructor(
         val resolvedGameReminders = prefs[Keys.GAME_REMINDERS]
             ?.let { decodeGameReminders(it) }
             ?: getSavedGameRemindersImmediate()
+        val resolvedLockTracker = prefs[Keys.LOCK_SCREEN_TRACKER]
+            ?: getSavedLockScreenTrackerImmediate()
+        val resolvedOnboardingDone = prefs[Keys.ONBOARDING_COMPLETED]
+            ?: getSavedOnboardingCompletedImmediate()
 
         UserPreferencesState(
             primaryTeamId = resolvedTeamId,
@@ -223,6 +251,8 @@ class CourtsidePreferencesDataStore @Inject constructor(
             tipOffAlarmEnabled = prefs[Keys.TIP_OFF_ALARM] ?: getSavedTipOffAlarmImmediate(),
             halftimeFinalScoreEnabled = prefs[Keys.HALFTIME_FINAL_SCORE] ?: getSavedHalftimeFinalImmediate(),
             closeGameAlertEnabled = prefs[Keys.CLOSE_GAME_ALERT] ?: getSavedCloseGameAlertImmediate(),
+            lockScreenLiveTrackerEnabled = resolvedLockTracker,
+            onboardingCompleted = resolvedOnboardingDone,
             autoUpdateCheckEnabled = resolvedAutoUpdate,
             betaUpdateChannelEnabled = resolvedBetaUpdates,
             gameReminders = resolvedGameReminders,
@@ -264,6 +294,20 @@ class CourtsidePreferencesDataStore @Inject constructor(
         saveGameRemindersImmediate(cleaned)
         context.dataStore.edit { prefs ->
             prefs[Keys.GAME_REMINDERS] = encodeGameReminders(cleaned)
+        }
+    }
+
+    suspend fun setLockScreenTrackerEnabled(enabled: Boolean) {
+        saveLockScreenTrackerImmediate(enabled)
+        context.dataStore.edit { prefs ->
+            prefs[Keys.LOCK_SCREEN_TRACKER] = enabled
+        }
+    }
+
+    suspend fun setOnboardingCompleted(completed: Boolean) {
+        saveOnboardingCompletedImmediate(completed)
+        context.dataStore.edit { prefs ->
+            prefs[Keys.ONBOARDING_COMPLETED] = completed
         }
     }
 

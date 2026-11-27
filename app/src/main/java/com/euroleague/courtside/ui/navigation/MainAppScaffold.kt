@@ -128,7 +128,9 @@ import com.euroleague.courtside.i18n.LocalCourtsideStrings
 import com.euroleague.courtside.i18n.formatTipOffCountdown
 import com.euroleague.courtside.i18n.localizedLabel
 import com.euroleague.courtside.notifications.EuroLeagueNotificationManager
+import com.euroleague.courtside.notifications.CourtsideLiveTrackerService
 import com.euroleague.courtside.notifications.GameReminderType
+import com.euroleague.courtside.ui.screens.CourtsideOnboardingDialog
 import com.euroleague.courtside.ui.screens.GameRemindersDialog
 import com.euroleague.courtside.ui.screens.MatchCenterScreen
 import com.euroleague.courtside.ui.screens.MyTeamDashboardScreen
@@ -276,6 +278,27 @@ fun MainAppScaffold(
     var closeGameChannelEnabled by rememberSaveable {
         mutableStateOf(preferencesDataStore?.getSavedCloseGameAlertImmediate() ?: true)
     }
+    var lockScreenTrackerEnabled by rememberSaveable {
+        mutableStateOf(preferencesDataStore?.getSavedLockScreenTrackerImmediate() ?: true)
+    }
+    var showOnboardingModal by rememberSaveable {
+        mutableStateOf(preferencesDataStore != null && !preferencesDataStore.getSavedOnboardingCompletedImmediate())
+    }
+
+    val onToggleLockScreenTracker: (Boolean) -> Unit = { enabled ->
+        lockScreenTrackerEnabled = enabled
+        preferencesDataStore?.saveLockScreenTrackerImmediate(enabled)
+        scope.launch {
+            preferencesDataStore?.setLockScreenTrackerEnabled(enabled)
+            CourtsideLiveTrackerService.syncLiveTrackerIfEligible(
+                context = context.applicationContext,
+                games = repository.games.value,
+                favoriteTeamIds = favoriteIds + primaryTeam.id,
+                perGameReminders = gameRemindersMap,
+                trackerEnabled = enabled
+            )
+        }
+    }
 
     val updateRemindersForGame: (EuroLeagueGame, Set<GameReminderType>) -> Unit = { game, newSet ->
         val nextMap = if (newSet.isEmpty()) {
@@ -286,6 +309,13 @@ fun MainAppScaffold(
         gameRemindersMap = nextMap
         preferencesDataStore?.saveGameRemindersImmediate(nextMap)
         notificationManager.onGameRemindersUpdated(game, newSet)
+        CourtsideLiveTrackerService.syncLiveTrackerIfEligible(
+            context = context.applicationContext,
+            games = repository.games.value,
+            favoriteTeamIds = favoriteIds + primaryTeam.id,
+            perGameReminders = nextMap,
+            trackerEnabled = lockScreenTrackerEnabled
+        )
         scope.launch {
             preferencesDataStore?.setGameReminders(nextMap)
             notificationManager.evaluateAutomaticGameNightAlerts(
@@ -818,6 +848,14 @@ fun MainAppScaffold(
                                     )
                                 }
                             },
+                            lockScreenTrackerEnabled = lockScreenTrackerEnabled,
+                            onToggleLockScreenTracker = onToggleLockScreenTracker,
+                            onPreviewLockScreenTracker = {
+                                CourtsideLiveTrackerService.launchPreviewTracker(context.applicationContext)
+                            },
+                            onReplayOnboarding = {
+                                showOnboardingModal = true
+                            },
                             updateInfo = updateInfo,
                             autoUpdateCheckEnabled = autoUpdateCheckEnabled,
                             onToggleAutoUpdateCheck = onToggleAutoUpdateCheck,
@@ -864,7 +902,55 @@ fun MainAppScaffold(
                             onUpdateReminders = { nextSet ->
                                 updateRemindersForGame(activeReminderGame, nextSet)
                             },
+                            onPreviewLockScreenTracker = {
+                                CourtsideLiveTrackerService.launchPreviewTracker(
+                                    context = context.applicationContext,
+                                    focusGameId = activeReminderGame.id
+                                )
+                            },
                             onDismiss = { reminderDialogGameId = null }
+                        )
+                    }
+
+                    // v2.0 Erststart-Onboarding ("Welcome & Club Setup")
+                    if (showOnboardingModal) {
+                        CourtsideOnboardingDialog(
+                            allTeams = allTeams,
+                            selectedTeam = primaryTeam,
+                            activeLanguage = activeLanguage,
+                            activeThemeMode = activeThemeMode,
+                            isCompact = isCompact,
+                            tipOffEnabled = tipOffChannelEnabled,
+                            halftimeFinalEnabled = halftimeFinalChannelEnabled,
+                            closeGameAlertEnabled = closeGameChannelEnabled,
+                            lockScreenTrackerEnabled = lockScreenTrackerEnabled,
+                            onSelectLanguage = onChangeLanguage,
+                            onSelectThemeMode = onChangeThemeMode,
+                            onSelectPrimaryTeam = { teamId ->
+                                repository.selectPrimaryTeam(teamId)
+                                preferencesDataStore?.savePrimaryTeamImmediate(teamId)
+                                scope.launch {
+                                    preferencesDataStore?.setPrimaryTeam(teamId)
+                                    offlineFirstRepository?.verifyAndSyncClubRoster(teamId)
+                                }
+                            },
+                            onUpdateNotificationChannels = { tipOff, htFinal, closeGame ->
+                                tipOffChannelEnabled = tipOff
+                                halftimeFinalChannelEnabled = htFinal
+                                closeGameChannelEnabled = closeGame
+                                preferencesDataStore?.saveNotificationChannelsImmediate(tipOff, htFinal, closeGame)
+                                scope.launch {
+                                    preferencesDataStore?.updateNotificationChannels(tipOff, htFinal, closeGame)
+                                }
+                            },
+                            onToggleLockScreenTracker = onToggleLockScreenTracker,
+                            onCompleteOnboarding = {
+                                showOnboardingModal = false
+                                preferencesDataStore?.saveOnboardingCompletedImmediate(true)
+                                scope.launch {
+                                    preferencesDataStore?.setOnboardingCompleted(true)
+                                }
+                            }
                         )
                     }
 

@@ -106,6 +106,7 @@ class MainActivity : ComponentActivity() {
             // + adaptiver Echtzeit-Ticker (8s während laufender Live-Spiele, 30s im Ruhemodus) & Voll-Sync alle 15 Min.
             LaunchedEffect(Unit) {
                 offlineFirstRepository.loadBundledLiveSnapshotFromAssets(applicationContext)
+                offlineFirstRepository.restoreFromRoomCacheIfAvailable()
                 offlineFirstRepository.refreshLiveMatchdayTick(forceScheduleSync = true)
                 evaluateAlertsAndSyncWidgets()
                 offlineFirstRepository.syncSeasonDataFromRemoteOrSeedCache()
@@ -169,6 +170,7 @@ class MainActivity : ComponentActivity() {
         val primaryId = preferencesDataStore.getSavedPrimaryTeamImmediate() ?: repository.selectedTeamId.value
         val favIds = (preferencesDataStore.getSavedFavoriteTeamsImmediate() ?: repository.favoriteTeamIds.value) + primaryId
         val lang = preferencesDataStore.getSavedLanguageImmediate() ?: repository.appLanguageFlow.value
+        val perGameReminders = preferencesDataStore.getSavedGameRemindersImmediate()
         notificationManager.evaluateAutomaticGameNightAlerts(
             games = repository.games.value,
             favoriteTeamIds = favIds,
@@ -176,7 +178,14 @@ class MainActivity : ComponentActivity() {
             halftimeFinalEnabled = preferencesDataStore.getSavedHalftimeFinalImmediate(),
             closeGameEnabled = preferencesDataStore.getSavedCloseGameAlertImmediate(),
             language = lang,
-            perGameReminders = preferencesDataStore.getSavedGameRemindersImmediate()
+            perGameReminders = perGameReminders
+        )
+        com.euroleague.courtside.notifications.CourtsideLiveTrackerService.syncLiveTrackerIfEligible(
+            context = applicationContext,
+            games = repository.games.value,
+            favoriteTeamIds = favIds,
+            perGameReminders = perGameReminders,
+            trackerEnabled = preferencesDataStore.getSavedLockScreenTrackerImmediate()
         )
         CourtsideAppWidgetProvider.updateAllWidgets(applicationContext)
     }

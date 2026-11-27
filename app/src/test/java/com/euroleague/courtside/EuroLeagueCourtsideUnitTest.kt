@@ -934,8 +934,14 @@ class EuroLeagueCourtsideUnitTest {
             override fun observeStandings() = kotlinx.coroutines.flow.flowOf(emptyList<com.euroleague.courtside.data.local.CachedTeamEntity>())
             override fun observeGamesByRound(round: Int) = kotlinx.coroutines.flow.flowOf(emptyList<com.euroleague.courtside.data.local.CachedGameEntity>())
             override fun observeAllGames() = kotlinx.coroutines.flow.flowOf(emptyList<com.euroleague.courtside.data.local.CachedGameEntity>())
+            override suspend fun getAllTeamsOnce() = emptyList<com.euroleague.courtside.data.local.CachedTeamEntity>()
+            override suspend fun getAllPlayersOnce() = emptyList<com.euroleague.courtside.data.local.CachedPlayerEntity>()
+            override suspend fun getAllGamesOnce() = emptyList<com.euroleague.courtside.data.local.CachedGameEntity>()
+            override suspend fun getGameByIdOnce(gameId: String) = null
             override suspend fun upsertTeams(teams: List<com.euroleague.courtside.data.local.CachedTeamEntity>) {}
+            override suspend fun upsertPlayers(players: List<com.euroleague.courtside.data.local.CachedPlayerEntity>) {}
             override suspend fun upsertGames(games: List<com.euroleague.courtside.data.local.CachedGameEntity>) {}
+            override suspend fun upsertSingleGame(game: com.euroleague.courtside.data.local.CachedGameEntity) {}
         }
         val dummyApi = object : com.euroleague.courtside.data.remote.EuroLeagueApiService {
             override suspend fun fetchSeasonClubs(seasonCode: String, limit: Int) = com.euroleague.courtside.data.remote.EuroLeagueClubsEnvelopeDto()
@@ -1290,5 +1296,182 @@ class EuroLeagueCourtsideUnitTest {
             if (it.exists()) it else java.io.File("app/src/main/assets/euroleague_live_snapshot.json")
         }
         assertFalse(snapFile.readText(Charsets.UTF_8).contains("Evan , Mehdi"))
+    }
+
+    @Test
+    fun `v2_0 LockScreenLiveTracker RoomOfflineGamecast OnboardingStrings and MonochromeIcon work end to end`() = kotlinx.coroutines.runBlocking {
+        val seedRepo = EuroLeagueMockRepository()
+        val now = 1_765_000_000_000L
+        val mun = seedRepo.findTeam("MUN") ?: seedRepo.teams.first()
+        val pan = seedRepo.findTeam("PAN") ?: seedRepo.teams[1]
+        val oly = seedRepo.findTeam("OLY") ?: seedRepo.teams[2]
+        val mad = seedRepo.findTeam("MAD") ?: seedRepo.teams[3]
+
+        val richBase = seedRepo.games.value.first { it.boxscoreHome.isNotEmpty() && it.shots.isNotEmpty() }
+        val samplePbp = listOf(
+            com.euroleague.courtside.data.repository.PlayByPlayEvent(
+                id = "pbp_200_4_401_0",
+                playNumber = 401,
+                quarter = 4,
+                clock = "01:18",
+                gameMinute = 38.7f,
+                teamId = mun.id,
+                playerId = "MUN_003",
+                playerName = "Carsen Edwards",
+                jerseyNumber = 3,
+                playType = "3FGM",
+                category = com.euroleague.courtside.data.repository.PlayEventCategory.THREE_PT,
+                description = "Clutch Three Pointer",
+                homeScore = 85,
+                awayScore = 82,
+                pointsScored = 3
+            )
+        )
+
+        val trackedLiveNonFav = richBase.copy(
+            id = "E2026_201",
+            gameCode = 201,
+            seasonCode = "E2026",
+            round = 15,
+            homeTeam = oly,
+            awayTeam = mad,
+            status = GameStatus.LIVE,
+            currentQuarter = 4,
+            remainingClock = "01:18",
+            homeScore = 85,
+            awayScore = 82,
+            tipOffEpochMillis = now - 90 * 60_000L,
+            playByPlay = samplePbp
+        )
+        val distantUpcomingFav = richBase.copy(
+            id = "E2026_205",
+            gameCode = 205,
+            round = 16,
+            homeTeam = mun,
+            awayTeam = pan,
+            status = GameStatus.UPCOMING,
+            tipOffEpochMillis = now + 48 * 3_600_000L
+        )
+        val imminentFav = distantUpcomingFav.copy(
+            id = "E2026_202",
+            gameCode = 202,
+            round = 15,
+            tipOffEpochMillis = now + 15 * 60_000L
+        )
+
+        val reminders = mapOf(
+            "E2026_201" to setOf(
+                com.euroleague.courtside.notifications.GameReminderType.CRUNCH_TIME,
+                com.euroleague.courtside.notifications.GameReminderType.FINAL_SCORE
+            )
+        )
+
+        // 1. Lock-Screen Live Game Tracker selects LIVE per-game reminder games + imminent favorite games, ignoring distant upcoming games
+        val activeTracked = com.euroleague.courtside.notifications.CourtsideLiveTrackerService.selectActiveTrackedGames(
+            games = listOf(distantUpcomingFav, imminentFav, trackedLiveNonFav),
+            favoriteTeamIds = setOf(mun.id),
+            perGameReminders = reminders,
+            nowMillis = now
+        )
+        assertEquals(2, activeTracked.size)
+        assertEquals("E2026_201", activeTracked.first().id)
+
+        AppLanguage.entries.forEach { lang ->
+            val payload = com.euroleague.courtside.notifications.CourtsideLiveTrackerService.formatLockScreenScorePayload(
+                trackedGames = activeTracked,
+                fallbackGame = null,
+                perGameReminders = reminders,
+                language = lang
+            )
+            assertTrue(payload.title.contains("${oly.code} 85 : 82 ${mad.code}"))
+            assertTrue(payload.title.contains("Q4 01:18"))
+            assertTrue(payload.bigText.contains("🔔"))
+
+            val s = CourtsideTranslations.forLanguage(lang)
+            assertTrue(s.lockScreenTrackerTitle.isNotBlank())
+            assertTrue(s.lockScreenTrackerSubtitle.isNotBlank())
+            assertTrue(s.onboardingWelcomeTitle.isNotBlank())
+            assertTrue(s.onboardingFinishButton.isNotBlank())
+            assertTrue(s.replayOnboardingButton.isNotBlank())
+        }
+
+        // 2. Room v2 Full Offline Gamecast round-trip (Boxscore + Shot Chart + Play-by-Play + Verified Players)
+        val memTeams = mutableListOf<com.euroleague.courtside.data.local.CachedTeamEntity>()
+        val memPlayers = mutableListOf<com.euroleague.courtside.data.local.CachedPlayerEntity>()
+        val memGames = mutableMapOf<String, com.euroleague.courtside.data.local.CachedGameEntity>()
+
+        val inMemoryDao = object : com.euroleague.courtside.data.local.CourtsideDao {
+            override fun observeStandings() = kotlinx.coroutines.flow.flowOf(memTeams.toList())
+            override fun observeGamesByRound(round: Int) = kotlinx.coroutines.flow.flowOf(memGames.values.filter { it.round == round })
+            override fun observeAllGames() = kotlinx.coroutines.flow.flowOf(memGames.values.toList())
+            override suspend fun getAllTeamsOnce() = memTeams.toList()
+            override suspend fun getAllPlayersOnce() = memPlayers.toList()
+            override suspend fun getAllGamesOnce() = memGames.values.toList()
+            override suspend fun getGameByIdOnce(gameId: String) = memGames[gameId]
+            override suspend fun upsertTeams(teams: List<com.euroleague.courtside.data.local.CachedTeamEntity>) {
+                memTeams.clear()
+                memTeams.addAll(teams)
+            }
+            override suspend fun upsertPlayers(players: List<com.euroleague.courtside.data.local.CachedPlayerEntity>) {
+                memPlayers.clear()
+                memPlayers.addAll(players)
+            }
+            override suspend fun upsertGames(games: List<com.euroleague.courtside.data.local.CachedGameEntity>) {
+                games.forEach { memGames[it.id] = it }
+            }
+            override suspend fun upsertSingleGame(game: com.euroleague.courtside.data.local.CachedGameEntity) {
+                memGames[game.id] = game
+            }
+        }
+        val dummyApi = object : com.euroleague.courtside.data.remote.EuroLeagueApiService {
+            override suspend fun fetchSeasonClubs(seasonCode: String, limit: Int) = com.euroleague.courtside.data.remote.EuroLeagueClubsEnvelopeDto()
+            override suspend fun fetchClubRosterPeople(seasonCode: String, clubCode: String) = emptyList<com.euroleague.courtside.data.remote.EuroLeagueClubPersonDto>()
+            override suspend fun fetchSeasonRounds(seasonCode: String) = com.euroleague.courtside.data.remote.EuroLeagueRoundsEnvelopeDto()
+            override suspend fun fetchSeasonGames(seasonCode: String, round: Int?, limit: Int) = com.euroleague.courtside.data.remote.EuroLeagueGamesEnvelopeDto()
+            override suspend fun fetchGameBoxscoreStats(seasonCode: String, gameCode: Int) = com.euroleague.courtside.data.remote.EuroLeagueGameBoxscoreDto()
+            override suspend fun fetchPlayerTraditionalStats(seasonMode: String, seasonCode: String, statisticMode: String, limit: Int) = com.euroleague.courtside.data.remote.EuroLeaguePlayerStatsEnvelopeDto()
+            override suspend fun fetchTeamTraditionalStats(seasonMode: String, seasonCode: String, statisticMode: String, limit: Int) = com.euroleague.courtside.data.remote.EuroLeagueTeamStatsEnvelopeDto()
+            override suspend fun fetchLiveGameBoxscore(fullUrl: String) = com.euroleague.courtside.data.remote.EuroLeagueLiveBoxscoreEnvelopeDto()
+            override suspend fun fetchLiveGameShotPoints(fullUrl: String) = com.euroleague.courtside.data.remote.EuroLeagueLivePointsDto()
+            override suspend fun fetchLiveGameHeader(fullUrl: String) = com.euroleague.courtside.data.remote.EuroLeagueLiveHeaderDto()
+            override suspend fun fetchLiveGamePlayByPlay(fullUrl: String) = com.euroleague.courtside.data.remote.EuroLeagueLivePlayByPlayDto()
+        }
+
+        val writerRepo = com.euroleague.courtside.data.remote.EuroLeagueOfflineFirstRepository(
+            apiService = dummyApi,
+            dao = inMemoryDao,
+            fallbackMockRepository = seedRepo
+        )
+        writerRepo.persistToRoomCache(
+            teams = seedRepo.teams,
+            games = listOf(trackedLiveNonFav),
+            players = seedRepo.players
+        )
+
+        val coldBootMockRepo = EuroLeagueMockRepository()
+        val readerRepo = com.euroleague.courtside.data.remote.EuroLeagueOfflineFirstRepository(
+            apiService = dummyApi,
+            dao = inMemoryDao,
+            fallbackMockRepository = coldBootMockRepo
+        )
+        val restored = readerRepo.restoreFromRoomCacheIfAvailable()
+        assertTrue(restored)
+
+        val offlineGame = coldBootMockRepo.games.value.find { it.id == "E2026_201" }
+        assertTrue("Cached gamecast must be restored from Room v2 offline cache", offlineGame != null)
+        assertEquals(richBase.boxscoreHome.size, offlineGame!!.boxscoreHome.size)
+        assertEquals(richBase.shots.size, offlineGame.shots.size)
+        assertEquals(1, offlineGame.playByPlay.size)
+        assertEquals("Clutch Three Pointer", offlineGame.playByPlay.first().description)
+
+        // 3. Android 13+ Monochrome Adaptive Launcher Icon XML verification
+        val adaptiveLauncherXml = java.io.File("src/main/res/mipmap-anydpi-v26/ic_launcher.xml").let {
+            if (it.exists()) it else java.io.File("app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml")
+        }
+        val monochromeVectorXml = java.io.File("src/main/res/drawable/ic_launcher_monochrome.xml").let {
+            if (it.exists()) it else java.io.File("app/src/main/res/drawable/ic_launcher_monochrome.xml")
+        }
+        assertTrue(adaptiveLauncherXml.exists() && adaptiveLauncherXml.readText().contains("<monochrome"))
+        assertTrue(monochromeVectorXml.exists())
     }
 }

@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.serialization.Serializable
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import javax.inject.Inject
@@ -50,6 +51,7 @@ data class EuroLeagueTeam(
         get() = kotlin.math.round((totalPointsAgainst.toFloat() / gamesPlayed.coerceAtLeast(1)) * 10f) / 10f
 }
 
+@Serializable
 enum class InjuryStatus(val label: String) {
     FIT("Einsatzbereit"),
     GAME_TIME_DECISION("Fraglich (GTD)"),
@@ -86,6 +88,7 @@ data class QuarterScores(
     val otHome: Int? = null, val otAway: Int? = null
 )
 
+@Serializable
 data class PlayerBoxscoreStat(
     val playerId: String,
     val playerName: String,
@@ -125,6 +128,7 @@ data class PlayerBoxscoreStat(
         }
 }
 
+@Serializable
 data class ShotAttempt(
     val id: String,
     val playerId: String,
@@ -139,6 +143,7 @@ data class ShotAttempt(
     val isMade: Boolean get() = made
 }
 
+@Serializable
 enum class PlayEventCategory(val badgeLabel: String) {
     THREE_PT("3PT"),
     DUNK("DUNK"),
@@ -153,6 +158,7 @@ enum class PlayEventCategory(val badgeLabel: String) {
     PERIOD("PERIOD")
 }
 
+@Serializable
 data class PlayByPlayEvent(
     val id: String,
     val playNumber: Int,

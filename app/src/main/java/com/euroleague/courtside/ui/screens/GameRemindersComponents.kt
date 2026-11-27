@@ -221,6 +221,7 @@ internal fun GameRemindersDialog(
     activeReminders: Set<GameReminderType>,
     isCompact: Boolean,
     onUpdateReminders: (Set<GameReminderType>) -> Unit,
+    onPreviewLockScreenTracker: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val strings = LocalCourtsideStrings.current
@@ -413,6 +414,26 @@ internal fun GameRemindersDialog(
                                 color = CourtsideDesignTokens.OnAccentText,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 12.sp
+                            )
+                        }
+                    }
+
+                    if (onPreviewLockScreenTracker != null) {
+                        Surface(
+                            color = CourtsideDesignTokens.PillSurface,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, CourtsideDesignTokens.SubtleGlassBorder, RoundedCornerShape(10.dp))
+                                .clickable { onPreviewLockScreenTracker() }
+                                .pointerHoverIcon(PointerIcon.Hand)
+                        ) {
+                            Text(
+                                text = strings.lockScreenPreviewButton,
+                                color = CourtsideDesignTokens.SecondaryText,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                             )
                         }
                     }

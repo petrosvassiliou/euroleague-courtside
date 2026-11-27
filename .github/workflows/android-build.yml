@@ -51,14 +51,28 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Run Unit Tests (PIR, RFC 5545 .ics, Crunch-Time Alerts, 6-Language Notifications)
+      - name: Run Unit Tests (PIR, RFC 5545 .ics, Crunch-Time Alerts, 6-Language Notifications, Room v2 Offline Gamecast)
         run: gradle testDebugUnitTest
 
-      - name: Assemble Signed Release APK & Debug APK
+      - name: Prepare Optional Secret Signing Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          gradle assembleRelease assembleDebug
+          if [ -n "${KEYSTORE_BASE64:-}" ]; then
+            echo "${KEYSTORE_BASE64}" | base64 --decode > app/ci-release-keystore.jks
+            echo "KEYSTORE_FILE=ci-release-keystore.jks" >> "$GITHUB_ENV"
+          fi
+
+      - name: Assemble Signed Release APK, Google Play App Bundle (.aab) & Debug APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          gradle assembleRelease assembleDebug bundleRelease
           cp app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/EuroLeague-Courtside-v${{ steps.version.outputs.version_name }}.apk"
           cp app/build/outputs/apk/debug/app-debug.apk "app/build/outputs/apk/debug/EuroLeague-Courtside-v${{ steps.version.outputs.version_name }}-debug.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "app/build/outputs/bundle/release/EuroLeague-Courtside-v${{ steps.version.outputs.version_name }}.aab"
 
       - name: Upload EuroLeague Courtside Signed Release APK Artifact
         uses: actions/upload-artifact@v4
@@ -66,13 +80,19 @@ jobs:
           name: euroleague-courtside-release-apk-v${{ steps.version.outputs.version_name }}
           path: app/build/outputs/apk/release/EuroLeague-Courtside-v${{ steps.version.outputs.version_name }}.apk
 
+      - name: Upload EuroLeague Courtside Signed Google Play Bundle (.aab) Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: euroleague-courtside-release-aab-v${{ steps.version.outputs.version_name }}
+          path: app/build/outputs/bundle/release/EuroLeague-Courtside-v${{ steps.version.outputs.version_name }}.aab
+
       - name: Upload EuroLeague Courtside Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: euroleague-courtside-debug-apk-v${{ steps.version.outputs.version_name }}
           path: app/build/outputs/apk/debug/EuroLeague-Courtside-v${{ steps.version.outputs.version_name }}-debug.apk
 
-      - name: Publish Versioned Signed Release / Beta Pre-Release APK to GitHub Releases
+      - name: Publish Versioned Signed Release / Beta Pre-Release APK & AAB to GitHub Releases
         if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -81,16 +101,16 @@ jobs:
           VER_CODE: ${{ steps.version.outputs.version_code }}
         run: |
           if [[ "${VER_NAME}" == *-* ]]; then
-            TITLE="EuroLeague Courtside ${TAG} (Build ${VER_CODE} — Beta Pre-Release Signed APK)"
-            NOTES="🧪 **Beta Pre-Release (\`EuroLeague-Courtside-${TAG}.apk\`, Build \`${VER_CODE}\`)** zum Vorab-Testen vor dem stabilen Rollout: Live Play-by-Play & Game-Flow Momentum-Chart (\`live.euroleague.net/api/PlaybyPlay\`), anklickbare Spieler-Scouting-Karten & EuroLeague Spiel-Logbücher, automatische Spieltags-Push-Alarme inkl. Deep-Link, neues Android Startbildschirm-Widget sowie optimierte APK-Größe in allen 6 Sprachen (\`EN\`, \`DE\`, \`FR\`, \`IT\`, \`ES\`, \`EL\`)."
+            TITLE="EuroLeague Courtside ${TAG} (Build ${VER_CODE} — Beta Pre-Release Signed APK & AAB)"
+            NOTES="🧪 **Beta Pre-Release (\`EuroLeague-Courtside-${TAG}.apk\` & \`.aab\`, Build \`${VER_CODE}\`)** zum Vorab-Testen vor dem stabilen Rollout: **Sperrbildschirm Live-Game-Tracker** (\`ForegroundService\` gegen Android-Doze-Verzögerungen), **vollständiges Offline-Gamecast-Caching in Room v2** (Boxscores, Shot-Charts, Play-by-Play & Kader), **Erststart-Onboarding** (Club-, Theme- & Alarm-Setup), **Android 13+ Monochrome Themed Icon** sowie signiertes **Google Play App Bundle (\`.aab\`)** in allen 6 Sprachen (\`EN\`, \`DE\`, \`FR\`, \`IT\`, \`ES\`, \`EL\`)."
             if gh release view "${TAG}" >/dev/null 2>&1; then
               gh release edit "${TAG}" --title "${TITLE}" --notes "${NOTES}" --prerelease
             else
               gh release create "${TAG}" --title "${TITLE}" --notes "${NOTES}" --prerelease
             fi
           else
-            TITLE="EuroLeague Courtside ${TAG} (Build ${VER_CODE} — Official Signed Release APK)"
-            NOTES="🏀 **EuroLeague Courtside ${TAG} (\`EuroLeague-Courtside-${TAG}.apk\`, Build \`${VER_CODE}\`)** — Offizielles signiertes Release mit **Daylight Light Mode (Standard) & Courtside Dark Mode**, **5s High-Speed Live-Ticker** (inkl. Cloudflare-Cache-Bypass & parallelem Gamecast-Abruf), **Live Play-by-Play & Game-Flow Momentum-Chart**, **anklickbaren Spieler-Scouting-Karten** (Top-Aligned 3:4 Headshots & Spiel-Logbücher), **spielspezifischen Erinnerungen** (\`Q1\`, \`Halbzeit\`, \`Q3\`, \`Crunch-Time\`, \`Endergebnis\`), **Android Startbildschirm-Widget** sowie Play-Protect-konformem **Stable/Beta In-App-Updater** in allen 6 Sprachen (\`EN\`, \`DE\`, \`FR\`, \`IT\`, \`ES\`, \`EL\`)."
+            TITLE="EuroLeague Courtside ${TAG} (Build ${VER_CODE} — Official Signed Release APK & AAB)"
+            NOTES="🏀 **EuroLeague Courtside ${TAG} (\`EuroLeague-Courtside-${TAG}.apk\` & \`.aab\`, Build \`${VER_CODE}\`)** — Offizielles signiertes Release mit **Sperrbildschirm Live-Game-Tracker**, **vollständigem Offline-Gamecast-Caching (Room v2)**, **Erststart-Onboarding**, **Daylight Light Mode (Standard) & Courtside Dark Mode**, **5s High-Speed Live-Ticker**, **spielspezifischen Erinnerungen** (\`Q1\`, \`Halbzeit\`, \`Q3\`, \`Crunch-Time\`, \`Endergebnis\`), **Android 13+ Monochrome Icon** sowie Play-Protect-konformem **Stable/Beta In-App-Updater** in allen 6 Sprachen (\`EN\`, \`DE\`, \`FR\`, \`IT\`, \`ES\`, \`EL\`)."
             if gh release view "${TAG}" >/dev/null 2>&1; then
               gh release edit "${TAG}" --title "${TITLE}" --notes "${NOTES}" --latest
             else
@@ -98,5 +118,6 @@ jobs:
             fi
           fi
           gh release upload "${TAG}" "app/build/outputs/apk/release/EuroLeague-Courtside-${TAG}.apk" --clobber
+          gh release upload "${TAG}" "app/build/outputs/bundle/release/EuroLeague-Courtside-${TAG}.aab" --clobber
           gh release upload "${TAG}" "app/build/outputs/apk/debug/EuroLeague-Courtside-${TAG}-debug.apk" --clobber
           gh release upload "${TAG}" app/src/main/assets/euroleague_live_snapshot.json --clobber
