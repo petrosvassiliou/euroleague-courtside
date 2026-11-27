@@ -121,3 +121,42 @@ jobs:
           gh release upload "${TAG}" "app/build/outputs/bundle/release/EuroLeague-Courtside-${TAG}.aab" --clobber
           gh release upload "${TAG}" "app/build/outputs/apk/debug/EuroLeague-Courtside-${TAG}-debug.apk" --clobber
           gh release upload "${TAG}" app/src/main/assets/euroleague_live_snapshot.json --clobber
+
+  macos-liquid-glass-build:
+    needs: build-and-test
+    runs-on: macos-15
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Extract App Version (versionName & versionCode) from Gradle
+        id: version
+        run: |
+          VERSION_NAME=$(python3 -c 'import re; txt=open("app/build.gradle.kts").read(); print(re.search(r"versionName\s*=\s*\"([^\"]+)\"", txt).group(1))')
+          VERSION_CODE=$(python3 -c 'import re; txt=open("app/build.gradle.kts").read(); print(re.search(r"versionCode\s*=\s*(\d+)", txt).group(1))')
+          echo "version_name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version_code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
+
+      - name: Build, Test & Package macOS Liquid Glass App (.dmg & .zip)
+        run: |
+          chmod +x scripts/build_macos_app.sh
+          ./scripts/build_macos_app.sh "${{ steps.version.outputs.version_name }}" "${{ steps.version.outputs.version_code }}"
+
+      - name: Upload macOS Liquid Glass DMG & ZIP Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: euroleague-courtside-macos-liquid-glass-v${{ steps.version.outputs.version_name }}
+          path: |
+            macos/dist/EuroLeague-Courtside-v${{ steps.version.outputs.version_name }}-macOS.dmg
+            macos/dist/EuroLeague-Courtside-v${{ steps.version.outputs.version_name }}-macOS.zip
+
+      - name: Attach macOS Liquid Glass DMG & ZIP to GitHub Release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: v${{ steps.version.outputs.version_name }}
+        run: |
+          gh release upload "${TAG}" "macos/dist/EuroLeague-Courtside-${TAG}-macOS.dmg" --clobber
+          gh release upload "${TAG}" "macos/dist/EuroLeague-Courtside-${TAG}-macOS.zip" --clobber

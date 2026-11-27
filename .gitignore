@@ -12,3 +12,7 @@
 *.aab
 *.ap_
 *.dex
+/macos/.build/
+/macos/dist/
+*.dmg
+*.icns
